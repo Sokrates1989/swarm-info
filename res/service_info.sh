@@ -10,9 +10,9 @@ for service in $(docker service ls --format '{{.Name}}'); do
   done
 done
 
-# Print the results
-echo "Number of running services per node:"
+# Print Amount of services on each node.
 echo
+echo "Number of running services per node:"
 for node in "${!node_service_count[@]}"; do
   echo "Node: $node, Running Services: ${node_service_count[$node]}"
 done
@@ -26,3 +26,12 @@ for service in $(docker service ls --format '{{.Name}}'); do
   docker service ps $service --filter "desired-state=running" --format 'Task ID: {{.ID}} | Task Name: {{.Name}} | Node: {{.Node}} | Status: {{.CurrentState}}'
   echo
 done
+
+
+# Print Amount of services on each node.
+echo
+echo "Number of running services per node:"
+for node in "${!node_service_count[@]}"; do
+  echo "Node: $node, Running Services: ${node_service_count[$node]}"
+done
+echo

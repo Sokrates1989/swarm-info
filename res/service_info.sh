@@ -12,9 +12,11 @@ done
 
 # Print the results
 echo "Number of running services per node:"
+echo
 for node in "${!node_service_count[@]}"; do
   echo "Node: $node, Running Services: ${node_service_count[$node]}"
 done
+echo
 
 
 # Each Service on and their tasks and their nodes.

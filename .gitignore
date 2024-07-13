@@ -1,0 +1,3 @@
+# Keep service-states dir, but do not track anything else within.
+service-states/*
+!service-states/.gitkeep

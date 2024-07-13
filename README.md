@@ -9,10 +9,35 @@ sudo apt update
 sudo apt install bash
 ```
 
-# Usage
+# First Setup
+
+### Quick 
 ```bash
-bash /path/to/get_info.sh
+mkdir -p /swarm_status
+cd /swarm_status
+git clone https://github.com/Sokrates1989/swarm-info.git .
 ```
+
+### Custom dir 
+```bash
+# Choose location on server (replace desired destintation with /desired/destination).
+mkdir -p /desired/destination/swarm_status
+cd /desired/destination/swarm_status
+git clone https://github.com/Sokrates1989/swarm-info.git .
+```
+
+
+# Usage
+
+### Quick 
+```bash
+bash /swarm_status/get_info.sh
+```
+### Custom dir 
+```bash
+bash /desired/destination/swarm_status/get_info.sh
+```
+
 
 # Output Files for messaging.
 Also writes percentages of server usage into files so that they can be mapped into docker images. These files can be used to monitor the server state and send server state infos via Telegram, email or other messaging tools.

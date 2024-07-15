@@ -25,48 +25,49 @@ print_info() {
     printf "%-${output_tab_space}s: %s\n" "$label" "$value"
 }
 
-# Swarm Status.
-echo "Swarm Status"
+
+# Swarm Status
+echo "Swarm Status:"
 swarm_status=$(docker info --format '{{.Swarm.LocalNodeState}}')
 print_info "Swarm Status" "$swarm_status"
 echo
 
-# List of Nodes.
-echo "List of Nodes in the Swarm"
+# List of Nodes
+echo "List of Nodes in the Swarm:"
 for node in $(docker node ls --format '{{.ID}}'); do
     node_info=$(docker node ls --filter id=$node --format 'ID: {{.ID}} | Hostname: {{.Hostname}} | Status: {{.Status}} | Availability: {{.Availability}} | Manager Status: {{.ManagerStatus}}')
     print_info "Node" "$node_info"
 done
 echo
 
-# Detailed Node Information.
-echo "Detailed Node Information"
+# Detailed Node Information
+echo "Detailed Node Information:"
 for node in $(docker node ls --format '{{.ID}}'); do
-    node_detail=$(docker node inspect --format '{{json .}}' $node | jq .)
+    node_detail=$(docker node inspect $node --format '{{json .}}')
     print_info "Node ID" "$node"
-    echo "$node_detail" | jq .
+    echo "$node_detail" | python3 -m json.tool
     echo
 done
 
-# List of Services.
-echo "List of Services"
+# List of Services
+echo "List of Services:"
 for service in $(docker service ls --format '{{.ID}}'); do
     service_info=$(docker service ls --filter id=$service --format 'ID: {{.ID}} | Name: {{.Name}} | Mode: {{.Mode}} | Replicas: {{.Replicas}} | Image: {{.Image}}')
     print_info "Service" "$service_info"
 done
 echo
 
-# Detailed Service Information.
-echo "Detailed Service Information"
+# Detailed Service Information
+echo "Detailed Service Information:"
 for service in $(docker service ls --format '{{.ID}}'); do
-    service_detail=$(docker service inspect --format '{{json .}}' $service | jq .)
+    service_detail=$(docker service inspect $service --format '{{json .}}')
     print_info "Service ID" "$service"
-    echo "$service_detail" | jq .
+    echo "$service_detail" | python3 -m json.tool
     echo
 done
 
-# Task Details for Each Service.
-echo "Task Details for Each Service"
+# Task Details for Each Service
+echo "Task Details for Each Service:"
 for service in $(docker service ls --format '{{.ID}}'); do
     print_info "Service ID" "$service"
     docker service ps $service --format 'Task ID: {{.ID}} | Node: {{.Node}} | Desired State: {{.DesiredState}} | Current State: {{.CurrentState}} | Error: {{.Error}} | Ports: {{.Ports}}' | while read -r task_info; do
@@ -75,8 +76,8 @@ for service in $(docker service ls --format '{{.ID}}'); do
     echo
 done
 
-# Node Resource Usage.
-echo "Node Resource Usage"
+# Node Resource Usage
+echo "Node Resource Usage:"
 for node in $(docker node ls --format '{{.Hostname}}'); do
     print_info "Node" "$node"
     resource_info=$(docker node inspect $node --format 'CPU: {{.Description.Resources.NanoCPUs}} | Memory: {{.Description.Resources.MemoryBytes}}')
@@ -84,8 +85,8 @@ for node in $(docker node ls --format '{{.Hostname}}'); do
     echo
 done
 
-# Running Containers on Each Node.
-echo "Running Containers on Each Node"
+# Running Containers on Each Node
+echo "Running Containers on Each Node:"
 for node in $(docker node ls --format '{{.Hostname}}'); do
     print_info "Node" "$node"
     docker node ps $node --filter "desired-state=running" --format 'Container ID: {{.ID}} | Image: {{.Image}} | Node: {{.Node}} | Status: {{.Status}}' | while read -r container_info; do
@@ -94,37 +95,37 @@ for node in $(docker node ls --format '{{.Hostname}}'); do
     echo
 done
 
-# List of Networks.
-echo "List of Networks"
+# List of Networks
+echo "List of Networks:"
 for network in $(docker network ls --format '{{.ID}}'); do
     network_info=$(docker network ls --filter id=$network --format 'ID: {{.ID}} | Name: {{.Name}} | Driver: {{.Driver}}')
     print_info "Network" "$network_info"
 done
 echo
 
-# Detailed Network Information.
-echo "Detailed Network Information"
+# Detailed Network Information
+echo "Detailed Network Information:"
 for network in $(docker network ls --format '{{.ID}}'); do
-    network_detail=$(docker network inspect $network --format '{{json .}}' | jq .)
+    network_detail=$(docker network inspect $network --format '{{json .}}')
     print_info "Network ID" "$network"
-    echo "$network_detail" | jq .
+    echo "$network_detail" | python3 -m json.tool
     echo
 done
 
-# List of Volumes.
-echo "List of Volumes"
+# List of Volumes
+echo "List of Volumes:"
 for volume in $(docker volume ls --format '{{.Name}}'); do
     volume_info=$(docker volume ls --filter name=$volume --format 'Name: {{.Name}} | Driver: {{.Driver}}')
     print_info "Volume" "$volume_info"
 done
 echo
 
-# Detailed Volume Information.
-echo "Detailed Volume Information"
+# Detailed Volume Information
+echo "Detailed Volume Information:"
 for volume in $(docker volume ls --format '{{.Name}}'); do
-    volume_detail=$(docker volume inspect $volume --format '{{json .}}' | jq .)
+    volume_detail=$(docker volume inspect $volume --format '{{json .}}')
     print_info "Volume Name" "$volume"
-    echo "$volume_detail" | jq .
+    echo "$volume_detail" | python3 -m json.tool
     echo
 done
 

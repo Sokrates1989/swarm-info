@@ -1,4 +1,4 @@
-# swarm-status
+# swarm-info
 Quick info about swarm status and helpful commands collection
 
 # Prerequisities
@@ -11,31 +11,42 @@ sudo apt install bash
 
 # First Setup
 
-### Quick 
+### Quick Option 1 (few people are expected to log into server)
 ```bash
-mkdir -p /swarm_status
-cd /swarm_status
-git clone https://github.com/Sokrates1989/swarm-info.git .
+sudo mkdir -p /tools/swarm_info
+cd /tools/swarm_info
+sudo git clone https://github.com/Sokrates1989/swarm-info.git .
 ```
 
-### Custom dir 
+### Quick Option 2 (default location for administrative installations)
+```bash
+sudo mkdir -p /usr/local/swarm_info
+cd /usr/local/swarm_info
+sudo git clone https://github.com/Sokrates1989/swarm-info.git .
+```
+
+### Custom location
 ```bash
 # Choose location on server (replace desired destintation with /desired/destination).
-mkdir -p /desired/destination/swarm_status
-cd /desired/destination/swarm_status
+mkdir -p /desired/destination/swarm_info
+cd /desired/destination/swarm_info
 git clone https://github.com/Sokrates1989/swarm-info.git .
 ```
 
 
 # Usage
 
-### Quick 
+### Quick Option 1
 ```bash
-bash /swarm_status/get_info.sh
+bash /tools/swarm_info/get_info.sh
+```
+### Quick Option 2
+```bash
+bash /usr/local/swarm_info/get_info.sh
 ```
 ### Custom dir 
 ```bash
-bash /desired/destination/swarm_status/get_info.sh
+bash /desired/destination/swarm_info/get_info.sh
 ```
 
 
@@ -65,7 +76,7 @@ bash /path/to/get_info.sh --json --output-file /custom/path/file.json
 
 
 ### Cronjob
-Setup cron to get periodic system info.
+Setup cron to get periodic swarm info.
 
 ```bash
 # Open crontab in edit mode.
@@ -77,7 +88,7 @@ crontab -e
 59 * * * * /bin/bash /path/to/get_info.sh --json --output-file /custom/path/file.json
 
 # Second Example as used on prod servers.
-59 * * * * /bin/bash /swarm-status/get_info.sh --json --output-file /swarm_info/service_info.json
+59 * * * * /bin/bash /swarm-status/get_info.sh --json --output-file /info_json/service_info.json
 ```
 
 

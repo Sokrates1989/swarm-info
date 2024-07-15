@@ -4,20 +4,35 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Function to display service information.
-display_service_info() {
-    bash "$SCRIPT_DIR/res/service_info.sh"
+display_short_info() {
+    bash "$SCRIPT_DIR/res/short_info.sh"
+}
+
+# Function to display service node information (What service is running on which node).
+display_node_info() {
+    bash "$SCRIPT_DIR/res/node_info.sh"
+}
+
+# Network info.
+display_network_info() {
+    bash "$SCRIPT_DIR/res/network_info.sh"
+}
+
+# Helpful comamnds.
+display_helpful_commands() {
+    bash "$SCRIPT_DIR/res/helpful_commands.sh"
 }
 
 # Function to display and save system information as json.
 CUSTOM_OUTPUT_FILE="NONE"
 swarm_info_dir="$SCRIPT_DIR/swarm_info"
-swarm_info_json_file="$swarm_info_dir/service_info.json"
-service_info_json() {
+swarm_info_json_file="$swarm_info_dir/short_info.json"
+swarm_info_json() {
     # Check if CUSTOM_OUTPUT_FILE is still in its default value
     if [ "$CUSTOM_OUTPUT_FILE" = "NONE" ]; then
-        bash "$SCRIPT_DIR/res/service_info.sh" --json --output-file "$swarm_info_json_file"
+        bash "$SCRIPT_DIR/res/swarm_info.sh" --json --output-file "$swarm_info_json_file"
     else
-        bash "$SCRIPT_DIR/res/service_info.sh" --json --output-file "$CUSTOM_OUTPUT_FILE"
+        bash "$SCRIPT_DIR/res/swarm_info.sh" --json --output-file "$CUSTOM_OUTPUT_FILE"
     fi
 }
 
@@ -25,13 +40,18 @@ service_info_json() {
 display_help() {
     echo -e "Usage: $0 [OPTIONS]"
     echo -e "Options:"
+    echo -e "  -c             Display helpful commands"
     echo -e "  -f, --full     Display full system information"
-    echo -e "  -l             Alias for --full"
-    echo -e "  -s             Display service information"
+    echo -e "  -h             Display this help message"
     echo -e "  --help         Display this help message"
     echo -e "  --json         Save and display info in json format"
-    echo -e "  --output-file  Where to save the system info output (only in combination with --json)"
+    echo -e "  -l             Alias for --full"
+    echo -e "  -n             Alias for --node"
+    echo -e "  --net          Display network info"
+    echo -e "  --node         Display service node information (What service is running on which node)"
     echo -e "  -o             Alias for --output-file"
+    echo -e "  --output-file  Where to save the system info output (only in combination with --json)"
+    echo -e "  -s             Display short information"
 }
 
 
@@ -42,16 +62,20 @@ file_output_type="json"
 # Check for command-line options.
 while [ $# -gt 0 ]; do
     case "$1" in
+        -c)
+            display_helpful_commands
+            exit 0
+            ;;
         -f)
-            display_service_info
+            display_short_info
             exit 0
             ;;
-        -l)
-            display_service_info
+        --full)
+            display_short_info
             exit 0
             ;;
-        -s)
-            display_service_info
+        -h)
+            display_help
             exit 0
             ;;
         --help)
@@ -63,15 +87,35 @@ while [ $# -gt 0 ]; do
             file_output_type="json"
             shift
             ;;
-        --output-file)
-            shift
-            CUSTOM_OUTPUT_FILE="$1"
-            shift
+        -l)
+            display_short_info
+            exit 0
+            ;;
+        -n)
+            display_node_info
+            exit 0
+            ;;
+        --net)
+            display_network_info
+            exit 0
+            ;;
+        --node)
+            display_node_info
+            exit 0
             ;;
         -o)
             shift
             CUSTOM_OUTPUT_FILE="$1"
             shift
+            ;;
+        --output-file)
+            shift
+            CUSTOM_OUTPUT_FILE="$1"
+            shift
+            ;;
+        -s)
+            display_short_info
+            exit 0
             ;;
         *)
             echo -e "Invalid option: $1" >&2
@@ -83,13 +127,13 @@ done
 # Use file output?
 if [ "$use_file_output" = "true" ]; then
     if [ "$file_output_type" = "json" ]; then
-        service_info_json
+        swarm_info_json
     else
         # If no option is specified or an invalid option is provided, display short info.
         echo -e "invalid file_output_type: $file_output_type"
     fi
 else
     # If no option is specified or an invalid option is provided, display short info.
-    display_service_info
+    display_short_info
 fi
 

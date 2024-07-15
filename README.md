@@ -13,23 +13,23 @@ sudo apt install bash
 
 ### Quick Option 1 (few people are expected to log into server)
 ```bash
-sudo mkdir -p /tools/swarm_info
-cd /tools/swarm_info
+sudo mkdir -p /tools/swarm-info
+cd /tools/swarm-info
 sudo git clone https://github.com/Sokrates1989/swarm-info.git .
 ```
 
 ### Quick Option 2 (default location for administrative installations)
 ```bash
-sudo mkdir -p /usr/local/swarm_info
-cd /usr/local/swarm_info
+sudo mkdir -p /usr/local/swarm-info
+cd /usr/local/swarm-info
 sudo git clone https://github.com/Sokrates1989/swarm-info.git .
 ```
 
 ### Custom location
 ```bash
 # Choose location on server (replace desired destintation with /desired/destination).
-mkdir -p /desired/destination/swarm_info
-cd /desired/destination/swarm_info
+mkdir -p /desired/destination/swarm-info
+cd /desired/destination/swarm-info
 git clone https://github.com/Sokrates1989/swarm-info.git .
 ```
 
@@ -38,15 +38,15 @@ git clone https://github.com/Sokrates1989/swarm-info.git .
 
 ### Quick Option 1
 ```bash
-bash /tools/swarm_info/get_info.sh
+bash /tools/swarm-info/get_info.sh
 ```
 ### Quick Option 2
 ```bash
-bash /usr/local/swarm_info/get_info.sh
+bash /usr/local/swarm-info/get_info.sh
 ```
 ### Custom dir 
 ```bash
-bash /desired/destination/swarm_info/get_info.sh
+bash /desired/destination/swarm-info/get_info.sh
 ```
 
 
@@ -56,7 +56,7 @@ Also writes percentages of server usage into files so that they can be mapped in
 ## Json
 
 #### Default json output file
-Writes output to path/to/swarm_info/service_info.json
+Writes output to path/to/swarm-info/service_info.json
 ```bash
 bash /path/to/get_info.sh --json
 ```

@@ -49,7 +49,6 @@ echo
 
 ## List of Nodes ##
 echo "List of Nodes in the Swarm:"
-echo
 
 # Count chars of longest values.
 max_name_length=0
@@ -105,7 +104,6 @@ echo
 
 ## Number of services on each node ##
 echo "Number of running services per node:"
-echo
 
 # Service Node Count.
 declare -A node_service_count
@@ -145,7 +143,6 @@ echo
 
 ## List of Services ##
 echo "List of Services:"
-echo
 
 # Count chars of longest values.
 max_name_length=0
@@ -202,7 +199,6 @@ echo
 
 ## List of Networks ##
 echo "List of Networks:"
-echo
 
 # Count chars of longest values.
 max_name_length=0
@@ -248,14 +244,13 @@ echo
 
 ## List of Volumes ##
 echo "List of Secrets:"
-echo
 secrets_output=$(docker secret ls)
 echo "$secrets_output"
 echo
 echo "Helpful commands:"
 printf "%-${output_tab_space}s: %s\n" "Create Secret" "vi secret.txt    (then insert secret and save file)"
-printf "%${output_tab_space}s%s\n" "" "docker secret create SECRETNAME secret.txt"
-printf "%${output_tab_space}s%s\n" "" "rm secret.txt"
+printf "%${output_tab_space}s  %s\n" "" "docker secret create SECRETNAME secret.txt"
+printf "%${output_tab_space}s  %s\n" "" "rm secret.txt"
 echo
 echo
 
@@ -263,7 +258,6 @@ echo
 
 ## List of Volumes ##
 echo "List of Volumes:"
-echo
 
 # Count chars of longest values.
 max_name_length=0

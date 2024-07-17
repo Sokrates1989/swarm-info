@@ -20,23 +20,74 @@ display_helpful_commands() {
 
 # Function to print formatted output.
 print_info() {
-    local label=$1
-    local value=$2
-    printf "%-${output_tab_space}s: %s\n" "$label" "$value"
+    while [ "$#" -gt 0 ]; do
+        local text=$1
+        local output_tab_space=$2
+        printf "%-${output_tab_space}s" "$text"
+        shift 2
+        if [ "$#" -gt 0 ]; then
+            printf " | "
+        fi
+    done
+    echo ""  # Print a newline at the end
 }
-
 
 # Swarm Status
 echo "Swarm Status:"
 swarm_status=$(docker info --format '{{.Swarm.LocalNodeState}}')
-print_info "Swarm Status" "$swarm_status"
+printf "%-${output_tab_space}s: %s\n" "Swarm Status" "$swarm_status"
 echo
 
 # List of Nodes.
+
+# Count chars of longest values.
+max_name_length=0
+max_id_length=0
+max_status_length=0
+max_avail_length=0
+max_manage_status_length=0
+for node in $(docker node ls --format '{{.ID}}'); do
+
+    # Get individual values to print out later.
+    node_name=$(docker node ls --filter id=$node --format 'Name: {{.Hostname}}')
+    node_id=$(docker node ls --filter id=$node --format 'ID: {{.ID}}')
+    node_status=$(docker node ls --filter id=$node --format 'Status: {{.Status}}')
+    node_avail=$(docker node ls --filter id=$node --format 'Availability: {{.Availability}}')
+    node_manage_status=$(docker node ls --filter id=$node --format 'Manager Status: {{.ManagerStatus}}')
+    
+    # Calculate the length of these values.
+    name_length=${#node_name}
+    id_length=${#node_id}
+    status_length=${#node_status}
+    avail_length=${#node_avail}
+    manage_status_length=${#node_manage_status}
+    
+    # Update the maximum lengths if necessary.
+    if (( name_length > max_name_length )); then
+        max_name_length=$name_length
+    fi
+    if (( id_length > max_id_length )); then
+        max_id_length=$id_length
+    fi
+    if (( status_length > max_status_length )); then
+        max_status_length=$status_length
+    fi
+    if (( avail_length > max_avail_length )); then
+        max_avail_length=$avail_length
+    fi
+    if (( manage_status_length > max_manage_status_length )); then
+        max_manage_status_length=$manage_status_length
+    fi
+done
+
 echo "List of Nodes in the Swarm:"
 for node in $(docker node ls --format '{{.ID}}'); do
-    node_info=$(docker node ls --filter id=$node --format 'ID: {{.ID}} | Hostname: {{.Hostname}} | Status: {{.Status}} | Availability: {{.Availability}} | Manager Status: {{.ManagerStatus}}')
-    print_info "{{.Hostname}}" "$node_info"
+    node_name=$(docker node ls --filter id=$node --format 'Name: {{.Hostname}}')
+    node_id=$(docker node ls --filter id=$node --format 'ID: {{.ID}}')
+    node_status=$(docker node ls --filter id=$node --format 'Status: {{.Status}}')
+    node_avail=$(docker node ls --filter id=$node --format 'Availability: {{.Availability}}')
+    node_manage_status=$(docker node ls --filter id=$node --format 'Manager Status: {{.ManagerStatus}}')
+    print_info "$node_name" "$max_name_length" "$node_id" "$max_id_length" "$node_status" "$max_status_length" "$node_avail" "$max_avail_length" "$node_manage_status" "$max_manage_status_length" 
 done
 echo
 
@@ -48,6 +99,7 @@ echo "Detailed Node Information:"
 #     echo "$node_detail" | python3 -m json.tool
 #     echo
 # done
+
 
 # List of Services.
 # Count chars of longest service name.
@@ -63,9 +115,8 @@ for service in $(docker service ls --format '{{.ID}}'); do
         max_length=$name_length
     fi
 done
+output_tab_space=$((max_length + 1))
 
-
-output_tab_space=$((max_length + 5))
 echo "List of Services:"
 for service in $(docker service ls --format '{{.ID}}'); do
     service_name=$(docker service ls --filter id=$service --format '{{.Name}}')

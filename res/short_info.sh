@@ -32,15 +32,15 @@ swarm_status=$(docker info --format '{{.Swarm.LocalNodeState}}')
 print_info "Swarm Status" "$swarm_status"
 echo
 
-# List of Nodes
+# List of Nodes.
 echo "List of Nodes in the Swarm:"
 for node in $(docker node ls --format '{{.ID}}'); do
     node_info=$(docker node ls --filter id=$node --format 'ID: {{.ID}} | Hostname: {{.Hostname}} | Status: {{.Status}} | Availability: {{.Availability}} | Manager Status: {{.ManagerStatus}}')
-    print_info "Node" "$node_info"
+    print_info "{{.Hostname}}" "$node_info"
 done
 echo
 
-# Detailed Node Information
+# Detailed Node Information.
 echo "Detailed Node Information:"
 # for node in $(docker node ls --format '{{.ID}}'); do
 #     node_detail=$(docker node inspect $node --format '{{json .}}')
@@ -49,11 +49,28 @@ echo "Detailed Node Information:"
 #     echo
 # done
 
-# List of Services
+# List of Services.
+# Count chars of longest service name.
+max_length=0
+for service in $(docker service ls --format '{{.ID}}'); do
+    service_name=$(docker service ls --filter id=$service --format '{{.Name}}')
+    
+    # Calculate the length of the service name.
+    name_length=${#service_name}
+    
+    # Update the maximum length and longest name if necessary
+    if (( name_length > max_length )); then
+        max_length=$name_length
+    fi
+done
+
+
+output_tab_space=$max_length+5
 echo "List of Services:"
 for service in $(docker service ls --format '{{.ID}}'); do
-    service_info=$(docker service ls --filter id=$service --format 'ID: {{.ID}} | Name: {{.Name}} | Mode: {{.Mode}} | Replicas: {{.Replicas}} | Image: {{.Image}}')
-    print_info "Service" "$service_info"
+    service_name=$(docker service ls --filter id=$service --format '{{.Name}}')
+    service_info=$(docker service ls --filter id=$service --format 'ID: {{.ID}} | Mode: {{.Mode}} | Replicas: {{.Replicas}} | Image: {{.Image}}')
+    print_info "$service_name" "$service_info"
 done
 echo
 

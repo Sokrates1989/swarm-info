@@ -2,11 +2,30 @@
 Quick info about swarm status and helpful commands collection
 
 # Prerequisities
-Install Bash
-
+### Bash
+Debian-based systems like Ubuntu
 ```bash
 sudo apt update
 sudo apt install bash
+```
+
+Red Hat-based system
+```bash
+sudo yum update
+sudo yum install bash
+```
+
+### python3
+Debian-based systems like Ubuntu
+```bash
+sudo apt-get update
+sudo apt-get install python3
+```
+
+Red Hat-based system
+```bash
+sudo yum update
+sudo yum install python3
 ```
 
 # First Setup

@@ -43,6 +43,7 @@ echo "Swarm Status:"
 swarm_status=$(docker info --format '{{.Swarm.LocalNodeState}}')
 printf "%-${output_tab_space}s: %s\n" "Swarm Status" "$swarm_status"
 echo
+echo
 
 
 
@@ -98,6 +99,7 @@ for node in $(docker node ls --format '{{.ID}}'); do
     print_info "$node_name" "$max_name_length" "$node_id" "$max_id_length" "$node_status" "$max_status_length" "$node_avail" "$max_avail_length" "$node_manage_status" "$max_manage_status_length" 
 done
 echo
+echo
 
 
 ## Number of services on each node ##
@@ -134,6 +136,7 @@ done
 for node in "${!node_service_count[@]}"; do
     print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
 done
+echo
 echo
 
 
@@ -190,6 +193,7 @@ for service in $(docker service ls --format '{{.ID}}'); do
     print_info "$service_name" "$max_name_length" "$service_id" "$max_id_length" "$service_mode" "$max_mode_length" "$service_replicas" "$max_replicas_length" "$service_image" "$max_image_length" 
 done
 echo
+echo
 
 
 
@@ -231,6 +235,7 @@ for network in $(docker network ls --format '{{.ID}}'); do
     print_info "$network_name" "$max_name_length" "$network_id" "$max_id_length" "$network_driver" "$max_driver_length"
 done
 echo
+echo
 
 
 ## List of Volumes ##
@@ -242,12 +247,12 @@ max_driver_length=0
 for volume in $(docker volume ls --format '{{.Name}}'); do
 
     # Get individual values to print out later.
-    volume_name=$(docker volume ls --filter name=$volume --format '{{.Name}} ')
+    volume_name=$(docker volume ls --filter name=$volume --format '{{.Name}}')
     volume_driver=$(docker volume ls --filter name=$volume --format 'Driver: {{.Driver}}')
 
     # Calculate the length of these values.
-    name_length=${#network_name}
-    driver_length=${#network_driver}
+    name_length=${#volume_name}
+    driver_length=${#volume_driver}
     
     # Update the maximum lengths if necessary.
     if (( name_length > max_name_length )); then
@@ -259,17 +264,18 @@ for volume in $(docker volume ls --format '{{.Name}}'); do
 done
 
 for volume in $(docker volume ls --format '{{.Name}}'); do
-    volume_name=$(docker volume ls --filter name=$volume --format '{{.Name}} ')
+    volume_name=$(docker volume ls --filter name=$volume --format '{{.Name}}')
     volume_driver=$(docker volume ls --filter name=$volume --format 'Driver: {{.Driver}}')
     print_info "$volume_name" "$max_name_length" "$volume_driver" "$max_driver_length"
 done
 echo
+echo
 
 
 # Helpful commands.
-echo
 display_helpful_commands
-
+echo
+echo
 
 
 # This tool's state.

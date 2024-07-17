@@ -42,12 +42,12 @@ echo
 
 # Detailed Node Information
 echo "Detailed Node Information:"
-for node in $(docker node ls --format '{{.ID}}'); do
-    node_detail=$(docker node inspect $node --format '{{json .}}')
-    print_info "Node ID" "$node"
-    echo "$node_detail" | python3 -m json.tool
-    echo
-done
+# for node in $(docker node ls --format '{{.ID}}'); do
+#     node_detail=$(docker node inspect $node --format '{{json .}}')
+#     print_info "Node ID" "$node"
+#     echo "$node_detail" | python3 -m json.tool
+#     echo
+# done
 
 # List of Services
 echo "List of Services:"
@@ -59,12 +59,12 @@ echo
 
 # Detailed Service Information
 echo "Detailed Service Information:"
-for service in $(docker service ls --format '{{.ID}}'); do
-    service_detail=$(docker service inspect $service --format '{{json .}}')
-    print_info "Service ID" "$service"
-    echo "$service_detail" | python3 -m json.tool
-    echo
-done
+# for service in $(docker service ls --format '{{.ID}}'); do
+#     service_detail=$(docker service inspect $service --format '{{json .}}')
+#     print_info "Service ID" "$service"
+#     echo "$service_detail" | python3 -m json.tool
+#     echo
+# done
 
 # Task Details for Each Service
 echo "Task Details for Each Service:"
@@ -78,12 +78,12 @@ done
 
 # Node Resource Usage
 echo "Node Resource Usage:"
-for node in $(docker node ls --format '{{.Hostname}}'); do
-    print_info "Node" "$node"
-    resource_info=$(docker node inspect $node --format 'CPU: {{.Description.Resources.NanoCPUs}} | Memory: {{.Description.Resources.MemoryBytes}}')
-    print_info "Resources" "$resource_info"
-    echo
-done
+# for node in $(docker node ls --format '{{.Hostname}}'); do
+#     print_info "Node" "$node"
+#     resource_info=$(docker node inspect $node --format 'CPU: {{.Description.Resources.NanoCPUs}} | Memory: {{.Description.Resources.MemoryBytes}}')
+#     print_info "Resources" "$resource_info"
+#     echo
+# done
 
 # Running Containers on Each Node
 echo "Running Containers on Each Node:"
@@ -105,12 +105,12 @@ echo
 
 # Detailed Network Information
 echo "Detailed Network Information:"
-for network in $(docker network ls --format '{{.ID}}'); do
-    network_detail=$(docker network inspect $network --format '{{json .}}')
-    print_info "Network ID" "$network"
-    echo "$network_detail" | python3 -m json.tool
-    echo
-done
+# for network in $(docker network ls --format '{{.ID}}'); do
+#     network_detail=$(docker network inspect $network --format '{{json .}}')
+#     print_info "Network ID" "$network"
+#     echo "$network_detail" | python3 -m json.tool
+#     echo
+# done
 
 # List of Volumes
 echo "List of Volumes:"
@@ -122,12 +122,12 @@ echo
 
 # Detailed Volume Information
 echo "Detailed Volume Information:"
-for volume in $(docker volume ls --format '{{.Name}}'); do
-    volume_detail=$(docker volume inspect $volume --format '{{json .}}')
-    print_info "Volume Name" "$volume"
-    echo "$volume_detail" | python3 -m json.tool
-    echo
-done
+# for volume in $(docker volume ls --format '{{.Name}}'); do
+#     volume_detail=$(docker volume inspect $volume --format '{{json .}}')
+#     print_info "Volume Name" "$volume"
+#     echo "$volume_detail" | python3 -m json.tool
+#     echo
+# done
 
 
 # Helpful commands.
@@ -137,6 +137,12 @@ display_helpful_commands
 
 
 # This tool's state.
+
+# Save the current directory to be able to revert back again to it later.
+current_dir=$(pwd)
+# Change to the Git repository directory to make git commands work.
+cd $MAIN_DIR
+
 echo -e "Fetching state of swarm-info (this tool) ..."
 repo_url=https://github.com/Sokrates1989/swarm-info.git
 is_healthy=true

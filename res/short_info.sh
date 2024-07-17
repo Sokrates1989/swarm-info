@@ -65,7 +65,7 @@ for service in $(docker service ls --format '{{.ID}}'); do
 done
 
 
-output_tab_space=$max_length+5
+output_tab_space=$((max_length + 5))
 echo "List of Services:"
 for service in $(docker service ls --format '{{.ID}}'); do
     service_name=$(docker service ls --filter id=$service --format '{{.Name}}')

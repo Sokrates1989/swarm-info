@@ -47,6 +47,7 @@ echo
 
 
 ## List of Nodes ##
+echo "List of Nodes in the Swarm:"
 
 # Count chars of longest values.
 max_name_length=0
@@ -88,7 +89,6 @@ for node in $(docker node ls --format '{{.ID}}'); do
     fi
 done
 
-echo "List of Nodes in the Swarm:"
 for node in $(docker node ls --format '{{.ID}}'); do
     node_name=$(docker node ls --filter id=$node --format '{{.Hostname}}')
     node_id=$(docker node ls --filter id=$node --format 'ID: {{.ID}}')
@@ -100,8 +100,46 @@ done
 echo
 
 
+## Number of services on each node ##
+echo "Number of running services per node:"
+
+# Service Node Count.
+declare -A node_service_count
+
+# Iterate through each service.
+for service in $(docker service ls --format '{{.Name}}'); do
+  # Get running tasks for the service
+  for node in $(docker service ps $service --filter "desired-state=running" --format '{{.Node}}'); do
+    # Increment the count for the node
+    ((node_service_count[$node]++))
+  done
+done
+
+# Count chars of longest values.
+max_name_length=0
+for node in "${!node_service_count[@]}"; do
+
+    # Get individual values to print out later.
+    node_name=${node}
+    
+    # Calculate the length of these values.
+    name_length=${#node_name}
+    
+    # Update the maximum lengths if necessary.
+    if (( name_length > max_name_length )); then
+        max_name_length=$name_length
+    fi
+done
+
+for node in "${!node_service_count[@]}"; do
+    print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
+done
+echo
+
+
 
 ## List of Services ##
+echo "List of Services:"
 
 # Count chars of longest values.
 max_name_length=0
@@ -143,7 +181,6 @@ for service in $(docker service ls --format '{{.ID}}'); do
     fi
 done
 
-echo "List of Services:"
 for service in $(docker service ls --format '{{.ID}}'); do
     service_name=$(docker service ls --filter id=$service --format '{{.Name}}')
     service_id=$(docker service ls --filter id=$service --format 'ID: {{.ID}}')
@@ -156,45 +193,8 @@ echo
 
 
 
-# Print Amount of services on each node.
-
-# Service Node Count.
-declare -A node_service_count
-
-# Iterate through each service.
-for service in $(docker service ls --format '{{.Name}}'); do
-  # Get running tasks for the service
-  for node in $(docker service ps $service --filter "desired-state=running" --format '{{.Node}}'); do
-    # Increment the count for the node
-    ((node_service_count[$node]++))
-  done
-done
-
-# Count chars of longest values.
-max_name_length=0
-for node in "${!node_service_count[@]}"; do
-
-    # Get individual values to print out later.
-    node_name= "Node: $node"
-    
-    # Calculate the length of these values.
-    name_length=${#node_name}
-    
-    # Update the maximum lengths if necessary.
-    if (( name_length > max_name_length )); then
-        max_name_length=$name_length
-    fi
-done
-
-echo
-echo "Number of running services per node:"
-for node in "${!node_service_count[@]}"; do
-    print_info "Node: $node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
-done
-echo
-
-
 ## List of Networks ##
+echo "List of Networks:"
 
 # Count chars of longest values.
 max_name_length=0
@@ -203,7 +203,7 @@ max_driver_length=0
 for network in $(docker network ls --format '{{.ID}}'); do
 
     # Get individual values to print out later.
-    network_name=$(docker network ls --filter id=$network --format 'Name: {{.Name}} ')
+    network_name=$(docker network ls --filter id=$network --format '{{.Name}} ')
     network_id=$(docker network ls --filter id=$network --format 'ID: {{.ID}}')
     network_driver=$(docker network ls --filter id=$network --format 'Driver: {{.Driver}}')
 
@@ -224,9 +224,8 @@ for network in $(docker network ls --format '{{.ID}}'); do
     fi
 done
 
-echo "List of Networks:"
 for network in $(docker network ls --format '{{.ID}}'); do
-    network_name=$(docker network ls --filter id=$network --format 'Name: {{.Name}} ')
+    network_name=$(docker network ls --filter id=$network --format '{{.Name}} ')
     network_id=$(docker network ls --filter id=$network --format 'ID: {{.ID}}')
     network_driver=$(docker network ls --filter id=$network --format 'Driver: {{.Driver}}')
     print_info "$network_name" "$max_name_length" "$network_id" "$max_id_length" "$network_driver" "$max_driver_length"
@@ -235,6 +234,7 @@ echo
 
 
 ## List of Volumes ##
+echo "List of Volumes:"
 
 # Count chars of longest values.
 max_name_length=0
@@ -242,7 +242,7 @@ max_driver_length=0
 for volume in $(docker volume ls --format '{{.Name}}'); do
 
     # Get individual values to print out later.
-    volume_name=$(docker volume ls --filter name=$volume --format 'Name: {{.Name}} ')
+    volume_name=$(docker volume ls --filter name=$volume --format '{{.Name}} ')
     volume_driver=$(docker volume ls --filter name=$volume --format 'Driver: {{.Driver}}')
 
     # Calculate the length of these values.
@@ -258,9 +258,8 @@ for volume in $(docker volume ls --format '{{.Name}}'); do
     fi
 done
 
-echo "List of Volumes:"
 for volume in $(docker volume ls --format '{{.Name}}'); do
-    volume_name=$(docker volume ls --filter name=$volume --format 'Name: {{.Name}} ')
+    volume_name=$(docker volume ls --filter name=$volume --format '{{.Name}} ')
     volume_driver=$(docker volume ls --filter name=$volume --format 'Driver: {{.Driver}}')
     print_info "$volume_name" "$max_name_length" "$volume_driver" "$max_driver_length"
 done

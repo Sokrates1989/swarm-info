@@ -109,7 +109,7 @@ max_id_length=0
 max_mode_length=0
 max_replicas_length=0
 max_image_length=0
-for node in $(docker node ls --format '{{.ID}}'); do
+for service in $(docker service ls --format '{{.ID}}'); do
 
     # Get individual values to print out later.
     service_name=$(docker service ls --filter id=$service --format '{{.Name}}')

@@ -145,6 +145,7 @@ echo
 
 
 ## List of Nodes ##
+wait_for_user
 echo "List of Nodes in the Swarm (docker node ls):"
 node_output=$(docker node ls)
 echo "$node_output"
@@ -153,6 +154,7 @@ echo
 
 
 ## Node-Lables ##
+wait_for_user
 echo "Labels for each node (docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}'):"
 # Count chars of longest values.
 max_name_length=0
@@ -240,6 +242,7 @@ echo
 
 
 ## List of Services ##
+wait_for_user
 echo "List of Services (docker service ls):"
 services_output=$(docker service ls)
 echo "$services_output"
@@ -270,6 +273,7 @@ echo
 
 
 ## List of Networks ##
+wait_for_user
 echo "List of Networks (docker network ls):"
 networks_output=$(docker network ls)
 echo "$networks_output"
@@ -285,6 +289,7 @@ echo
 
 
 ## List of Secrets ##
+wait_for_user
 echo "List of Secrets (docker secret ls):"
 secrets_output=$(docker secret ls)
 echo "$secrets_output"

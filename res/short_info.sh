@@ -57,18 +57,18 @@ print_info() {
     echo ""  # Print a newline at the end
 }
 
-# Wait for user.
-wait_for_user() {
+# Loading animation.
+loading_animation() {
     local duration=3
     local delay=0.1
     if [ "$output_speed" == "fast" ]; then
         delay=0.05
         duration=0
     elif [ "$output_speed" == "normal" ]; then
-        delay=0.1
+        delay=0.2
         duration=3
     elif [ "$output_speed" == "slow" ]; then
-        delay=0.2
+        delay=0.4
         duration=5
     fi
     local spinstr='|/-\'
@@ -85,6 +85,56 @@ wait_for_user() {
 }
 
 
+# Function to show a loading dots animation.
+show_loading_dots() {
+    local duration=3
+    local delay=0.5
+    if [ "$output_speed" == "fast" ]; then
+        delay=0.05
+        duration=0
+    elif [ "$output_speed" == "normal" ]; then
+        delay=0.2
+        duration=3
+    elif [ "$output_speed" == "slow" ]; then
+        delay=0.4
+        duration=5
+    fi
+    SECONDS=0
+    while (( SECONDS < duration )); do
+        printf "."
+        sleep $delay
+        printf "\b\b  \b\b"
+        sleep $delay
+        printf ".."
+        sleep $delay
+        printf "\b\b\b   \b\b\b"
+        sleep $delay
+        printf "..."
+        sleep $delay
+        printf "\b\b\b    \b\b\b\b"
+        sleep $delay
+    done
+    printf "    \b\b\b\b"
+}
+
+
+# Wait for user.
+wait_for_user() {
+    if [ "$output_speed" == "fast" ]; then
+        : # no-op (no operation) command.
+    else 
+        wait_for_keypress
+    fi
+}
+
+
+# Function to wait for a key press.
+wait_for_keypress() {
+    echo "Press any button to continue..."
+    read -n 1 -s
+}
+
+
 # Swarm Status
 echo
 swarm_status=$(docker info --format '{{.Swarm.LocalNodeState}}')
@@ -95,7 +145,6 @@ echo
 
 
 ## List of Nodes ##
-wait_for_user # Simulate calculation time to allow user to read previous output.
 echo "List of Nodes in the Swarm (docker node ls):"
 node_output=$(docker node ls)
 echo "$node_output"
@@ -104,7 +153,6 @@ echo
 
 
 ## Node-Lables ##
-wait_for_user # Simulate calculation time to allow user to read previous output.
 echo "Labels for each node (docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}'):"
 # Count chars of longest values.
 max_name_length=0
@@ -148,7 +196,7 @@ echo
 echo
 
 ## Number of services on each node ##
-wait_for_user # Simulate calculation time to allow user to read previous output.
+wait_for_user
 echo "Number of running services per node:"
 
 # Service Node Count.
@@ -192,7 +240,6 @@ echo
 
 
 ## List of Services ##
-wait_for_user # Simulate calculation time to allow user to read previous output.
 echo "List of Services (docker service ls):"
 services_output=$(docker service ls)
 echo "$services_output"
@@ -208,7 +255,7 @@ echo
 
 
 ## List of Stacks ##
-wait_for_user # Simulate calculation time to allow user to read previous output.
+wait_for_user
 echo "List of Stacks (docker stack ls):"
 stacks_output=$(docker stack ls)
 echo "$stacks_output"
@@ -223,7 +270,6 @@ echo
 
 
 ## List of Networks ##
-wait_for_user # Simulate calculation time to allow user to read previous output.
 echo "List of Networks (docker network ls):"
 networks_output=$(docker network ls)
 echo "$networks_output"
@@ -239,7 +285,6 @@ echo
 
 
 ## List of Secrets ##
-wait_for_user # Simulate calculation time to allow user to read previous output.
 echo "List of Secrets (docker secret ls):"
 secrets_output=$(docker secret ls)
 echo "$secrets_output"

@@ -3,9 +3,17 @@
 # Get the directory of the script.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Function to display service information.
+# Display swarm information.
 display_short_info() {
     bash "$SCRIPT_DIR/res/short_info.sh"
+}
+# Display swarm information fastly.
+display_short_info_fast() {
+    bash "$SCRIPT_DIR/res/short_info.sh" -f
+}
+# Display swarm information slowly.
+display_short_info_slow() {
+    bash "$SCRIPT_DIR/res/short_info.sh" -s
 }
 
 # Function to display service node information (What service is running on which node).
@@ -51,7 +59,8 @@ display_help() {
     echo -e "Usage: $0 [OPTIONS]"
     echo -e "Options:"
     echo -e "  -c             Display helpful commands"
-    echo -e "  -f, --full     Display full system information"
+    echo -e "  -f             Alias for --fast"
+    echo -e "  --fast         Do not wait for user to read output (without this option, the scripts waits after every output)"
     echo -e "  -h             Display this help message"
     echo -e "  --help         Display this help message"
     echo -e "  --json         Save and display info in json format"
@@ -62,6 +71,7 @@ display_help() {
     echo -e "  --nodes        Display service node information (What service is running on which node)"
     echo -e "  -o             Alias for --output-file"
     echo -e "  --output-file  Where to save the swarm info output (only in combination with --json)"
+    echo -e "  --slow         Wait a little longer between displaying swarm infos"
     echo -e "  --stacks       Display stack information"
 }
 
@@ -78,11 +88,11 @@ while [ $# -gt 0 ]; do
             exit 0
             ;;
         -f)
-            display_short_info
+            display_short_info_fast
             exit 0
             ;;
-        --full)
-            display_short_info
+        --fast)
+            display_short_info_fast
             exit 0
             ;;
         -h)
@@ -127,6 +137,10 @@ while [ $# -gt 0 ]; do
             shift
             CUSTOM_OUTPUT_FILE="$1"
             shift
+            ;;
+        --slow)
+            display_short_info_slow
+            exit 0
             ;;
         --stacks)
             display_stack_info

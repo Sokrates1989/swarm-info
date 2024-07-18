@@ -9,10 +9,11 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Helpful commands.
 echo
-echo "Troubleshooting:"
-printf "%${output_tab_space}s: %s\n" "Get information" "docker service ps <SERVICE_NAME> --no-trunc"
-printf "%${output_tab_space}s: %s\n" "Read logs" "docker service logs <SERVICE_NAME>"
-echo "Enter container, if further information is needed:"
+echo "Troubleshooting"
+printf "%-${output_tab_space}s: %s\n" "Get information" "docker service ps <SERVICE_NAME> --no-trunc"
+printf "%-${output_tab_space}s: %s\n" "Read logs" "docker service logs <SERVICE_NAME>"
+echo 
+echo "Enter container, if further information is needed"
 printf "%-${output_tab_space}s: %s\n" "Determine Node" "docker service ps <SERVICE_NAME> --no-trunc"
 printf "%-${output_tab_space}s: %s\n" "Enter node" "ssh into node (Putty or alike)"
 printf "%-${output_tab_space}s: %s\n" "Get container ID" "docker ps"

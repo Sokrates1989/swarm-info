@@ -13,6 +13,11 @@ display_node_info() {
     bash "$SCRIPT_DIR/res/node_info.sh"
 }
 
+# Local node info.
+display_local_node_info() {
+    bash "$SCRIPT_DIR/res/local_node_info.sh"
+}
+
 # Stack info.
 display_stack_info() {
     bash "$SCRIPT_DIR/res/stack_info.sh"
@@ -50,7 +55,8 @@ display_help() {
     echo -e "  -h             Display this help message"
     echo -e "  --help         Display this help message"
     echo -e "  --json         Save and display info in json format"
-    echo -e "  -l             Alias for --full"
+    echo -e "  -l             Alias for --local"
+    echo -e "  --local        Display local docker information (docker on this node)"
     echo -e "  -n             Alias for --node"
     echo -e "  --net          Display network info"
     echo -e "  --nodes        Display service node information (What service is running on which node)"
@@ -93,7 +99,11 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -l)
-            display_short_info
+            display_local_node_info
+            exit 0
+            ;;
+        --local)
+            display_local_node_info
             exit 0
             ;;
         -n)

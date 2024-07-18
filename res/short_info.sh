@@ -141,8 +141,6 @@ wait_for_keypress() {
     tput el # Clear the line
     echo
     echo
-    echo
-    echo
     echo "($page/$total_pages)"
     echo
 }

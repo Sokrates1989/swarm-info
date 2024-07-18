@@ -132,6 +132,8 @@ wait_for_user() {
 wait_for_keypress() {
     echo "Press any button to continue..."
     read -n 1 -s
+    tput cuu1 # Move cursor up one line
+    tput el # Clear the line
 }
 
 

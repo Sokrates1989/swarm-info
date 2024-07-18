@@ -13,6 +13,11 @@ display_node_info() {
     bash "$SCRIPT_DIR/res/node_info.sh"
 }
 
+# Stack info.
+display_stack_info() {
+    bash "$SCRIPT_DIR/res/stack_info.sh"
+}
+
 # Network info.
 display_network_info() {
     bash "$SCRIPT_DIR/res/network_info.sh"
@@ -26,13 +31,13 @@ display_helpful_commands() {
 # Function to display and save system information as json.
 CUSTOM_OUTPUT_FILE="NONE"
 swarm_info_dir="$SCRIPT_DIR/swarm_info"
-swarm_info_json_file="$swarm_info_dir/short_info.json"
+swarm_info_json_file="$swarm_info_dir/swarm_info.json"
 swarm_info_json() {
     # Check if CUSTOM_OUTPUT_FILE is still in its default value
     if [ "$CUSTOM_OUTPUT_FILE" = "NONE" ]; then
-        bash "$SCRIPT_DIR/res/swarm_info.sh" --json --output-file "$swarm_info_json_file"
+        bash "$SCRIPT_DIR/res/json_info.sh" --json --output-file "$swarm_info_json_file"
     else
-        bash "$SCRIPT_DIR/res/swarm_info.sh" --json --output-file "$CUSTOM_OUTPUT_FILE"
+        bash "$SCRIPT_DIR/res/json_info.sh" --json --output-file "$CUSTOM_OUTPUT_FILE"
     fi
 }
 
@@ -48,10 +53,10 @@ display_help() {
     echo -e "  -l             Alias for --full"
     echo -e "  -n             Alias for --node"
     echo -e "  --net          Display network info"
-    echo -e "  --node         Display service node information (What service is running on which node)"
+    echo -e "  --nodes        Display service node information (What service is running on which node)"
     echo -e "  -o             Alias for --output-file"
-    echo -e "  --output-file  Where to save the system info output (only in combination with --json)"
-    echo -e "  -s             Display short information"
+    echo -e "  --output-file  Where to save the swarm info output (only in combination with --json)"
+    echo -e "  --stacks       Display stack information"
 }
 
 
@@ -99,7 +104,7 @@ while [ $# -gt 0 ]; do
             display_network_info
             exit 0
             ;;
-        --node)
+        --nodes)
             display_node_info
             exit 0
             ;;
@@ -113,8 +118,8 @@ while [ $# -gt 0 ]; do
             CUSTOM_OUTPUT_FILE="$1"
             shift
             ;;
-        -s)
-            display_short_info
+        --stacks)
+            display_stack_info
             exit 0
             ;;
         *)
@@ -129,7 +134,7 @@ if [ "$use_file_output" = "true" ]; then
     if [ "$file_output_type" = "json" ]; then
         swarm_info_json
     else
-        # If no option is specified or an invalid option is provided, display short info.
+        # File output type is invalid.
         echo -e "invalid file_output_type: $file_output_type"
     fi
 else

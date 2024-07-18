@@ -1,37 +1,39 @@
-# Service Node Count.
-declare -A node_service_count
+#!/bin/bash
 
-# Iterate through each service
-for service in $(docker service ls --format '{{.Name}}'); do
-  # Get running tasks for the service
-  for node in $(docker service ps $service --filter "desired-state=running" --format '{{.Node}}'); do
-    # Increment the count for the node
-    ((node_service_count[$node]++))
-  done
+## List of Networks ##
+echo "List of Networks:"
+
+# Count chars of longest values.
+max_name_length=0
+max_id_length=0
+max_driver_length=0
+for network in $(docker network ls --format '{{.ID}}'); do
+
+    # Get individual values to print out later.
+    network_name=$(docker network ls --filter id=$network --format '{{.Name}} ')
+    network_id=$(docker network ls --filter id=$network --format 'ID: {{.ID}}')
+    network_driver=$(docker network ls --filter id=$network --format 'Driver: {{.Driver}}')
+
+    # Calculate the length of these values.
+    name_length=${#network_name}
+    id_length=${#network_id}
+    driver_length=${#network_driver}
+    
+    # Update the maximum lengths if necessary.
+    if (( name_length > max_name_length )); then
+        max_name_length=$name_length
+    fi
+    if (( id_length > max_id_length )); then
+        max_id_length=$id_length
+    fi
+    if (( driver_length > max_driver_length )); then
+        max_driver_length=$driver_length
+    fi
 done
 
-# Print Amount of services on each node.
-echo
-echo "Number of running services per node:"
-for node in "${!node_service_count[@]}"; do
-  echo "Node: $node, Running Services: ${node_service_count[$node]}"
+for network in $(docker network ls --format '{{.ID}}'); do
+    network_name=$(docker network ls --filter id=$network --format '{{.Name}} ')
+    network_id=$(docker network ls --filter id=$network --format 'ID: {{.ID}}')
+    network_driver=$(docker network ls --filter id=$network --format 'Driver: {{.Driver}}')
+    print_info "$network_name" "$max_name_length" "$network_id" "$max_id_length" "$network_driver" "$max_driver_length"
 done
-echo
-
-
-# Each Service on and their tasks and their nodes.
-for service in $(docker service ls --format '{{.Name}}'); do
-  service_id=$(docker service ls --filter "name=$service" --format '{{.ID}}')
-  echo "Service: $service (ID: $service_id)"
-  docker service ps $service --filter "desired-state=running" --format 'Task ID: {{.ID}} | Task Name: {{.Name}} | Node: {{.Node}} | Status: {{.CurrentState}}'
-  echo
-done
-
-
-# Print Amount of services on each node.
-echo
-echo "Number of running services per node:"
-for node in "${!node_service_count[@]}"; do
-  echo "Node: $node, Running Services: ${node_service_count[$node]}"
-done
-echo

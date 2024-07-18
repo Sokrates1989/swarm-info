@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # This tool's state.

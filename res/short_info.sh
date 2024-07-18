@@ -37,6 +37,7 @@ print_info() {
     echo ""  # Print a newline at the end
 }
 
+
 # Swarm Status
 echo
 echo "Swarm Status:"
@@ -48,29 +49,30 @@ echo
 
 
 ## List of Nodes ##
-echo "List of Nodes in the Swarm:"
+echo "List of Nodes in the Swarm (docker node ls):"
+node_output=$(docker node ls)
+echo "$node_output"
+echo
+echo
 
+
+## Node-Lables ##
+echo "Labels for each node (docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}'):"
 # Count chars of longest values.
 max_name_length=0
 max_id_length=0
-max_status_length=0
-max_avail_length=0
-max_manage_status_length=0
+max_labels_length=0
 for node in $(docker node ls --format '{{.ID}}'); do
 
     # Get individual values to print out later.
-    node_name=$(docker node ls --filter id=$node --format 'Name: {{.Hostname}}')
+    node_name=$(docker node ls --filter id=$node --format '{{.Hostname}}')
     node_id=$(docker node ls --filter id=$node --format 'ID: {{.ID}}')
-    node_status=$(docker node ls --filter id=$node --format 'Status: {{.Status}}')
-    node_avail=$(docker node ls --filter id=$node --format 'Availability: {{.Availability}}')
-    node_manage_status=$(docker node ls --filter id=$node --format 'Manager Status: {{.ManagerStatus}}')
+    node_labels=$(docker node ls --filter id=$node --format 'Labels: {{.Spec.Labels}}')
     
     # Calculate the length of these values.
     name_length=${#node_name}
     id_length=${#node_id}
-    status_length=${#node_status}
-    avail_length=${#node_avail}
-    manage_status_length=${#node_manage_status}
+    labels_length=${#node_labels}
     
     # Update the maximum lengths if necessary.
     if (( name_length > max_name_length )); then
@@ -79,28 +81,23 @@ for node in $(docker node ls --format '{{.ID}}'); do
     if (( id_length > max_id_length )); then
         max_id_length=$id_length
     fi
-    if (( status_length > max_status_length )); then
-        max_status_length=$status_length
-    fi
-    if (( avail_length > max_avail_length )); then
-        max_avail_length=$avail_length
-    fi
-    if (( manage_status_length > max_manage_status_length )); then
-        max_manage_status_length=$manage_status_length
+    if (( labels_length > max_labels_length )); then
+        max_labels_length=$labels_length
     fi
 done
 
 for node in $(docker node ls --format '{{.ID}}'); do
     node_name=$(docker node ls --filter id=$node --format '{{.Hostname}}')
     node_id=$(docker node ls --filter id=$node --format 'ID: {{.ID}}')
-    node_status=$(docker node ls --filter id=$node --format 'Status: {{.Status}}')
-    node_avail=$(docker node ls --filter id=$node --format 'Availability: {{.Availability}}')
-    node_manage_status=$(docker node ls --filter id=$node --format 'Manager Status: {{.ManagerStatus}}')
-    print_info "$node_name" "$max_name_length" "$node_id" "$max_id_length" "$node_status" "$max_status_length" "$node_avail" "$max_avail_length" "$node_manage_status" "$max_manage_status_length" 
+    node_labels=$(docker node ls --filter id=$node --format 'Labels: {{.Spec.Labels}}')
+    print_info "$node_name" "$max_name_length" "$node_id" "$max_id_length" "$node_labels" "$max_labels_length"
 done
 echo
+echo "Helpful commands:"
+printf "%-${output_tab_space}s: %s\n" "Set label" "docker node update --label-add <KEY>=<VALUE> <NODE_ID>"
+printf "%-${output_tab_space}s: %s\n" "´Remove Label" "docker node update --label-rm <KEY> <NODE_ID>"
 echo
-
+echo
 
 ## Number of services on each node ##
 echo "Number of running services per node:"
@@ -110,9 +107,9 @@ declare -A node_service_count
 
 # Iterate through each service.
 for service in $(docker service ls --format '{{.Name}}'); do
-  # Get running tasks for the service
+  # Get running tasks for the service.
   for node in $(docker service ps $service --filter "desired-state=running" --format '{{.Node}}'); do
-    # Increment the count for the node
+    # Increment the count for the node.
     ((node_service_count[$node]++))
   done
 done
@@ -137,120 +134,68 @@ for node in "${!node_service_count[@]}"; do
     print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
 done
 echo
+echo "More details and tasks on each node:"
+printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --nodes"
+echo
 echo
 
 
 
 ## List of Services ##
-echo "List of Services:"
+echo "List of Services (docker service ls):"
+services_output=$(docker service ls)
+echo "$services_output"
+echo
+echo "Helpful commands:"
+printf "%${output_tab_space}s  %s\n" "Get information" "docker service ps <SERVICE_NAME> --no-trunc"
+printf "%${output_tab_space}s  %s\n" "Read logs" "docker service logs <SERVICE_NAME>"
+printf "%${output_tab_space}s  %s\n" "Inspect service" "docker service inspect <SERVICE_NAME> --pretty"
+printf "%${output_tab_space}s  %s\n" "Remove service" "docker service rm <SERVICE_NAME>"
+echo
+echo
 
-# Count chars of longest values.
-max_name_length=0
-max_id_length=0
-max_mode_length=0
-max_replicas_length=0
-max_image_length=0
-for service in $(docker service ls --format '{{.ID}}'); do
 
-    # Get individual values to print out later.
-    service_name=$(docker service ls --filter id=$service --format '{{.Name}}')
-    service_id=$(docker service ls --filter id=$service --format 'ID: {{.ID}}')
-    service_mode=$(docker service ls --filter id=$service --format 'Mode: {{.Mode}}')
-    service_replicas=$(docker service ls --filter id=$service --format 'Replicas: {{.Replicas}}')
-    service_image=$(docker service ls --filter id=$service --format 'Image: {{.Image}}')
-    
-    # Calculate the length of these values.
-    name_length=${#service_name}
-    id_length=${#service_id}
-    mode_length=${#service_mode}
-    replicas_length=${#service_replicas}
-    image_length=${#service_image}
-    
-    # Update the maximum lengths if necessary.
-    if (( name_length > max_name_length )); then
-        max_name_length=$name_length
-    fi
-    if (( id_length > max_id_length )); then
-        max_id_length=$id_length
-    fi
-    if (( mode_length > max_mode_length )); then
-        max_mode_length=$mode_length
-    fi
-    if (( replicas_length > max_replicas_length )); then
-        max_replicas_length=$replicas_length
-    fi
-    if (( image_length > max_image_length )); then
-        max_image_length=$image_length
-    fi
-done
 
-for service in $(docker service ls --format '{{.ID}}'); do
-    service_name=$(docker service ls --filter id=$service --format '{{.Name}}')
-    service_id=$(docker service ls --filter id=$service --format 'ID: {{.ID}}')
-    service_mode=$(docker service ls --filter id=$service --format 'Mode: {{.Mode}}')
-    service_replicas=$(docker service ls --filter id=$service --format 'Replicas: {{.Replicas}}')
-    service_image=$(docker service ls --filter id=$service --format 'Image: {{.Image}}')
-    print_info "$service_name" "$max_name_length" "$service_id" "$max_id_length" "$service_mode" "$max_mode_length" "$service_replicas" "$max_replicas_length" "$service_image" "$max_image_length" 
-done
+## List of Stacks ##
+echo "List of Stacks (docker stack ls):"
+stacks_output=$(docker stack ls)
+echo "$stacks_output"
+echo
+echo "Helpful commands:"
+printf "%-${output_tab_space}s: %s\n" "More details" "bash $MAIN_DIR/get_info.sh --stack"
+printf "%-${output_tab_space}s: %s\n" "Services of stack" "docker stack services <STACKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Remove stack" "docker stack rm <STACKNAME>"
 echo
 echo
 
 
 
 ## List of Networks ##
-echo "List of Networks:"
-
-# Count chars of longest values.
-max_name_length=0
-max_id_length=0
-max_driver_length=0
-for network in $(docker network ls --format '{{.ID}}'); do
-
-    # Get individual values to print out later.
-    network_name=$(docker network ls --filter id=$network --format '{{.Name}} ')
-    network_id=$(docker network ls --filter id=$network --format 'ID: {{.ID}}')
-    network_driver=$(docker network ls --filter id=$network --format 'Driver: {{.Driver}}')
-
-    # Calculate the length of these values.
-    name_length=${#network_name}
-    id_length=${#network_id}
-    driver_length=${#network_driver}
-    
-    # Update the maximum lengths if necessary.
-    if (( name_length > max_name_length )); then
-        max_name_length=$name_length
-    fi
-    if (( id_length > max_id_length )); then
-        max_id_length=$id_length
-    fi
-    if (( driver_length > max_driver_length )); then
-        max_driver_length=$driver_length
-    fi
-done
-
-for network in $(docker network ls --format '{{.ID}}'); do
-    network_name=$(docker network ls --filter id=$network --format '{{.Name}} ')
-    network_id=$(docker network ls --filter id=$network --format 'ID: {{.ID}}')
-    network_driver=$(docker network ls --filter id=$network --format 'Driver: {{.Driver}}')
-    print_info "$network_name" "$max_name_length" "$network_id" "$max_id_length" "$network_driver" "$max_driver_length"
-done
+echo "List of Networks (docker network ls):"
+networks_output=$(docker network ls)
+echo "$networks_output"
+echo
+echo "Helpful commands:"
+printf "%-${output_tab_space}s: %s\n" "Create Network" "docker network create --driver overlay --attachable <NETWORKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Get Info" "docker network inspect <NETWORKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Remove Network" "docker network rm <NETWORKNAME>"
 echo
 echo
 
 
 
 
-
-
-## List of Volumes ##
-echo "List of Secrets:"
+## List of Secrets ##
+echo "List of Secrets (docker secret ls):"
 secrets_output=$(docker secret ls)
 echo "$secrets_output"
 echo
 echo "Helpful commands:"
 printf "%-${output_tab_space}s: %s\n" "Create Secret" "vi secret.txt    (then insert secret and save file)"
-printf "%${output_tab_space}s  %s\n" "" "docker secret create SECRETNAME secret.txt"
+printf "%${output_tab_space}s  %s\n" "" "docker secret create <SECRETNAME> secret.txt"
 printf "%${output_tab_space}s  %s\n" "" "rm secret.txt"
+printf "%-${output_tab_space}s: %s\n" "Inspect Secret" "docker secret inspect --pretty <SECRETNAME>"
+printf "%-${output_tab_space}s: %s\n" "Remove Secret" "docker secret rm <SECRETNAME>"
 echo
 echo
 
@@ -284,14 +229,23 @@ done
 for volume in $(docker volume ls --format '{{.Name}}'); do
     volume_name=$(docker volume ls --filter name=$volume --format '{{.Name}}')
     volume_driver=$(docker volume ls --filter name=$volume --format 'Driver: {{.Driver}}')
-    print_info "$volume_name" "$max_name_length" "$volume_driver" "$max_driver_length"
+
+    # Get the mountpoint of the volume.
+    volume_mountpoint=$(docker volume inspect $volume_name --format '{{ .Mountpoint }}')
+    # Check if the mountpoint was retrieved successfully.
+    if [ -z "$volume_mountpoint" ]; then
+        volume_disk_usage="UNKNOWN MOUNTPOINT"
+    else
+        # Get the disk usage of the volume.
+        volume_disk_usage=$(du -sh $volume_mountpoint 2>/dev/null)
+        # Check if the disk usage command succeeded.
+        if [ $? -ne 0 ]; then
+            volume_disk_usage="UNKNOWN DISK USAGE"
+        fi
+    fi
+
+    print_info "$volume_name" "$max_name_length" "$volume_driver" "$max_driver_length" "$volume_disk_usage" "15"
 done
-echo
-echo
-
-
-# Helpful commands.
-display_helpful_commands
 echo
 echo
 
@@ -300,9 +254,14 @@ echo
 check_state_of_tool
 
 
-# Spacer.
-echo -e "\n"
-echo -e "To view all available options use --help -> bash $MAIN_DIR/get_info.sh --help  "
-echo -e ""
+# This tool's options.
+echo
+echo
+echo "This tool's options:"
+printf "%-${output_tab_space}s: %s\n" "Swarm commands overview" "bash $MAIN_DIR/get_info.sh -c"
+printf "%-${output_tab_space}s: %s\n" "Nodes info" "bash $MAIN_DIR/get_info.sh --nodes"
+printf "%-${output_tab_space}s: %s\n" "Stacks info" "bash $MAIN_DIR/get_info.sh --stacks"
+printf "%-${output_tab_space}s: %s\n" "All options" "bash $MAIN_DIR/get_info.sh --help"
+echo
 
 

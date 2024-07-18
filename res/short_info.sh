@@ -325,6 +325,7 @@ echo
 echo "This tool's options:"
 output_tab_space=25
 printf "%-${output_tab_space}s: %s\n" "Helpful swarm commands" "bash $MAIN_DIR/get_info.sh -c"
+printf "%-${output_tab_space}s: %s\n" "Do not wait for keypress" "bash $MAIN_DIR/get_info.sh -f"
 printf "%-${output_tab_space}s: %s\n" "Nodes info" "bash $MAIN_DIR/get_info.sh --nodes"
 printf "%-${output_tab_space}s: %s\n" "Local docker info" "bash $MAIN_DIR/get_info.sh --local"
 printf "%-${output_tab_space}s: %s\n" "Stacks info" "bash $MAIN_DIR/get_info.sh --stacks"

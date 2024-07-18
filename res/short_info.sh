@@ -134,11 +134,15 @@ wait_for_user() {
 wait_for_keypress() {
     local page=$1
     local total_pages=$2
+    local lines=$(tput lines) # Get the height of the terminal
     echo "Press any button to continue... ($page/$total_pages)"
     read -n 1 -s
     tput cuu1 # Move cursor up one line
     tput el # Clear the line
-    clear # Empty shell to make it look like a new page
+    for ((i = 0; i < lines; i++)); do
+        echo
+    done
+    echo
 }
 
 

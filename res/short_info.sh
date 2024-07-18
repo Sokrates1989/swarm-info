@@ -120,20 +120,25 @@ show_loading_dots() {
 
 # Wait for user.
 wait_for_user() {
+    local page=$1
+    local total_pages=$2
     if [ "$output_speed" == "fast" ]; then
         : # no-op (no operation) command.
     else 
-        wait_for_keypress
+        wait_for_keypress $page $total_pages
     fi
 }
 
 
 # Function to wait for a key press.
 wait_for_keypress() {
-    echo "Press any button to continue..."
+    local page=$1
+    local total_pages=$2
+    echo "Press any button to continue... ($page/$total_pages)"
     read -n 1 -s
     tput cuu1 # Move cursor up one line
     tput el # Clear the line
+    clear # Empty shell to make it look like a new page
 }
 
 
@@ -147,7 +152,7 @@ echo
 
 
 ## List of Nodes ##
-wait_for_user
+wait_for_user 1 7
 echo "List of Nodes in the Swarm (docker node ls):"
 node_output=$(docker node ls)
 echo "$node_output"
@@ -156,7 +161,7 @@ echo
 
 
 ## Node-Lables ##
-wait_for_user
+wait_for_user 2 7
 echo "Labels for each node (docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}'):"
 # Count chars of longest values.
 max_name_length=0
@@ -200,7 +205,7 @@ echo
 echo
 
 ## Number of services on each node ##
-wait_for_user
+wait_for_user 3 7
 echo "Number of running services per node:"
 
 # Service Node Count.
@@ -244,7 +249,7 @@ echo
 
 
 ## List of Services ##
-wait_for_user
+wait_for_user 4 7
 echo "List of Services (docker service ls):"
 services_output=$(docker service ls)
 echo "$services_output"
@@ -260,7 +265,7 @@ echo
 
 
 ## List of Stacks ##
-wait_for_user
+wait_for_user 5 7
 echo "List of Stacks (docker stack ls):"
 stacks_output=$(docker stack ls)
 echo "$stacks_output"
@@ -275,7 +280,7 @@ echo
 
 
 ## List of Networks ##
-wait_for_user
+wait_for_user 6 7
 echo "List of Networks (docker network ls):"
 networks_output=$(docker network ls)
 echo "$networks_output"
@@ -291,7 +296,7 @@ echo
 
 
 ## List of Secrets ##
-wait_for_user
+wait_for_user 7 7
 echo "List of Secrets (docker secret ls):"
 secrets_output=$(docker secret ls)
 echo "$secrets_output"

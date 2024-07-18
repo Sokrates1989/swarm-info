@@ -59,13 +59,29 @@ print_info() {
 
 # Wait for user.
 wait_for_user() {
+    local duration=3
+    local delay=0.1
     if [ "$output_speed" == "fast" ]; then
-        sleep 0
+        delay=0.05
+        duration=0
     elif [ "$output_speed" == "normal" ]; then
-        sleep 3
+        delay=0.1
+        duration=3
     elif [ "$output_speed" == "slow" ]; then
-        sleep 5
+        delay=0.2
+        duration=5
     fi
+    local spinstr='|/-\'
+    local temp
+    SECONDS=0
+    while (( SECONDS < duration )); do
+        temp=${spinstr#?}
+        printf " [%c]  " "$spinstr"
+        spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\b\b\b\b\b\b"
+    done
+    printf "    \b\b\b\b"
 }
 
 
@@ -79,8 +95,8 @@ echo
 
 
 ## List of Nodes ##
-echo "List of Nodes in the Swarm (docker node ls):"
 wait_for_user # Simulate calculation time to allow user to read previous output.
+echo "List of Nodes in the Swarm (docker node ls):"
 node_output=$(docker node ls)
 echo "$node_output"
 echo
@@ -88,8 +104,8 @@ echo
 
 
 ## Node-Lables ##
-echo "Labels for each node (docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}'):"
 wait_for_user # Simulate calculation time to allow user to read previous output.
+echo "Labels for each node (docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}'):"
 # Count chars of longest values.
 max_name_length=0
 max_id_length=0
@@ -132,8 +148,8 @@ echo
 echo
 
 ## Number of services on each node ##
-echo "Number of running services per node:"
 wait_for_user # Simulate calculation time to allow user to read previous output.
+echo "Number of running services per node:"
 
 # Service Node Count.
 declare -A node_service_count
@@ -176,8 +192,8 @@ echo
 
 
 ## List of Services ##
-echo "List of Services (docker service ls):"
 wait_for_user # Simulate calculation time to allow user to read previous output.
+echo "List of Services (docker service ls):"
 services_output=$(docker service ls)
 echo "$services_output"
 echo "Helpful service commands:"
@@ -192,8 +208,8 @@ echo
 
 
 ## List of Stacks ##
-echo "List of Stacks (docker stack ls):"
 wait_for_user # Simulate calculation time to allow user to read previous output.
+echo "List of Stacks (docker stack ls):"
 stacks_output=$(docker stack ls)
 echo "$stacks_output"
 echo "Helpful stack commands:"
@@ -207,8 +223,8 @@ echo
 
 
 ## List of Networks ##
-echo "List of Networks (docker network ls):"
 wait_for_user # Simulate calculation time to allow user to read previous output.
+echo "List of Networks (docker network ls):"
 networks_output=$(docker network ls)
 echo "$networks_output"
 echo "Helpful network commands:"
@@ -223,8 +239,8 @@ echo
 
 
 ## List of Secrets ##
-echo "List of Secrets (docker secret ls):"
 wait_for_user # Simulate calculation time to allow user to read previous output.
+echo "List of Secrets (docker secret ls):"
 secrets_output=$(docker secret ls)
 echo "$secrets_output"
 echo "Helpful secret commands:"

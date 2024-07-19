@@ -1,39 +1,87 @@
 #!/bin/bash
 
+# Get the directory of the script.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+
+# Global functions.
+source "$SCRIPT_DIR/res/functions.sh"
+
+
+
+# Display next menu item.
+display_next_menu_item() {
+    if [ "$output_type" = "menu" ]; then
+        if [ "$output_speed" = "wait" ]; then
+            bash "$SCRIPT_DIR/res/secrets_info.sh" -t "$total_pages" -c "$current_page" -w
+        elif [ "$output_speed" = "fast" ]; then
+            bash "$SCRIPT_DIR/res/secrets_info.sh" -t "$total_pages" -c "$current_page" -f
+        fi
+    fi   
+}
+
+
+# Parse command-line options.
+total_pages=0
+current_page=0
+output_type="single"
+output_speed="wait"
+while getopts ":fwt:c:" opt; do
+  case $opt in
+    f)
+      output_type="menu"
+      output_speed="fast"
+      ;;
+    w)
+      output_type="menu"
+      output_speed="wait"
+      ;;
+    t)
+      total_pages=$OPTARG
+      ;;
+    c)
+      current_page=$OPTARG
+      ;;
+    \?)
+      echo -e "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo -e "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
+
+
+
+
 ## List of Networks ##
-echo "List of Networks:"
+echo "List of Networks (docker network ls):"
+networks_output=$(docker network ls)
+echo "$networks_output"
+echo "Helpful network commands:"
+output_tab_space=20
+printf "%-${output_tab_space}s: %s\n" "Create Network" "docker network create --driver overlay --attachable <NETWORKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Get Info" "docker network inspect <NETWORKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Remove Network" "docker network rm <NETWORKNAME>"
+echo
+echo
 
-# Count chars of longest values.
-max_name_length=0
-max_id_length=0
-max_driver_length=0
-for network in $(docker network ls --format '{{.ID}}'); do
 
-    # Get individual values to print out later.
-    network_name=$(docker network ls --filter id=$network --format '{{.Name}} ')
-    network_id=$(docker network ls --filter id=$network --format 'ID: {{.ID}}')
-    network_driver=$(docker network ls --filter id=$network --format 'Driver: {{.Driver}}')
 
-    # Calculate the length of these values.
-    name_length=${#network_name}
-    id_length=${#network_id}
-    driver_length=${#network_driver}
-    
-    # Update the maximum lengths if necessary.
-    if (( name_length > max_name_length )); then
-        max_name_length=$name_length
+
+# Go on after showing desired info.
+if [ "$output_type" = "single" ]; then
+    if [ "$output_speed" = "wait" ]; then
+        wait_for_user 0 0
     fi
-    if (( id_length > max_id_length )); then
-        max_id_length=$id_length
+    display_menu
+elif [ "$output_type" = "menu" ]; then
+    if [ "$output_speed" = "wait" ]; then
+        current_page=$((current_page + 1)) # Increment the current page.
+        wait_for_user $current_page $total_pages # show wait dialog.
     fi
-    if (( driver_length > max_driver_length )); then
-        max_driver_length=$driver_length
-    fi
-done
-
-for network in $(docker network ls --format '{{.ID}}'); do
-    network_name=$(docker network ls --filter id=$network --format '{{.Name}} ')
-    network_id=$(docker network ls --filter id=$network --format 'ID: {{.ID}}')
-    network_driver=$(docker network ls --filter id=$network --format 'Driver: {{.Driver}}')
-    print_info "$network_name" "$max_name_length" "$network_id" "$max_id_length" "$network_driver" "$max_driver_length"
-done
+    display_next_menu_item
+fi

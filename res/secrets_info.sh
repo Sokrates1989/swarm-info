@@ -13,9 +13,9 @@ source "$SCRIPT_DIR/res/functions.sh"
 display_next_menu_item() {
     if [ "$output_type" = "menu" ]; then
         if [ "$output_speed" = "wait" ]; then
-            bash "$SCRIPT_DIR/res/stack_info.sh" -t "$total_pages" -c "$current_page" -w
+            bash "$SCRIPT_DIR/res/check_tool_state.sh" -t "$total_pages" -c "$current_page" -w
         elif [ "$output_speed" = "fast" ]; then
-            bash "$SCRIPT_DIR/res/stack_info.sh" -t "$total_pages" -c "$current_page" -f
+            bash "$SCRIPT_DIR/res/check_tool_state.sh" -t "$total_pages" -c "$current_page" -f
         fi
     fi   
 }

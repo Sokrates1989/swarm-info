@@ -3,17 +3,26 @@
 # Get the directory of the script.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Display swarm information.
-display_short_info() {
-    bash "$SCRIPT_DIR/res/short_info.sh"
+# Define the number of pages when showing all information.
+total_pages=8
+
+# Function to display the menu.
+display_menu() {
+    bash "$SCRIPT_DIR/res/menu.sh"
 }
-# Display swarm information fastly.
-display_short_info_fast() {
-    bash "$SCRIPT_DIR/res/short_info.sh" -f
+
+# Function to display all swarm information quickly.
+display_all_swarm_info_fast() {
+    local total_pages_without_options=$((total_pages - 1))
+    local current_page=1
+    bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages_without_options" -c "$current_page" -f
 }
-# Display swarm information slowly.
-display_short_info_slow() {
-    bash "$SCRIPT_DIR/res/short_info.sh" -s
+
+# Display all swarm information waiting for keypress.
+display_all_swarm_info_waiting() {
+    local total_pages_without_options=$((total_pages - 1))
+    local current_page=1
+    bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages_without_options" -c "$current_page" -w
 }
 
 # Function to display service node information (What service is running on which node).
@@ -60,7 +69,7 @@ display_help() {
     echo -e "Options:"
     echo -e "  -c             Display helpful commands"
     echo -e "  -f             Alias for --fast"
-    echo -e "  --fast         Do not wait for keypress (without this option -> the script waits after outputs)"
+    echo -e "  --fast         Do not wait for keypress and display all information"
     echo -e "  -h             Display this help message"
     echo -e "  --help         Display this help message"
     echo -e "  --json         Save and display info in json format"
@@ -87,11 +96,11 @@ while [ $# -gt 0 ]; do
             exit 0
             ;;
         -f)
-            display_short_info_fast
+            display_all_swarm_info_fast
             exit 0
             ;;
         --fast)
-            display_short_info_fast
+            display_all_swarm_info_fast
             exit 0
             ;;
         -h)
@@ -157,7 +166,7 @@ if [ "$use_file_output" = "true" ]; then
         echo -e "invalid file_output_type: $file_output_type"
     fi
 else
-    # If no option is specified or an invalid option is provided, display short info.
-    display_short_info
+    # If no option is specified or an invalid option is provided, display menu.
+    display_menu
 fi
 

@@ -13,9 +13,9 @@ source "$SCRIPT_DIR/res/functions.sh"
 display_next_menu_item() {
     if [ "$output_type" = "menu" ]; then
         if [ "$output_speed" = "wait" ]; then
-            bash "$SCRIPT_DIR/res/network_info.sh" -t "$total_pages" -c "$current_page" -w
+            bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -w
         elif [ "$output_speed" = "fast" ]; then
-            bash "$SCRIPT_DIR/res/network_info.sh" -t "$total_pages" -c "$current_page" -f
+            bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -f
         fi
     fi   
 }
@@ -54,33 +54,18 @@ while getopts ":fwt:c:" opt; do
 done
 
 
-
-
-## List of Stacks ##
-echo "List of Stacks (docker stack ls):"
-stacks_output=$(docker stack ls)
-echo "$stacks_output"
-echo "Helpful stack commands:"
+# This tool's options.
+echo
+echo "This tool's options:"
 output_tab_space=25
-printf "%-${output_tab_space}s: %s\n" "Services of stack" "docker stack services <STACKNAME>"
-printf "%-${output_tab_space}s: %s\n" "Remove stack" "docker stack rm <STACKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Helpful swarm commands" "bash $MAIN_DIR/get_info.sh -c"
+printf "%-${output_tab_space}s: %s\n" "Do not wait for keypress" "bash $MAIN_DIR/get_info.sh -f"
+printf "%-${output_tab_space}s: %s\n" "Nodes info" "bash $MAIN_DIR/get_info.sh --nodes"
+printf "%-${output_tab_space}s: %s\n" "Local docker info" "bash $MAIN_DIR/get_info.sh --local"
+printf "%-${output_tab_space}s: %s\n" "Stacks info" "bash $MAIN_DIR/get_info.sh --stacks"
+printf "%-${output_tab_space}s: %s\n" "All options" "bash $MAIN_DIR/get_info.sh --help"
 echo
 echo
-
-
-
-## Stacks and their services ##
-echo "Stacks and their services (docker stack services <STACKNAME>):"
-for stack in $(docker stack ls --format '{{.Name}}'); do
-  echo "$stack"
-  # Services of stack.
-  stacks_output=$(docker stack services $stack)
-  echo "$stacks_output"
-  echo
-done
-
-
-
 
 
 # Go on after showing desired info.

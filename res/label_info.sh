@@ -9,13 +9,14 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/res/functions.sh"
 
 
+
 # Display next menu item.
 display_next_menu_item() {
     if [ "$output_type" = "menu" ]; then
         if [ "$output_speed" = "wait" ]; then
-            bash "$SCRIPT_DIR/res/stack_info.sh" -t "$total_pages" -c "$current_page" -w
+            bash "$SCRIPT_DIR/res/services_info.sh" -t "$total_pages" -c "$current_page" -w
         elif [ "$output_speed" = "fast" ]; then
-            bash "$SCRIPT_DIR/res/stack_info.sh" -t "$total_pages" -c "$current_page" -f
+            bash "$SCRIPT_DIR/res/services_info.sh" -t "$total_pages" -c "$current_page" -f
         fi
     fi   
 }
@@ -55,64 +56,48 @@ done
 
 
 
-## Number of services on each node ##
-echo "Number of running services per node:"
-
-# Service Node Count.
-declare -A node_service_count
-
-# Iterate through each service.
-for service in $(docker service ls --format '{{.Name}}'); do
-  # Get running tasks for the service.
-  for node in $(docker service ps $service --filter "desired-state=running" --format '{{.Node}}'); do
-    # Increment the count for the node.
-    ((node_service_count[$node]++))
-  done
-done
-
+## Node-Lables ##
+echo "Labels for each node (docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}'):"
 # Count chars of longest values.
 max_name_length=0
-for node in "${!node_service_count[@]}"; do
+max_id_length=0
+max_labels_length=0
+for node in $(docker node ls --format '{{.ID}}'); do
 
     # Get individual values to print out later.
-    node_name=${node}
+    node_name=$(docker node ls --filter id=$node --format '{{.Hostname}}')
+    node_id=$(docker node ls --filter id=$node --format 'ID: {{.ID}}')
+    node_labels=$(docker node inspect --format 'Labels: {{.Spec.Labels}}' $node)
     
     # Calculate the length of these values.
     name_length=${#node_name}
+    id_length=${#node_id}
+    labels_length=${#node_labels}
     
     # Update the maximum lengths if necessary.
     if (( name_length > max_name_length )); then
         max_name_length=$name_length
     fi
+    if (( id_length > max_id_length )); then
+        max_id_length=$id_length
+    fi
+    if (( labels_length > max_labels_length )); then
+        max_labels_length=$labels_length
+    fi
 done
 
-for node in "${!node_service_count[@]}"; do
-    print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
+for node in $(docker node ls --format '{{.ID}}'); do
+    node_name=$(docker node ls --filter id=$node --format '{{.Hostname}}')
+    node_id=$(docker node ls --filter id=$node --format 'ID: {{.ID}}')
+    node_labels=$(docker node inspect --format 'Labels: {{.Spec.Labels}}' $node)
+    print_info "$node_name" "$max_name_length" "$node_id" "$max_id_length" "$node_labels" "$max_labels_length"
 done
-echo
-echo "More details and tasks on each node:"
-output_tab_space=18
-printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --nodes"
-echo
-echo
-
-
-
-
-## List of Services ##
-echo "List of Services (docker service ls):"
-services_output=$(docker service ls)
-echo "$services_output"
-echo "Helpful service commands:"
-output_tab_space=25
-printf "%-${output_tab_space}s: %s\n" "Get information" "docker service ps <SERVICENAME> --no-trunc"
-printf "%-${output_tab_space}s: %s\n" "Read logs" "docker service logs <SERVICENAME>"
-printf "%-${output_tab_space}s: %s\n" "Inspect service" "docker service inspect <SERVICENAME> --pretty"
-printf "%-${output_tab_space}s: %s\n" "Remove service" "docker service rm <SERVICENAME>"
+echo "Helpful label commands:"
+output_tab_space=20
+printf "%-${output_tab_space}s: %s\n" "Set label" "docker node update --label-add <KEY>=<VALUE> <NODE_ID>"
+printf "%-${output_tab_space}s: %s\n" "Remove Label" "docker node update --label-rm <KEY> <NODE_ID>"
 echo
 echo
-
-
 
 
 

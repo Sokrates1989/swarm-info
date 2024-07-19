@@ -9,13 +9,14 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/res/functions.sh"
 
 
+
 # Display next menu item.
 display_next_menu_item() {
     if [ "$output_type" = "menu" ]; then
         if [ "$output_speed" = "wait" ]; then
-            bash "$SCRIPT_DIR/res/network_info.sh" -t "$total_pages" -c "$current_page" -w
+            bash "$SCRIPT_DIR/res/label_info.sh" -t "$total_pages" -c "$current_page" -w
         elif [ "$output_speed" = "fast" ]; then
-            bash "$SCRIPT_DIR/res/network_info.sh" -t "$total_pages" -c "$current_page" -f
+            bash "$SCRIPT_DIR/res/label_info.sh" -t "$total_pages" -c "$current_page" -f
         fi
     fi   
 }
@@ -54,33 +55,20 @@ while getopts ":fwt:c:" opt; do
 done
 
 
-
-
-## List of Stacks ##
-echo "List of Stacks (docker stack ls):"
-stacks_output=$(docker stack ls)
-echo "$stacks_output"
-echo "Helpful stack commands:"
-output_tab_space=25
-printf "%-${output_tab_space}s: %s\n" "Services of stack" "docker stack services <STACKNAME>"
-printf "%-${output_tab_space}s: %s\n" "Remove stack" "docker stack rm <STACKNAME>"
+# Swarm Status
+echo
+swarm_status=$(docker info --format '{{.Swarm.LocalNodeState}}')
+printf "%-${output_tab_space}s: %s\n" "Swarm Status" "$swarm_status"
 echo
 echo
 
 
-
-## Stacks and their services ##
-echo "Stacks and their services (docker stack services <STACKNAME>):"
-for stack in $(docker stack ls --format '{{.Name}}'); do
-  echo "$stack"
-  # Services of stack.
-  stacks_output=$(docker stack services $stack)
-  echo "$stacks_output"
-  echo
-done
-
-
-
+## List of Nodes ##
+echo "List of Nodes in the Swarm (docker node ls):"
+node_output=$(docker node ls)
+echo "$node_output"
+echo
+echo
 
 
 # Go on after showing desired info.

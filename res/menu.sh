@@ -16,6 +16,7 @@ show_menu() {
         show_menu_options
         read -n 1 -p "Please select an option: " choice
         echo    # Move to a new line after reading input
+        echo    # Add spacer for readibility
 
         case $choice in
             1)

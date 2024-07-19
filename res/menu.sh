@@ -21,12 +21,15 @@ show_menu() {
         case $choice in
             1)
                 option1
+                break
                 ;;
             2)
                 option2
+                break
                 ;;
             3)
                 option3
+                break
                 ;;
             q)
                 echo "Thanks for using swarm-info!"

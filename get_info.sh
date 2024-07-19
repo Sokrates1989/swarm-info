@@ -3,26 +3,22 @@
 # Get the directory of the script.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Global functions.
+source "$SCRIPT_DIR/res/functions.sh"
+
 # Define the number of pages when showing all information.
 total_pages=8
 
-# Function to display the menu.
-display_menu() {
-    bash "$SCRIPT_DIR/res/menu.sh"
-}
-
 # Function to display all swarm information quickly.
 display_all_swarm_info_fast() {
-    local total_pages_without_options=$((total_pages - 1))
     local current_page=1
-    bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages_without_options" -c "$current_page" -f
+    bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -f
 }
 
 # Display all swarm information waiting for keypress.
 display_all_swarm_info_waiting() {
-    local total_pages_without_options=$((total_pages - 1))
     local current_page=1
-    bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages_without_options" -c "$current_page" -w
+    bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -w
 }
 
 # Function to display service node information (What service is running on which node).
@@ -45,9 +41,29 @@ display_network_info() {
     bash "$SCRIPT_DIR/res/network_info.sh"
 }
 
-# Helpful comamnds.
+# Secrets info.
+display_secrets_info() {
+    bash "$SCRIPT_DIR/res/secrets_info.sh"
+}
+
+# Services info.
+display_services_info() {
+    bash "$SCRIPT_DIR/res/services_info.sh"
+}
+
+# Node label info.
+display_node_label_info() {
+    bash "$SCRIPT_DIR/res/label_info.sh"
+}
+
+# Helpful commands.
 display_helpful_commands() {
     bash "$SCRIPT_DIR/res/helpful_commands.sh"
+}
+
+# Function to check tool state.
+check_tool_state() {
+    bash "$SCRIPT_DIR/res/check_tool_state.sh"
 }
 
 # Function to display and save system information as json.
@@ -67,20 +83,32 @@ swarm_info_json() {
 display_help() {
     echo -e "Usage: $0 [OPTIONS]"
     echo -e "Options:"
-    echo -e "  -c             Display helpful commands"
+    echo -e "  -b             Alias for --basic"
+    echo -e "  --basic        Basic swarm info"
+    echo -e "  -c             Alias for --commands"
+    echo -e "  --commands     Display helpful commands"
     echo -e "  -f             Alias for --fast"
     echo -e "  --fast         Do not wait for keypress and display all information"
-    echo -e "  -h             Display this help message"
+    echo -e "  -h             Alias for --help"
     echo -e "  --help         Display this help message"
     echo -e "  --json         Save and display info in json format"
-    echo -e "  -l             Alias for --local"
     echo -e "  --local        Display local docker information (docker on this node)"
-    echo -e "  -n             Alias for --node"
+    echo -e "  --labels       Display Node label info (What labels are set to each node)"
     echo -e "  --net          Display network info"
+    echo -e "  --network      Display network info"
     echo -e "  --nodes        Display service node information (What service is running on which node)"
     echo -e "  -o             Alias for --output-file"
     echo -e "  --output-file  Where to save the swarm info output (only in combination with --json)"
+    echo -e "  --secrets      Display infos for secrets"
+    echo -e "  --services     Display services information"
     echo -e "  --stacks       Display stack information"
+    echo -e "  --state        Check this tool's state"
+    echo -e "  -w             Alias for --wait"
+    echo -e "  --wait         Show swarm info and wait after outputs to make it easier to read"
+
+    echo
+    wait_for_user
+    display_menu
 }
 
 
@@ -91,23 +119,19 @@ file_output_type="json"
 # Check for command-line options.
 while [ $# -gt 0 ]; do
     case "$1" in
-        -c)
+        -b|--basic)
+            show_basic_swarm_info
+            exit 0
+            ;;
+        -c|--commands)
             display_helpful_commands
             exit 0
             ;;
-        -f)
+        -f|--fast)
             display_all_swarm_info_fast
             exit 0
             ;;
-        --fast)
-            display_all_swarm_info_fast
-            exit 0
-            ;;
-        -h)
-            display_help
-            exit 0
-            ;;
-        --help)
+        -h|--help)
             display_help
             exit 0
             ;;
@@ -116,19 +140,15 @@ while [ $# -gt 0 ]; do
             file_output_type="json"
             shift
             ;;
-        -l)
-            display_local_node_info
-            exit 0
-            ;;
         --local)
             display_local_node_info
             exit 0
             ;;
-        -n)
-            display_node_info
+        --labels)
+            display_node_label_info
             exit 0
             ;;
-        --net)
+        --net|--network)
             display_network_info
             exit 0
             ;;
@@ -136,18 +156,29 @@ while [ $# -gt 0 ]; do
             display_node_info
             exit 0
             ;;
-        -o)
+        -o|--output-file)
             shift
             CUSTOM_OUTPUT_FILE="$1"
             shift
             ;;
-        --output-file)
-            shift
-            CUSTOM_OUTPUT_FILE="$1"
-            shift
+        --secrets)
+            display_secrets_info
+            exit 0
+            ;;
+        --services)
+            display_services_info
+            exit 0
             ;;
         --stacks)
             display_stack_info
+            exit 0
+            ;;
+        --state)
+            check_tool_state
+            exit 0
+            ;;
+        -w|--wait)
+            display_all_swarm_info_waiting
             exit 0
             ;;
         *)
@@ -169,4 +200,3 @@ else
     # If no option is specified or an invalid option is provided, display menu.
     display_menu
 fi
-

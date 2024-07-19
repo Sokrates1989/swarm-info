@@ -13,7 +13,7 @@ show_menu_options() {
 show_menu() {
     # Main loop
     while true; do
-        show_menu
+        show_menu_options
         read -n 1 -p "Please select an option: " choice
         echo    # Move to a new line after reading input
 

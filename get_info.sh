@@ -26,6 +26,11 @@ display_node_info() {
     bash "$SCRIPT_DIR/node_info.sh"
 }
 
+# Basic swarm info.
+show_basic_swarm_info() {
+    bash "$SCRIPT_DIR/basic_swarm_info.sh"
+}
+
 # Local node info.
 display_local_node_info() {
     bash "$SCRIPT_DIR/local_node_info.sh"

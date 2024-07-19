@@ -7,17 +7,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/res" && pwd)"
 source "$SCRIPT_DIR/functions.sh"
 
 # Define the number of pages when showing all information.
-total_pages=8
+total_pages=7
 
 # Function to display all swarm information quickly.
 display_all_swarm_info_fast() {
-    local current_page=1
+    local current_page=0
     bash "$SCRIPT_DIR/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -f
 }
 
 # Display all swarm information waiting for keypress.
 display_all_swarm_info_waiting() {
-    local current_page=1
+    local current_page=0
     bash "$SCRIPT_DIR/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -w
 }
 

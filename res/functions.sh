@@ -2,10 +2,6 @@
 
 ## Global functions ##
 
-# Get the directory of the script.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
 # Function to print formatted output.
 print_info() {
     while [ "$#" -gt 0 ]; do

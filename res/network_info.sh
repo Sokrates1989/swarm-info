@@ -6,7 +6,7 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 
 # Global functions.
-source "$SCRIPT_DIR/res/functions.sh"
+source "$SCRIPT_DIR/functions.sh"
 
 
 
@@ -14,9 +14,9 @@ source "$SCRIPT_DIR/res/functions.sh"
 display_next_menu_item() {
     if [ "$output_type" = "menu" ]; then
         if [ "$output_speed" = "wait" ]; then
-            bash "$SCRIPT_DIR/res/secrets_info.sh" -t "$total_pages" -c "$current_page" -w
+            bash "$SCRIPT_DIR/secrets_info.sh" -t "$total_pages" -c "$current_page" -w
         elif [ "$output_speed" = "fast" ]; then
-            bash "$SCRIPT_DIR/res/secrets_info.sh" -t "$total_pages" -c "$current_page" -f
+            bash "$SCRIPT_DIR/secrets_info.sh" -t "$total_pages" -c "$current_page" -f
         fi
     fi   
 }

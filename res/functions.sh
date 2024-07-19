@@ -102,5 +102,5 @@ wait_for_user() {
 
 # Display the main menu.
 display_menu() {
-    bash "$SCRIPT_DIR/res/menu.sh"
+    bash "$SCRIPT_DIR/menu.sh"
 }

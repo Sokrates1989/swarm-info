@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Get the directory of the script.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")/res" && pwd)"
 
 # Global functions.
-source "$SCRIPT_DIR/res/functions.sh"
+source "$SCRIPT_DIR/functions.sh"
 
 # Define the number of pages when showing all information.
 total_pages=8
@@ -12,58 +12,58 @@ total_pages=8
 # Function to display all swarm information quickly.
 display_all_swarm_info_fast() {
     local current_page=1
-    bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -f
+    bash "$SCRIPT_DIR/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -f
 }
 
 # Display all swarm information waiting for keypress.
 display_all_swarm_info_waiting() {
     local current_page=1
-    bash "$SCRIPT_DIR/res/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -w
+    bash "$SCRIPT_DIR/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -w
 }
 
 # Function to display service node information (What service is running on which node).
 display_node_info() {
-    bash "$SCRIPT_DIR/res/node_info.sh"
+    bash "$SCRIPT_DIR/node_info.sh"
 }
 
 # Local node info.
 display_local_node_info() {
-    bash "$SCRIPT_DIR/res/local_node_info.sh"
+    bash "$SCRIPT_DIR/local_node_info.sh"
 }
 
 # Stack info.
 display_stack_info() {
-    bash "$SCRIPT_DIR/res/stack_info.sh"
+    bash "$SCRIPT_DIR/stack_info.sh"
 }
 
 # Network info.
 display_network_info() {
-    bash "$SCRIPT_DIR/res/network_info.sh"
+    bash "$SCRIPT_DIR/network_info.sh"
 }
 
 # Secrets info.
 display_secrets_info() {
-    bash "$SCRIPT_DIR/res/secrets_info.sh"
+    bash "$SCRIPT_DIR/secrets_info.sh"
 }
 
 # Services info.
 display_services_info() {
-    bash "$SCRIPT_DIR/res/services_info.sh"
+    bash "$SCRIPT_DIR/services_info.sh"
 }
 
 # Node label info.
 display_node_label_info() {
-    bash "$SCRIPT_DIR/res/label_info.sh"
+    bash "$SCRIPT_DIR/label_info.sh"
 }
 
 # Helpful commands.
 display_helpful_commands() {
-    bash "$SCRIPT_DIR/res/helpful_commands.sh"
+    bash "$SCRIPT_DIR/helpful_commands.sh"
 }
 
 # Function to check tool state.
 check_tool_state() {
-    bash "$SCRIPT_DIR/res/check_tool_state.sh"
+    bash "$SCRIPT_DIR/check_tool_state.sh"
 }
 
 # Function to display and save system information as json.
@@ -73,9 +73,9 @@ swarm_info_json_file="$swarm_info_dir/swarm_info.json"
 swarm_info_json() {
     # Check if CUSTOM_OUTPUT_FILE is still in its default value
     if [ "$CUSTOM_OUTPUT_FILE" = "NONE" ]; then
-        bash "$SCRIPT_DIR/res/json_info.sh" --json --output-file "$swarm_info_json_file"
+        bash "$SCRIPT_DIR/json_info.sh" --json --output-file "$swarm_info_json_file"
     else
-        bash "$SCRIPT_DIR/res/json_info.sh" --json --output-file "$CUSTOM_OUTPUT_FILE"
+        bash "$SCRIPT_DIR/json_info.sh" --json --output-file "$CUSTOM_OUTPUT_FILE"
     fi
 }
 

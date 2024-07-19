@@ -6,13 +6,13 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 
 # Global functions.
-source "$SCRIPT_DIR/res/functions.sh"
+source "$SCRIPT_DIR/functions.sh"
 
 
 # Display next menu item.
 display_next_menu_item() {
     # Is last item -> reshow start menu.
-    bash "$SCRIPT_DIR/res/get_info.sh"
+    bash "$SCRIPT_DIR/get_info.sh"
 }
 
 

@@ -159,7 +159,6 @@ show_individual_info_menu() {
             q)
                 echo "Thanks for using swarm-info!"
                 echo "Have a great day :)"
-                echo
                 break
                 ;;
             *)

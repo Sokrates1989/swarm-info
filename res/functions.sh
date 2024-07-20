@@ -79,14 +79,27 @@ show_loading_dots() {
 
 # Wait for user to press any key.
 wait_for_user() {
-    local page=$1
-    local total_pages=$2
+    # Default values allowing this function to be called without paramters.
+    local page=0
+    local total_pages=0
+
+    # Check if parameters are passed-
+    if [ -n "$1" ]; then
+        page=$1
+    fi
+    if [ -n "$2" ]; then
+        total_pages=$2
+    fi
+
+    # Wait for user to press any button.
     if [ "$page" -eq 0 ] && [ "$total_pages" -eq 0 ]; then
         echo "Press any button to continue... "
     else
         echo "Press any button to continue... ($page/$total_pages)"
     fi
     read -n 1 -s
+
+    # UI improvements.
     tput cuu1 # Move cursor up one line
     tput el # Clear the line
     if [ "$page" -ne 0 ] || [ "$total_pages" -ne 0 ]; then

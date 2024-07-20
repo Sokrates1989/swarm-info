@@ -7,7 +7,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/res" && pwd)"
 source "$SCRIPT_DIR/functions.sh"
 
 # Define the number of pages when showing all information.
-total_pages=7
+total_pages=6
+# Current pages belonging to info tour (in order of appearance).
+# basic_swarm_info.sh.
+# services_info.sh.
+# stack_info.
+# network_info.sh.
+# secrets_info.sh.
+# check_tool_state.sh.
+
 
 # Function to display all swarm information quickly.
 display_all_swarm_info_fast() {
@@ -21,54 +29,95 @@ display_all_swarm_info_waiting() {
     bash "$SCRIPT_DIR/basic_swarm_info.sh" -t "$total_pages" -c "$current_page" -w
 }
 
+
+# Function to display Basic swarm info.
+show_basic_swarm_info() {
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/basic_swarm_info.sh" -m
+    else
+        bash "$SCRIPT_DIR/basic_swarm_info.sh"
+    fi
+}
+
+# Function to display Node label info.
+display_node_label_info() {
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/label_info.sh" -m
+    else
+        bash "$SCRIPT_DIR/label_info.sh"
+    fi
+}
+
 # Function to display service node information (What service is running on which node).
 display_node_info() {
-    bash "$SCRIPT_DIR/node_info.sh"
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/node_info.sh" -m
+    else
+        bash "$SCRIPT_DIR/node_info.sh"
+    fi
 }
 
-# Basic swarm info.
-show_basic_swarm_info() {
-    bash "$SCRIPT_DIR/basic_swarm_info.sh"
-}
-
-# Local node info.
+# Function to display Local node info.
 display_local_node_info() {
-    bash "$SCRIPT_DIR/local_node_info.sh"
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/local_node_info.sh" -m
+    else
+        bash "$SCRIPT_DIR/local_node_info.sh"
+    fi
 }
 
-# Stack info.
+# Function to display Stack info.
 display_stack_info() {
-    bash "$SCRIPT_DIR/stack_info.sh"
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/stack_info.sh" -m
+    else
+        bash "$SCRIPT_DIR/stack_info.sh"
+    fi
 }
 
-# Network info.
+# Function to display Network info.
 display_network_info() {
-    bash "$SCRIPT_DIR/network_info.sh"
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/network_info.sh" -m
+    else
+        bash "$SCRIPT_DIR/network_info.sh"
+    fi
 }
 
-# Secrets info.
+# Function to display Secrets info.
 display_secrets_info() {
-    bash "$SCRIPT_DIR/secrets_info.sh"
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/secrets_info.sh" -m
+    else
+        bash "$SCRIPT_DIR/secrets_info.sh"
+    fi
 }
 
-# Services info.
+# Function to display Services info.
 display_services_info() {
-    bash "$SCRIPT_DIR/services_info.sh"
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/services_info.sh" -m
+    else
+        bash "$SCRIPT_DIR/services_info.sh"
+    fi
 }
 
-# Node label info.
-display_node_label_info() {
-    bash "$SCRIPT_DIR/label_info.sh"
-}
-
-# Helpful commands.
+# Function to display Helpful commands.
 display_helpful_commands() {
-    bash "$SCRIPT_DIR/helpful_commands.sh"
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/helpful_commands.sh" -m
+    else
+        bash "$SCRIPT_DIR/helpful_commands.sh"
+    fi
 }
 
 # Function to check tool state.
 check_tool_state() {
-    bash "$SCRIPT_DIR/check_tool_state.sh"
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/check_tool_state.sh" -m
+    else
+        bash "$SCRIPT_DIR/check_tool_state.sh"
+    fi
 }
 
 # Function to display and save system information as json.
@@ -99,6 +148,8 @@ display_help() {
     echo -e "  --json         Save and display info in json format"
     echo -e "  --local        Display local docker information (docker on this node)"
     echo -e "  --labels       Display Node label info (What labels are set to each node)"
+    echo -e "  -m             Alias for --menu"
+    echo -e "  --menu         When used in combination with any single information option -> Shows menu after displaying info"
     echo -e "  --net          Display network info"
     echo -e "  --network      Display network info"
     echo -e "  --nodes        Display service node information (What service is running on which node)"
@@ -112,12 +163,13 @@ display_help() {
     echo -e "  --wait         Show swarm info and wait after outputs to make it easier to read"
 
     echo
-    wait_for_user 0 0
+    wait_for_user
     display_menu
 }
 
 
 # Default values.
+is_show_menu_option_selected="false"
 use_file_output="false"
 file_output_type="json"
 
@@ -152,6 +204,10 @@ while [ $# -gt 0 ]; do
         --labels)
             display_node_label_info
             exit 0
+            ;;
+        -m|--menu)
+            is_show_menu_option_selected="true"
+            shift
             ;;
         --net|--network)
             display_network_info

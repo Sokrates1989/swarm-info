@@ -9,33 +9,29 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/functions.sh"
 
 
-
 # Display next menu item.
 display_next_menu_item() {
-    if [ "$output_type" = "menu" ]; then
-        if [ "$output_speed" = "wait" ]; then
-            bash "$SCRIPT_DIR/services_info.sh" -t "$total_pages" -c "$current_page" -w
-        elif [ "$output_speed" = "fast" ]; then
-            bash "$SCRIPT_DIR/services_info.sh" -t "$total_pages" -c "$current_page" -f
-        fi
-    fi   
+    if [ "$output_speed" = "part_of_whole_info_wait" ]; then
+        bash "$SCRIPT_DIR/services_info.sh" -t "$total_pages" -c "$current_page" -w
+    elif [ "$output_speed" = "part_of_whole_info_fast" ]; then
+        bash "$SCRIPT_DIR/services_info.sh" -t "$total_pages" -c "$current_page" -f
+    fi 
 }
-
 
 # Parse command-line options.
 total_pages=0
 current_page=0
-output_type="single"
-output_speed="wait"
-while getopts ":fwt:c:" opt; do
+output_type="single_without_menu"
+while getopts ":fwmt:c:" opt; do
   case $opt in
     f)
-      output_type="menu"
-      output_speed="fast"
+      output_type="part_of_whole_info_fast"
       ;;
     w)
-      output_type="menu"
-      output_speed="wait"
+      output_type="part_of_whole_info_wait"
+      ;;
+    m)
+      output_type="single_with_menu"
       ;;
     t)
       total_pages=$OPTARG
@@ -58,6 +54,7 @@ done
 
 ## Node-Lables ##
 echo "Labels for each node (docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}'):"
+echo
 # Count chars of longest values.
 max_name_length=0
 max_id_length=0
@@ -92,6 +89,7 @@ for node in $(docker node ls --format '{{.ID}}'); do
     node_labels=$(docker node inspect --format 'Labels: {{.Spec.Labels}}' $node)
     print_info "$node_name" "$max_name_length" "$node_id" "$max_id_length" "$node_labels" "$max_labels_length"
 done
+echo
 echo "Helpful label commands:"
 output_tab_space=20
 printf "%-${output_tab_space}s: %s\n" "Set label" "docker node update --label-add <KEY>=<VALUE> <NODE_ID>"
@@ -102,16 +100,20 @@ echo
 
 
 
-# Go on after showing desired info.
-if [ "$output_type" = "single" ]; then
-    if [ "$output_speed" = "wait" ]; then
-        wait_for_user 0 0
-    fi
-    display_menu
-elif [ "$output_type" = "menu" ]; then
-    if [ "$output_speed" = "wait" ]; then
+# Go on after showing desired info based on output type.
+case $output_type in
+    single_without_menu)
+        : # No operation
+        ;;
+    single_with_menu)
+        display_menu
+        ;;
+    part_of_whole_info_wait)
         current_page=$((current_page + 1)) # Increment the current page.
-        wait_for_user $current_page $total_pages # show wait dialog.
-    fi
-    display_next_menu_item
-fi
+        wait_for_user $current_page $total_pages # Show wait dialog.
+        display_next_menu_item
+        ;;
+    part_of_whole_info_fast)
+        display_next_menu_item
+        ;;
+esac

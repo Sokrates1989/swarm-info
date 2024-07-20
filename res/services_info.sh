@@ -11,30 +11,27 @@ source "$SCRIPT_DIR/functions.sh"
 
 # Display next menu item.
 display_next_menu_item() {
-    if [ "$output_type" = "menu" ]; then
-        if [ "$output_speed" = "wait" ]; then
-            bash "$SCRIPT_DIR/stack_info.sh" -t "$total_pages" -c "$current_page" -w
-        elif [ "$output_speed" = "fast" ]; then
-            bash "$SCRIPT_DIR/stack_info.sh" -t "$total_pages" -c "$current_page" -f
-        fi
-    fi   
+    if [ "$output_speed" = "part_of_whole_info_wait" ]; then
+        bash "$SCRIPT_DIR/stack_info.sh" -t "$total_pages" -c "$current_page" -w
+    elif [ "$output_speed" = "part_of_whole_info_fast" ]; then
+        bash "$SCRIPT_DIR/stack_info.sh" -t "$total_pages" -c "$current_page" -f
+    fi 
 }
-
 
 # Parse command-line options.
 total_pages=0
 current_page=0
-output_type="single"
-output_speed="wait"
-while getopts ":fwt:c:" opt; do
+output_type="single_without_menu"
+while getopts ":fwmt:c:" opt; do
   case $opt in
     f)
-      output_type="menu"
-      output_speed="fast"
+      output_type="part_of_whole_info_fast"
       ;;
     w)
-      output_type="menu"
-      output_speed="wait"
+      output_type="part_of_whole_info_wait"
+      ;;
+    m)
+      output_type="single_with_menu"
       ;;
     t)
       total_pages=$OPTARG
@@ -57,6 +54,7 @@ done
 
 ## Number of services on each node ##
 echo "Number of running services per node:"
+echo
 
 # Service Node Count.
 declare -A node_service_count
@@ -90,9 +88,9 @@ for node in "${!node_service_count[@]}"; do
     print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
 done
 echo
-echo "More details and tasks on each node:"
+echo "More details on nodes:"
 output_tab_space=18
-printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --nodes"
+printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --nodes --menu"
 echo
 echo
 
@@ -115,18 +113,20 @@ echo
 
 
 
-
-
-# Go on after showing desired info.
-if [ "$output_type" = "single" ]; then
-    if [ "$output_speed" = "wait" ]; then
-        wait_for_user 0 0
-    fi
-    display_menu
-elif [ "$output_type" = "menu" ]; then
-    if [ "$output_speed" = "wait" ]; then
+# Go on after showing desired info based on output type.
+case $output_type in
+    single_without_menu)
+        : # No operation
+        ;;
+    single_with_menu)
+        display_menu
+        ;;
+    part_of_whole_info_wait)
         current_page=$((current_page + 1)) # Increment the current page.
-        wait_for_user $current_page $total_pages # show wait dialog.
-    fi
-    display_next_menu_item
-fi
+        wait_for_user $current_page $total_pages # Show wait dialog.
+        display_next_menu_item
+        ;;
+    part_of_whole_info_fast)
+        display_next_menu_item
+        ;;
+esac

@@ -1,18 +1,32 @@
 #!/bin/bash
 
-# Function to print formatted output.
-print_info() {
-    while [ "$#" -gt 0 ]; do
-        local text=$1
-        local output_tab_space=$2
-        printf "%-${output_tab_space}s" "$text"
-        shift 2
-        if [ "$#" -gt 0 ]; then
-            printf "  | "
-        fi
-    done
-    echo ""  # Print a newline at the end
-}
+# Get the directory of the script.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# The space until the colon to align all output info to.
+output_tab_space=28 
+
+# Global functions.
+source "$SCRIPT_DIR/functions.sh"
+
+# Parse command-line options.
+output_type="single_without_menu"
+while getopts ":m" opt; do
+  case $opt in
+    m)
+      output_type="single_with_menu"
+      ;;
+    \?)
+      echo -e "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo -e "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
 
 
 # Service Node Count and Node Services.
@@ -61,6 +75,7 @@ done
 
 ## Number of services on each node ##
 echo "Number of running services per node:"
+echo
 for node in "${!node_service_count[@]}"; do
     print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
 done
@@ -90,9 +105,15 @@ done
 
 ## Number of services on each node ##
 echo "Number of running services per node:"
+echo
 for node in "${!node_service_count[@]}"; do
     print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
 done
+echo
+echo "More details on nodes:"
+output_tab_space=20
+printf "%-${output_tab_space}s: %s\n" "Labels" "bash $MAIN_DIR/get_info.sh --labels --menu"
+printf "%-${output_tab_space}s: %s\n" "This node" "bash $MAIN_DIR/get_info.sh --local --menu"
 echo
 echo "Helpful commands:"
 printf "%-${output_tab_space}s: %s\n" "Create Secret" "vi secret.txt    (then insert secret and save file)"
@@ -102,3 +123,14 @@ printf "%-${output_tab_space}s: %s\n" "Inspect Secret" "docker secret inspect --
 printf "%-${output_tab_space}s: %s\n" "Remove Secret" "docker secret rm <SECRETNAME>"
 echo
 echo
+
+
+# Go on after showing desired info based on output type.
+case $output_type in
+    single_without_menu)
+        : # No operation
+        ;;
+    single_with_menu)
+        display_menu
+        ;;
+esac

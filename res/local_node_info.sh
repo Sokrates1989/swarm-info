@@ -1,8 +1,33 @@
 
 #!/bin/bash
 
+# Get the directory of the script.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # The space until the colon to align all output info to.
 output_tab_space=28 
+
+# Global functions.
+source "$SCRIPT_DIR/functions.sh"
+
+# Parse command-line options.
+output_type="single_without_menu"
+while getopts ":m" opt; do
+  case $opt in
+    m)
+      output_type="single_with_menu"
+      ;;
+    \?)
+      echo -e "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo -e "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
 
 
 ## Docker version ##
@@ -15,6 +40,7 @@ echo
 
 ## List of local containers ##
 echo "List of local containers (docker ps):"
+echo
 container_output=$(docker ps)
 echo "$container_output"
 echo
@@ -23,6 +49,7 @@ echo
 
 ## List of Volumes ##
 echo "List of Volumes:"
+echo
 
 # Count chars of longest values.
 max_name_length=0
@@ -73,3 +100,14 @@ printf "%-${output_tab_space}s: %s\n" "List volumes" "docker volume ls"
 printf "%-${output_tab_space}s: %s\n" "Inspect volume" "docker volume inspect <VOLUMENAME>"
 echo
 echo
+
+
+# Go on after showing desired info based on output type.
+case $output_type in
+    single_without_menu)
+        : # No operation
+        ;;
+    single_with_menu)
+        display_menu
+        ;;
+esac

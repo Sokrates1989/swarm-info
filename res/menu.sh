@@ -9,7 +9,7 @@ show_menu_options() {
     echo "1) Display whole swarm info waiting for keypress after output"
     echo "2) Display whole swarm info at once"
     echo "3) Show menu with individual information options"
-    echo "4) All options to call this script directly"
+    echo "4) Show all options to call this script directly"
     echo "h) Help"
     echo "q) Quit"
 }
@@ -83,15 +83,16 @@ show_help() {
 
 # Individual information options.
 show_individual_info_options() {
-    echo "1) Basic swarm info               (bash $MAIN_DIR/get_info.sh --basic)"
-    echo "2) Services                       (bash $MAIN_DIR/get_info.sh --services)"
-    echo "3) Stacks                         (bash $MAIN_DIR/get_info.sh --stacks)"
-    echo "4) Node label info                (bash $MAIN_DIR/get_info.sh --labels)"
-    echo "5) This local node                (bash $MAIN_DIR/get_info.sh --local)"
-    echo "6) Networks                       (bash $MAIN_DIR/get_info.sh --network)"
-    echo "7) Secrets                        (bash $MAIN_DIR/get_info.sh --secrets)"
-    echo "8) Show helpful docker commands   (bash $MAIN_DIR/get_info.sh --commands)"
-    echo "9) Check this tool's state        (bash $MAIN_DIR/get_info.sh --state)"
+    echo "1) Basic swarm info               (bash $MAIN_DIR/get_info.sh --basic --menu)"
+    echo "2) Services                       (bash $MAIN_DIR/get_info.sh --services --menu)"
+    echo "3) Stacks                         (bash $MAIN_DIR/get_info.sh --stacks --menu)"
+    echo "4) Node info                      (bash $MAIN_DIR/get_info.sh --nodes --menu)"
+    echo "5) Node label info                (bash $MAIN_DIR/get_info.sh --labels --menu)"
+    echo "6) This local node                (bash $MAIN_DIR/get_info.sh --local --menu)"
+    echo "7) Networks                       (bash $MAIN_DIR/get_info.sh --network --menu)"
+    echo "8) Secrets                        (bash $MAIN_DIR/get_info.sh --secrets --menu)"
+    echo "9) Show helpful docker commands   (bash $MAIN_DIR/get_info.sh --commands --menu)"
+    echo "0) Check this tool's state        (bash $MAIN_DIR/get_info.sh --state --menu)"
     echo "b) Back to main menu"
     echo "q) Quit"
 }
@@ -122,31 +123,36 @@ show_individual_info_menu() {
                 break
                 ;;
             4)
-                show_node_label_info
+                show_nodes_info
                 echo
                 break
                 ;;
             5)
-                show_local_node_info
+                show_node_label_info
                 echo
                 break
                 ;;
             6)
-                show_network_info
+                show_local_node_info
                 echo
                 break
                 ;;
             7)
-                show_secrets_info
+                show_network_info
                 echo
                 break
                 ;;
             8)
-                show_helpful_docker_commands
+                show_secrets_info
                 echo
                 break
                 ;;
             9)
+                show_helpful_docker_commands
+                echo
+                break
+                ;;
+            0)
                 check_tool_state
                 echo
                 break
@@ -170,47 +176,52 @@ show_individual_info_menu() {
 
 # Function to show basic swarm info .
 show_basic_swarm_info() {
-    bash "$MAIN_DIR/get_info.sh" --basic
+    bash "$MAIN_DIR/get_info.sh" --basic --menu
 }
 
 # Function to show services info.
 show_services_info() {
-    bash "$MAIN_DIR/get_info.sh" --services
+    bash "$MAIN_DIR/get_info.sh" --services --menu
 }
 
 # Function to show stacks info.
 show_stacks_info() {
-    bash "$MAIN_DIR/get_info.sh" --stacks
+    bash "$MAIN_DIR/get_info.sh" --stacks --menu
+}
+
+# Function to show node label info.
+show_nodes_info() {
+    bash "$MAIN_DIR/get_info.sh" --nodes --menu
 }
 
 # Function to show node label info.
 show_node_label_info() {
-    bash "$MAIN_DIR/get_info.sh" --labels
+    bash "$MAIN_DIR/get_info.sh" --labels --menu
 }
 
 # Function to show this local node info.
 show_local_node_info() {
-    bash "$MAIN_DIR/get_info.sh" --local
+    bash "$MAIN_DIR/get_info.sh" --local --menu
 }
 
 # Function to show network info.
 show_network_info() {
-    bash "$MAIN_DIR/get_info.sh" --network
+    bash "$MAIN_DIR/get_info.sh" --network --menu
 }
 
 # Function to show secrets info.
 show_secrets_info() {
-    bash "$MAIN_DIR/get_info.sh" --secrets
+    bash "$MAIN_DIR/get_info.sh" --secrets --menu
 }
 
 # Function to show helpful docker commands.
 show_helpful_docker_commands() {
-    bash "$MAIN_DIR/get_info.sh" --commands
+    bash "$MAIN_DIR/get_info.sh" --commands --menu
 }
 
 # Function to check this tool's state.
 check_tool_state() {
-    bash "$MAIN_DIR/get_info.sh" --state
+    bash "$MAIN_DIR/get_info.sh" --state --menu
 }
 
 

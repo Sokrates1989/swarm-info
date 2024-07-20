@@ -89,9 +89,11 @@ wait_for_user() {
     read -n 1 -s
     tput cuu1 # Move cursor up one line
     tput el # Clear the line
-    echo
-    echo
-    echo "($page/$total_pages)"
+    if [ "$page" -ne 0 ] || [ "$total_pages" -ne 0 ]; then
+        echo
+        echo
+        echo "($page/$total_pages)"
+    fi
     echo
 }
 

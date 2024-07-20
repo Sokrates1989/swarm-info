@@ -112,7 +112,7 @@ display_help() {
     echo -e "  --wait         Show swarm info and wait after outputs to make it easier to read"
 
     echo
-    wait_for_user
+    wait_for_user 0 0
     display_menu
 }
 

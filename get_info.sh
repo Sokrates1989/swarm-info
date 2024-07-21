@@ -168,7 +168,8 @@ display_help() {
 }
 
 
-# Default values.
+# Default values for the selected action.
+selected_action="none"
 is_show_menu_option_selected="false"
 use_file_output="false"
 file_output_type="json"
@@ -177,20 +178,20 @@ file_output_type="json"
 while [ $# -gt 0 ]; do
     case "$1" in
         -b|--basic)
-            show_basic_swarm_info
-            exit 0
+            selected_action="basic"
+            shift
             ;;
         -c|--commands)
-            display_helpful_commands
-            exit 0
+            selected_action="commands"
+            shift
             ;;
         -f|--fast)
-            display_all_swarm_info_fast
-            exit 0
+            selected_action="fast"
+            shift
             ;;
         -h|--help)
-            display_help
-            exit 0
+            selected_action="help"
+            shift
             ;;
         --json)
             use_file_output="true"
@@ -198,24 +199,24 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --local)
-            display_local_node_info
-            exit 0
+            selected_action="local"
+            shift
             ;;
         --labels)
-            display_node_label_info
-            exit 0
+            selected_action="labels"
+            shift
             ;;
         -m|--menu)
             is_show_menu_option_selected="true"
             shift
             ;;
         --net|--network)
-            display_network_info
-            exit 0
+            selected_action="network"
+            shift
             ;;
         --nodes)
-            display_node_info
-            exit 0
+            selected_action="nodes"
+            shift
             ;;
         -o|--output-file)
             shift
@@ -223,24 +224,24 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --secrets)
-            display_secrets_info
-            exit 0
+            selected_action="secrets"
+            shift
             ;;
         --services)
-            display_services_info
-            exit 0
+            selected_action="services"
+            shift
             ;;
         --stacks)
-            display_stack_info
-            exit 0
+            selected_action="stacks"
+            shift
             ;;
         --state)
-            check_tool_state
-            exit 0
+            selected_action="state"
+            shift
             ;;
         -w|--wait)
-            display_all_swarm_info_waiting
-            exit 0
+            selected_action="wait"
+            shift
             ;;
         *)
             echo -e "Invalid option: $1" >&2
@@ -249,15 +250,58 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Use file output?
-if [ "$use_file_output" = "true" ]; then
-    if [ "$file_output_type" = "json" ]; then
-        swarm_info_json
-    else
-        # File output type is invalid.
-        echo -e "invalid file_output_type: $file_output_type"
-    fi
-else
-    # If no option is specified or an invalid option is provided, display menu.
-    display_menu
-fi
+# Execute the selected action
+case "$selected_action" in
+    "basic")
+        show_basic_swarm_info
+        ;;
+    "commands")
+        display_helpful_commands
+        ;;
+    "fast")
+        display_all_swarm_info_fast
+        ;;
+    "help")
+        display_help
+        ;;
+    "local")
+        display_local_node_info
+        ;;
+    "labels")
+        display_node_label_info
+        ;;
+    "network")
+        display_network_info
+        ;;
+    "nodes")
+        display_node_info
+        ;;
+    "secrets")
+        display_secrets_info
+        ;;
+    "services")
+        display_services_info
+        ;;
+    "stacks")
+        display_stack_info
+        ;;
+    "state")
+        check_tool_state
+        ;;
+    "wait")
+        display_all_swarm_info_waiting
+        ;;
+    *)
+        if [ "$use_file_output" = "true" ]; then
+            if [ "$file_output_type" = "json" ]; then
+                swarm_info_json
+            else
+                # File output type is invalid.
+                echo -e "invalid file_output_type: $file_output_type"
+            fi
+        else
+            # If no option is specified or an invalid option is provided, display menu.
+            display_menu
+        fi
+        ;;
+esac

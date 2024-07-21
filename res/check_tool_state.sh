@@ -12,7 +12,7 @@ source "$SCRIPT_DIR/functions.sh"
 # Display next menu item.
 display_next_menu_item() {
     # Is last item -> reshow start menu.
-    bash "$MAIN_DIR/get_info.sh"
+    bash "$MAIN_DIR/get_info.sh" --menu
 }
 
 # Parse command-line options.

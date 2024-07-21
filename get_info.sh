@@ -149,7 +149,7 @@ display_help() {
     echo -e "  --local        Display local docker information (docker on this node)"
     echo -e "  --labels       Display Node label info (What labels are set to each node)"
     echo -e "  -m             Alias for --menu"
-    echo -e "  --menu         When used in combination with any single information option -> Shows menu after displaying info"
+    echo -e "  --menu         Show menu (after displaying info, if used in combination with any single information option)"
     echo -e "  --net          Display network info"
     echo -e "  --network      Display network info"
     echo -e "  --nodes        Display service node information (What service is running on which node)"
@@ -300,8 +300,12 @@ case "$selected_action" in
                 echo -e "invalid file_output_type: $file_output_type"
             fi
         else
-            # If no option is specified or an invalid option is provided, display menu.
-            display_menu
+            # If no option is specified or an invalid option is provided, display menu or start tour.
+            if [ "$is_show_menu_option_selected" = "true" ]; then
+                display_menu
+            else
+                display_all_swarm_info_waiting
+            fi
         fi
         ;;
 esac

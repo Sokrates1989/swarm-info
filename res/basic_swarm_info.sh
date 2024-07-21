@@ -85,6 +85,7 @@ show_context_menu_options() {
     echo "1) Services      bash $MAIN_DIR/get_info.sh --nodes --menu"
     echo "2) Labels        bash $MAIN_DIR/get_info.sh --labels --menu"
     echo "3) This node     bash $MAIN_DIR/get_info.sh --local --menu"
+    echo "m) Main menu     bash $MAIN_DIR/get_info.sh --menu"
 
     # Determine any other key button text.
     if [ "$output_type" = "part_of_whole_info_wait" ]; then
@@ -113,6 +114,9 @@ show_context_menu() {
             3)
                 show_this_node
                 ;;
+            m)
+                show_main_menu
+                ;;
             *)
                 proceed_with_main_task
                 break
@@ -124,19 +128,21 @@ show_context_menu() {
 # Function to show services.
 show_services() {
     bash "$MAIN_DIR/get_info.sh" --nodes --menu
-    echo
 }
 
 # Function to show labels.
 show_labels() {
     bash "$MAIN_DIR/get_info.sh" --labels --menu
-    echo
 }
 
 # Function to show this node.
 show_this_node() {
     bash "$MAIN_DIR/get_info.sh" --local --menu
-    echo
+}
+
+# Function to show main menu.
+show_main_menu() {
+    bash "$MAIN_DIR/get_info.sh" --menu
 }
 
 

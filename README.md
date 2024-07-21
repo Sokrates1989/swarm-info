@@ -1,6 +1,19 @@
 # swarm-info
 Quick info about swarm status and helpful commands collection
 
+# Backlog
+Stuff that just could not be finished in time:
+ - Headings of individual scripts: Add bash command how to call them directly
+ - Helpful docker commands
+   - Add commands based on information category
+     - volumes
+     - secrets
+     - services
+     - ...
+ - Context menus 
+   - Add context menu every time there is a context
+   - Broaden context of context menus
+
 # Prerequisities
 ### Bash
 Debian-based systems like Ubuntu

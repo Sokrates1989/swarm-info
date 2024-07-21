@@ -18,18 +18,28 @@ print_info() {
 
 # Loading animation.
 loading_animation() {
+
+    # Speed parameter with default value.
+    local speed="normal"
+    if [ -n "$1" ]; then
+        speed=$1
+    fi
+
+    # Prepare default values based on speed.
     local duration=3
     local delay=0.1
-    if [ "$output_speed" == "fast" ]; then
+    if [ "$speed" == "fast" ]; then
         delay=0.05
         duration=0
-    elif [ "$output_speed" == "normal" ]; then
+    elif [ "$speed" == "normal" ]; then
         delay=0.2
         duration=3
-    elif [ "$output_speed" == "slow" ]; then
+    elif [ "$speed" == "slow" ]; then
         delay=0.4
         duration=5
     fi
+
+    # Show animation.
     local spinstr='|/-\'
     local temp
     SECONDS=0
@@ -46,18 +56,28 @@ loading_animation() {
 
 # Function to show a loading dots animation.
 show_loading_dots() {
+
+    # Speed parameter with default value.
+    local speed="normal"
+    if [ -n "$1" ]; then
+        speed=$1
+    fi
+
+    # Prepare default values based on speed.
     local duration=3
     local delay=0.5
-    if [ "$output_speed" == "fast" ]; then
+    if [ "$speed" == "fast" ]; then
         delay=0.05
         duration=0
-    elif [ "$output_speed" == "normal" ]; then
+    elif [ "$speed" == "normal" ]; then
         delay=0.2
         duration=3
-    elif [ "$output_speed" == "slow" ]; then
+    elif [ "$speed" == "slow" ]; then
         delay=0.4
         duration=5
     fi
+
+    # Show animation.
     SECONDS=0
     while (( SECONDS < duration )); do
         printf "."
@@ -83,7 +103,7 @@ wait_for_user() {
     local page=0
     local total_pages=0
 
-    # Check if parameters are passed-
+    # Check if parameters are passed.
     if [ -n "$1" ]; then
         page=$1
     fi

@@ -11,9 +11,9 @@ source "$SCRIPT_DIR/functions.sh"
 
 # Display next menu item.
 display_next_menu_item() {
-    if [ "$output_speed" = "part_of_whole_info_wait" ]; then
+    if [ "$output_type" = "part_of_whole_info_wait" ]; then
         bash "$SCRIPT_DIR/network_info.sh" -t "$total_pages" -c "$current_page" -w
-    elif [ "$output_speed" = "part_of_whole_info_fast" ]; then
+    elif [ "$output_type" = "part_of_whole_info_fast" ]; then
         bash "$SCRIPT_DIR/network_info.sh" -t "$total_pages" -c "$current_page" -f
     fi 
 }

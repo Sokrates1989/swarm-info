@@ -12,6 +12,7 @@ show_menu_options() {
     echo "3) Show menu with individual information options"
     echo "4) Show all options to call this script directly"
     echo "5) List of helpful docker (swarm) commands"
+    echo
     echo "h) Help"
     echo "q) Quit"
     echo
@@ -107,6 +108,7 @@ show_individual_info_options() {
     echo "8) Secrets                        (bash $MAIN_DIR/get_info.sh --secrets --menu)"
     echo "9) Show helpful docker commands   (bash $MAIN_DIR/get_info.sh --commands --menu)"
     echo "0) Check this tool's state        (bash $MAIN_DIR/get_info.sh --state --menu)"
+    echo
     echo "b) Back to main menu"
     echo "q) Quit"
     echo

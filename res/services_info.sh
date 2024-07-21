@@ -129,7 +129,9 @@ show_context_menu_options() {
     echo
     echo "Need context information?"
     echo "1) Services across nodes      bash $MAIN_DIR/get_info.sh --node-services --menu"
+    echo
     echo "m) Main menu                  bash $MAIN_DIR/get_info.sh --menu"
+    echo
 
     # Determine any other key button text.
     if [ "$output_type" = "part_of_whole_info_wait" ]; then

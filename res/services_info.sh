@@ -88,7 +88,7 @@ for node in "${!node_service_count[@]}"; do
     print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
 done
 echo
-echo "More details on nodes:"
+echo "What services are running on which node:"
 output_tab_space=18
 printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --nodes --menu"
 echo
@@ -99,8 +99,10 @@ echo
 
 ## List of Services ##
 echo "List of Services (docker service ls):"
+echo
 services_output=$(docker service ls)
 echo "$services_output"
+echo
 echo "Helpful service commands:"
 output_tab_space=25
 printf "%-${output_tab_space}s: %s\n" "Get information" "docker service ps <SERVICENAME> --no-trunc"

@@ -65,28 +65,111 @@ echo
 node_output=$(docker node ls)
 echo "$node_output"
 echo
-echo "More details on nodes:"
-output_tab_space=20
-printf "%-${output_tab_space}s: %s\n" "Services" "bash $MAIN_DIR/get_info.sh --nodes --menu"
-printf "%-${output_tab_space}s: %s\n" "Labels" "bash $MAIN_DIR/get_info.sh --labels --menu"
-printf "%-${output_tab_space}s: %s\n" "This node" "bash $MAIN_DIR/get_info.sh --local --menu"
-echo
-echo
+
+# Only display context info as text, if the context menu does not open.
+if [[ "$output_type" == "single_with_menu" || "$output_type" == "part_of_whole_info_wait" ]]; then
+  echo "More details on nodes:"
+  output_tab_space=20
+  printf "%-${output_tab_space}s: %s\n" "Services" "bash $MAIN_DIR/get_info.sh --nodes --menu"
+  printf "%-${output_tab_space}s: %s\n" "Labels" "bash $MAIN_DIR/get_info.sh --labels --menu"
+  printf "%-${output_tab_space}s: %s\n" "This node" "bash $MAIN_DIR/get_info.sh --local --menu"
+  echo
+  echo
+fi
 
 
-# Go on after showing desired info based on output type.
+# Function to display context menu options.
+show_context_menu_options() {
+    echo
+    echo
+    echo "Get context information"
+    echo
+    echo "1) Services      bash $MAIN_DIR/get_info.sh --nodes --menu"
+    echo "2) Labels        bash $MAIN_DIR/get_info.sh --labels --menu"
+    echo "3) This node     bash $MAIN_DIR/get_info.sh --local --menu"
+
+    # Determine any other key button text.
+    if [ "$output_type" = "part_of_whole_info_wait" ]; then
+        current_page=$((current_page + 1)) # Increment the current page.
+        echo "*) Press any other key to proceed... ($current_page/$total_pages)"
+    else
+        echo "*) Press any other key to proceed..."
+    fi
+}
+
+# Function to display the menu.
+show_context_menu() {
+    while true; do
+        show_context_menu_options
+        read -n 1 -p "Please select an option: " choice
+        echo    # Move to a new line after reading input
+        echo    # Add spacer for readability
+
+        case $choice in
+            1)
+                show_services
+                ;;
+            2)
+                show_labels
+                ;;
+            3)
+                show_this_node
+                ;;
+            *)
+                proceed_with_main_task
+                break
+                ;;
+        esac
+    done
+}
+
+# Function to show services.
+show_services() {
+    bash "$MAIN_DIR/get_info.sh" --nodes --menu
+    echo
+}
+
+# Function to show labels.
+show_labels() {
+    bash "$MAIN_DIR/get_info.sh" --labels --menu
+    echo
+}
+
+# Function to show this node.
+show_this_node() {
+    bash "$MAIN_DIR/get_info.sh" --local --menu
+    echo
+}
+
+
+# Function to proceed with after showing desired info based on output type.
+proceed_with_main_task() {
+    case $output_type in
+        single_without_menu)
+            : # No operation
+            ;;
+        single_with_menu)
+            display_menu
+            ;;
+        part_of_whole_info_wait)
+            display_next_menu_item
+            ;;
+        part_of_whole_info_fast)
+            display_next_menu_item
+            ;;
+    esac
+}
+
+# Determine menu display.
 case $output_type in
     single_without_menu)
         : # No operation
         ;;
     single_with_menu)
-        wait_for_user
-        display_menu
+        show_context_menu
         ;;
     part_of_whole_info_wait)
-        current_page=$((current_page + 1)) # Increment the current page.
-        wait_for_user $current_page $total_pages # Show wait dialog.
-        display_next_menu_item
+        show_context_menu
         ;;
     part_of_whole_info_fast)
         display_next_menu_item

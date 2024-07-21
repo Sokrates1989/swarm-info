@@ -6,12 +6,15 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Menu options.
 show_menu_options() {
+    echo "Main menu"
     echo "1) Display whole swarm info waiting for keypress after output"
     echo "2) Display whole swarm info at once"
     echo "3) Show menu with individual information options"
     echo "4) Show all options to call this script directly"
+    echo "5) List of helpful docker (swarm) commands"
     echo "h) Help"
     echo "q) Quit"
+    echo
 }
 
 
@@ -42,6 +45,11 @@ show_menu() {
                 ;;
             4)
                 show_help
+                echo
+                break
+                ;;
+            5)
+                show_helpful_docker_commands
                 echo
                 break
                 ;;
@@ -79,10 +87,16 @@ show_help() {
     bash "$MAIN_DIR/get_info.sh" --help
 }
 
+# Function to show helpful docker commands.
+show_helpful_docker_commands() {
+    bash "$MAIN_DIR/get_info.sh" --commands --menu
+}
+
 
 
 # Individual information options.
 show_individual_info_options() {
+    echo "Individual information menu"
     echo "1) Basic swarm info               (bash $MAIN_DIR/get_info.sh --basic --menu)"
     echo "2) Services                       (bash $MAIN_DIR/get_info.sh --services --menu)"
     echo "3) Stacks                         (bash $MAIN_DIR/get_info.sh --stacks --menu)"
@@ -95,6 +109,7 @@ show_individual_info_options() {
     echo "0) Check this tool's state        (bash $MAIN_DIR/get_info.sh --state --menu)"
     echo "b) Back to main menu"
     echo "q) Quit"
+    echo
 }
 
 # Function to display the individual option menu.
@@ -212,11 +227,6 @@ show_network_info() {
 # Function to show secrets info.
 show_secrets_info() {
     bash "$MAIN_DIR/get_info.sh" --secrets --menu
-}
-
-# Function to show helpful docker commands.
-show_helpful_docker_commands() {
-    bash "$MAIN_DIR/get_info.sh" --commands --menu
 }
 
 # Function to check this tool's state.

@@ -97,6 +97,7 @@ show_context_menu_options() {
     else
         echo "*) Press any other key to proceed..."
     fi
+    echo
 }
 
 # Function to display the menu.

@@ -90,7 +90,7 @@ done
 echo
 echo "More details and tasks on each node:"
 output_tab_space=18
-printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --nodes"
+printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --node-services"
 echo
 echo
 

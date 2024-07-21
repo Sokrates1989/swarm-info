@@ -86,7 +86,7 @@ show_individual_info_options() {
     echo "1) Basic swarm info               (bash $MAIN_DIR/get_info.sh --basic --menu)"
     echo "2) Services                       (bash $MAIN_DIR/get_info.sh --services --menu)"
     echo "3) Stacks                         (bash $MAIN_DIR/get_info.sh --stacks --menu)"
-    echo "4) Node info                      (bash $MAIN_DIR/get_info.sh --nodes --menu)"
+    echo "4) Node Service info              (bash $MAIN_DIR/get_info.sh --node-services --menu)"
     echo "5) Node label info                (bash $MAIN_DIR/get_info.sh --labels --menu)"
     echo "6) This local node                (bash $MAIN_DIR/get_info.sh --local --menu)"
     echo "7) Networks                       (bash $MAIN_DIR/get_info.sh --network --menu)"
@@ -191,7 +191,7 @@ show_stacks_info() {
 
 # Function to show node label info.
 show_nodes_info() {
-    bash "$MAIN_DIR/get_info.sh" --nodes --menu
+    bash "$MAIN_DIR/get_info.sh" --node-services --menu
 }
 
 # Function to show node label info.

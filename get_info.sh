@@ -75,6 +75,17 @@ display_stack_info() {
     fi
 }
 
+# Function to display services within stacks.
+display_stack_services_info() {
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        bash "$SCRIPT_DIR/stack_services_info.sh" -m
+    else
+        bash "$SCRIPT_DIR/stack_services_info.sh"
+    fi
+}
+
+
+
 # Function to display Network info.
 display_network_info() {
     if [ "$is_show_menu_option_selected" = "true" ]; then
@@ -137,30 +148,31 @@ swarm_info_json() {
 display_help() {
     echo -e "Usage: $0 [OPTIONS]"
     echo -e "Options:"
-    echo -e "  -b             Alias for --basic"
-    echo -e "  --basic        Basic swarm info"
-    echo -e "  -c             Alias for --commands"
-    echo -e "  --commands     Display helpful commands"
-    echo -e "  -f             Alias for --fast"
-    echo -e "  --fast         Do not wait for keypress and display all information"
-    echo -e "  -h             Alias for --help"
-    echo -e "  --help         Display this help message"
-    echo -e "  --json         Save and display info in json format"
-    echo -e "  --local        Display local docker information (docker on this node)"
-    echo -e "  --labels       Display Node label info (What labels are set to each node)"
-    echo -e "  -m             Alias for --menu"
-    echo -e "  --menu         Show menu (after displaying info, if used in combination with any single information option)"
-    echo -e "  --net          Display network info"
-    echo -e "  --network      Display network info"
-    echo -e "  --nodes        Display service node information (What service is running on which node)"
-    echo -e "  -o             Alias for --output-file"
-    echo -e "  --output-file  Where to save the swarm info output (only in combination with --json)"
-    echo -e "  --secrets      Display infos for secrets"
-    echo -e "  --services     Display services information"
-    echo -e "  --stacks       Display stack information"
-    echo -e "  --state        Check this tool's state"
-    echo -e "  -w             Alias for --wait"
-    echo -e "  --wait         Show swarm info and wait after outputs to make it easier to read"
+    echo -e "  -b                Alias for --basic"
+    echo -e "  --basic           Basic swarm info"
+    echo -e "  -c                Alias for --commands"
+    echo -e "  --commands        Display helpful commands"
+    echo -e "  -f                Alias for --fast"
+    echo -e "  --fast            Do not wait for keypress and display all information"
+    echo -e "  -h                Alias for --help"
+    echo -e "  --help            Display this help message"
+    echo -e "  --json            Save and display info in json format"
+    echo -e "  --local           Display local docker information (docker on this node)"
+    echo -e "  --labels          Display Node label info (What labels are set to each node)"
+    echo -e "  -m                Alias for --menu"
+    echo -e "  --menu            Show menu (after displaying info, if used in combination with any single information option)"
+    echo -e "  --net             Display network info"
+    echo -e "  --network         Display network info"
+    echo -e "  --node-services   Display service node information (What service is running on which node)"
+    echo -e "  -o                Alias for --output-file"
+    echo -e "  --output-file     Where to save the swarm info output (only in combination with --json)"
+    echo -e "  --secrets         Display infos for secrets"
+    echo -e "  --services        Display services information"
+    echo -e "  --stacks          Display stack information"
+    echo -e "  --stack-services  Display services within stacks"
+    echo -e "  --state           Check this tool's state"
+    echo -e "  -w                Alias for --wait"
+    echo -e "  --wait            Show swarm info and wait after outputs to make it easier to read"
 
     echo
     wait_for_user
@@ -214,7 +226,7 @@ while [ $# -gt 0 ]; do
             selected_action="network"
             shift
             ;;
-        --nodes)
+        --node-services)
             selected_action="nodes"
             shift
             ;;
@@ -233,6 +245,10 @@ while [ $# -gt 0 ]; do
             ;;
         --stacks)
             selected_action="stacks"
+            shift
+            ;;
+        --stack-services)
+            selected_action="stack-services"
             shift
             ;;
         --state)
@@ -284,6 +300,9 @@ case "$selected_action" in
         ;;
     "stacks")
         display_stack_info
+        ;;
+    "stack-services")
+        display_stack_services_info
         ;;
     "state")
         check_tool_state

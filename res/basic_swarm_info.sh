@@ -53,6 +53,9 @@ done
 
 # Swarm Status
 echo
+echo "Basic Swarm information"
+echo
+echo
 swarm_status=$(docker info --format '{{.Swarm.LocalNodeState}}')
 printf "%-${output_tab_space}s: %s\n" "Swarm Status" "$swarm_status"
 echo
@@ -70,7 +73,7 @@ echo
 if [[ "$output_type" != "single_with_menu" && "$output_type" != "part_of_whole_info_wait" ]]; then
   echo "More details on nodes:"
   output_tab_space=20
-  printf "%-${output_tab_space}s: %s\n" "Services" "bash $MAIN_DIR/get_info.sh --nodes --menu"
+  printf "%-${output_tab_space}s: %s\n" "Services" "bash $MAIN_DIR/get_info.sh --node-services --menu"
   printf "%-${output_tab_space}s: %s\n" "Labels" "bash $MAIN_DIR/get_info.sh --labels --menu"
   printf "%-${output_tab_space}s: %s\n" "This node" "bash $MAIN_DIR/get_info.sh --local --menu"
   echo
@@ -82,7 +85,7 @@ fi
 show_context_menu_options() {
     echo
     echo "Need context information?"
-    echo "1) Services      bash $MAIN_DIR/get_info.sh --nodes --menu"
+    echo "1) Services      bash $MAIN_DIR/get_info.sh --node-services --menu"
     echo "2) Labels        bash $MAIN_DIR/get_info.sh --labels --menu"
     echo "3) This node     bash $MAIN_DIR/get_info.sh --local --menu"
     echo "m) Main menu     bash $MAIN_DIR/get_info.sh --menu"
@@ -127,7 +130,7 @@ show_context_menu() {
 
 # Function to show services.
 show_services() {
-    bash "$MAIN_DIR/get_info.sh" --nodes --menu
+    bash "$MAIN_DIR/get_info.sh" --node-services --menu
 }
 
 # Function to show labels.

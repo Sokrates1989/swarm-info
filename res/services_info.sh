@@ -53,7 +53,11 @@ done
 
 
 ## Number of services on each node ##
-echo "Number of running services per node:"
+echo
+echo "Services"
+echo
+echo
+echo "Running services per node:"
 echo
 
 # Service Node Count.
@@ -88,11 +92,17 @@ for node in "${!node_service_count[@]}"; do
     print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
 done
 echo
-echo "What services are running on which node:"
-output_tab_space=18
-printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --nodes --menu"
-echo
-echo
+
+
+
+# Only display context info as text, if the context menu does not open.
+if [[ "$output_type" != "single_with_menu" && "$output_type" != "part_of_whole_info_wait" ]]; then
+  echo "Which services are running on which node?"
+  output_tab_space=18
+  printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --node-services --menu"
+  echo
+  echo
+fi
 
 
 
@@ -114,20 +124,84 @@ echo
 
 
 
+# Function to display context menu options.
+show_context_menu_options() {
+    echo
+    echo "Need context information?"
+    echo "1) Services across nodes      bash $MAIN_DIR/get_info.sh --node-services --menu"
+    echo "m) Main menu                  bash $MAIN_DIR/get_info.sh --menu"
 
-# Go on after showing desired info based on output type.
+    # Determine any other key button text.
+    if [ "$output_type" = "part_of_whole_info_wait" ]; then
+        current_page=$((current_page + 1)) # Increment the current page.
+        echo "*) Press any other key to proceed... ($current_page/$total_pages)"
+    else
+        echo "*) Press any other key to proceed..."
+    fi
+}
+
+# Function to display the menu.
+show_context_menu() {
+    while true; do
+        show_context_menu_options
+        read -n 1 -p "Please select an option: " choice
+        echo    # Move to a new line after reading input
+        echo    # Add spacer for readability
+
+        case $choice in
+            1)
+                show_services
+                ;;
+            m)
+                show_main_menu
+                ;;
+            *)
+                proceed_with_main_task
+                break
+                ;;
+        esac
+    done
+}
+
+# Function to show services.
+show_services() {
+    bash "$MAIN_DIR/get_info.sh" --node-services --menu
+}
+
+# Function to show main menu.
+show_main_menu() {
+    bash "$MAIN_DIR/get_info.sh" --menu
+}
+
+
+# Function to proceed with after showing desired info based on output type.
+proceed_with_main_task() {
+    case $output_type in
+        single_without_menu)
+            : # No operation
+            ;;
+        single_with_menu)
+            display_menu
+            ;;
+        part_of_whole_info_wait)
+            display_next_menu_item
+            ;;
+        part_of_whole_info_fast)
+            display_next_menu_item
+            ;;
+    esac
+}
+
+# Determine menu display.
 case $output_type in
     single_without_menu)
         : # No operation
         ;;
     single_with_menu)
-        wait_for_user
-        display_menu
+        show_context_menu
         ;;
     part_of_whole_info_wait)
-        current_page=$((current_page + 1)) # Increment the current page.
-        wait_for_user $current_page $total_pages # Show wait dialog.
-        display_next_menu_item
+        show_context_menu
         ;;
     part_of_whole_info_fast)
         display_next_menu_item

@@ -52,63 +52,23 @@ done
 
 
 
-## Number of services on each node ##
-echo "Number of running services per node:"
+
+
+
+## List of Secrets ##
 echo
-
-# Service Node Count.
-declare -A node_service_count
-
-# Iterate through each service.
-for service in $(docker service ls --format '{{.Name}}'); do
-  # Get running tasks for the service.
-  for node in $(docker service ps $service --filter "desired-state=running" --format '{{.Node}}'); do
-    # Increment the count for the node.
-    ((node_service_count[$node]++))
-  done
-done
-
-# Count chars of longest values.
-max_name_length=0
-for node in "${!node_service_count[@]}"; do
-
-    # Get individual values to print out later.
-    node_name=${node}
-    
-    # Calculate the length of these values.
-    name_length=${#node_name}
-    
-    # Update the maximum lengths if necessary.
-    if (( name_length > max_name_length )); then
-        max_name_length=$name_length
-    fi
-done
-
-for node in "${!node_service_count[@]}"; do
-    print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
-done
-echo
-echo "More details and tasks on each node:"
-output_tab_space=18
-printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --node-services"
+echo "Secrets"
 echo
 echo
-
-
-
-
-## List of Services ##
-echo "List of Services (docker service ls):"
+secrets_output=$(docker secret ls)
+echo "$secrets_output"
 echo
-services_output=$(docker service ls)
-echo "$services_output"
-echo
-echo "Helpful service commands:"
-output_tab_space=25
-printf "%-${output_tab_space}s: %s\n" "Get information" "docker service ps <SERVICENAME> --no-trunc"
-printf "%-${output_tab_space}s: %s\n" "Read logs" "docker service logs <SERVICENAME>"
-printf "%-${output_tab_space}s: %s\n" "Inspect service" "docker service inspect <SERVICENAME> --pretty"
-printf "%-${output_tab_space}s: %s\n" "Remove service" "docker service rm <SERVICENAME>"
+echo "Helpful secret commands:"
+printf "%-${output_tab_space}s: %s\n" "Create Secret" "vi secret.txt    (then insert secret and save file)"
+printf "%${output_tab_space}s  %s\n" "" "docker secret create <SECRETNAME> secret.txt"
+printf "%${output_tab_space}s  %s\n" "" "rm secret.txt"
+printf "%-${output_tab_space}s: %s\n" "Inspect Secret" "docker secret inspect --pretty <SECRETNAME>"
+printf "%-${output_tab_space}s: %s\n" "Remove Secret" "docker secret rm <SECRETNAME>"
 echo
 echo
 

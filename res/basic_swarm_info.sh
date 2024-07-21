@@ -85,10 +85,10 @@ fi
 show_context_menu_options() {
     echo
     echo "Need context information?"
-    echo "1) Services      bash $MAIN_DIR/get_info.sh --node-services --menu"
-    echo "2) Labels        bash $MAIN_DIR/get_info.sh --labels --menu"
-    echo "3) This node     bash $MAIN_DIR/get_info.sh --local --menu"
-    echo "m) Main menu     bash $MAIN_DIR/get_info.sh --menu"
+    echo "1) Services within nodes    bash $MAIN_DIR/get_info.sh --node-services --menu"
+    echo "2) Labels                   bash $MAIN_DIR/get_info.sh --labels --menu"
+    echo "3) This node                bash $MAIN_DIR/get_info.sh --local --menu"
+    echo "m) Main menu                bash $MAIN_DIR/get_info.sh --menu"
 
     # Determine any other key button text.
     if [ "$output_type" = "part_of_whole_info_wait" ]; then

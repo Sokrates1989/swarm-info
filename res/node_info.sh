@@ -78,6 +78,10 @@ echo
 
 
 # Print services grouped by node.
+echo
+echo
+echo "Nodes and the services running on them"
+echo
 for node in "${!node_services[@]}"; do
     echo "Node: $node"
     echo "${node_services[$node]}" | sed '/^$/d'  # Remove empty lines
@@ -87,6 +91,10 @@ done
 
 
 # Each Service on and their tasks and their nodes.
+echo
+echo
+echo "Services and their tasks"
+echo
 for service in $(docker service ls --format '{{.Name}}'); do
   service_id=$(docker service ls --filter "name=$service" --format '{{.ID}}')
   echo "Service: $service (ID: $service_id)"

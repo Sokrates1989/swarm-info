@@ -121,6 +121,7 @@ case $output_type in
         : # No operation
         ;;
     single_with_menu)
+        wait_for_user
         display_menu
         ;;
     part_of_whole_info_wait)

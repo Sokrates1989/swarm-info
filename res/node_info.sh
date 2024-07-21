@@ -45,18 +45,6 @@ for service in $(docker service ls --format '{{.Name}}'); do
   done < <(docker service ps $service --filter "desired-state=running" --format '{{.Node}}')
 done
 
-# # Service Node Count.
-# declare -A node_service_count
-
-# # Iterate through each service
-# for service in $(docker service ls --format '{{.Name}}'); do
-#   # Get running tasks for the service
-#   for node in $(docker service ps $service --filter "desired-state=running" --format '{{.Node}}'); do
-#     # Increment the count for the node
-#     ((node_service_count[$node]++))
-#   done
-# done
-
 # Count chars of longest values.
 max_name_length=0
 for node in "${!node_service_count[@]}"; do
@@ -73,7 +61,12 @@ for node in "${!node_service_count[@]}"; do
     fi
 done
 
+
+
+
 ## Number of services on each node ##
+echo
+echo
 echo "Number of running services per node:"
 echo
 for node in "${!node_service_count[@]}"; do
@@ -104,6 +97,8 @@ done
 
 
 ## Number of services on each node ##
+echo
+echo
 echo "Number of running services per node:"
 echo
 for node in "${!node_service_count[@]}"; do
@@ -114,14 +109,6 @@ echo "More details on nodes:"
 output_tab_space=20
 printf "%-${output_tab_space}s: %s\n" "Labels" "bash $MAIN_DIR/get_info.sh --labels --menu"
 printf "%-${output_tab_space}s: %s\n" "This node" "bash $MAIN_DIR/get_info.sh --local --menu"
-echo
-echo "Helpful commands:"
-printf "%-${output_tab_space}s: %s\n" "Create Secret" "vi secret.txt    (then insert secret and save file)"
-printf "%${output_tab_space}s  %s\n" "" "docker secret create <SECRETNAME> secret.txt"
-printf "%${output_tab_space}s  %s\n" "" "rm secret.txt"
-printf "%-${output_tab_space}s: %s\n" "Inspect Secret" "docker secret inspect --pretty <SECRETNAME>"
-printf "%-${output_tab_space}s: %s\n" "Remove Secret" "docker secret rm <SECRETNAME>"
-echo
 echo
 
 

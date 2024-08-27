@@ -119,6 +119,7 @@ printf "%-${output_tab_space}s: %s\n" "Get information" "docker service ps <SERV
 printf "%-${output_tab_space}s: %s\n" "Read logs" "docker service logs <SERVICENAME>"
 printf "%-${output_tab_space}s: %s\n" "Inspect service" "docker service inspect <SERVICENAME> --pretty"
 printf "%-${output_tab_space}s: %s\n" "Remove service" "docker service rm <SERVICENAME>"
+printf "%-${output_tab_space}s: %s\n" "Force Service Restart" "docker service update --force <SERVICENAME>"
 printf "%-${output_tab_space}s: %s\n" "Scale service (1)" "docker service scale <SERVICENAME>=<AMOUNT_REPLICAS>"
 printf "%-${output_tab_space}s: %s\n" "Scale service (2)" "docker service update --replicas=<AMOUNT_REPLICAS> <SERVICENAME>"
 echo

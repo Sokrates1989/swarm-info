@@ -21,13 +21,18 @@ show_menu_options() {
 
 # Function to display the main menu.
 show_menu() {
-    # Main loop
-    while true; do
+    # Flag to indicate, if a valid menu selection has been chosen by the user.
+    valid_menu_selection_chosen=false
+
+    # Get input from user until a valid selection has been chosen.
+    while ! $valid_menu_selection_chosen; do
         show_menu_options
         read -n 1 -p "Please select an option: " choice
         echo    # Move to a new line after reading input
         echo    # Add spacer for readibility
-
+        
+        # Indicate that a valid menu selection has been chosen, only reverse flag, if not.
+        valid_menu_selection_chosen=true
         case $choice in
             1)
                 show_swarm_info_waiting
@@ -60,13 +65,12 @@ show_menu() {
                 break
                 ;;
             q)
-                echo "Thanks for using swarm-info!"
-                echo "Have a great day :)"
-                echo
+                quit_script
                 break
                 ;;
             *)
                 echo "Invalid option, please try again."
+                valid_menu_selection_chosen=false
                 ;;
         esac
     done
@@ -93,6 +97,13 @@ show_helpful_docker_commands() {
     bash "$MAIN_DIR/get_info.sh" --commands --menu
 }
 
+# Function to handle quitting the script.
+quit_script() {
+    echo "Thanks for using swarm-info!"
+    echo "Have a great day :)"
+    echo
+}
+
 
 
 # Individual information options.
@@ -116,13 +127,19 @@ show_individual_info_options() {
 
 # Function to display the individual option menu.
 show_individual_info_menu() {
-    # Main loop
-    while true; do
+
+    # Flag to indicate, if a valid menu selection has been chosen by the user.
+    valid_menu_selection_chosen=false
+
+    # Get input from user until a valid selection has been chosen.
+    while ! $valid_menu_selection_chosen; do
         show_individual_info_options
         read -n 1 -p "Please select an option: " choice
         echo    # Move to a new line after reading input
         echo    # Add spacer for readibility
 
+        # Indicate that a valid menu selection has been chosen, only reverse flag, if not.
+        valid_menu_selection_chosen=true
         case $choice in
             1)
                 show_basic_swarm_info
@@ -180,12 +197,12 @@ show_individual_info_menu() {
                 break
                 ;;
             q)
-                echo "Thanks for using swarm-info!"
-                echo "Have a great day :)"
+                quit_script
                 break
                 ;;
             *)
                 echo "Invalid option, please try again."
+                valid_menu_selection_chosen=false
                 ;;
         esac
     done

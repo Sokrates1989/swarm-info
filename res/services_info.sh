@@ -147,12 +147,19 @@ show_context_menu_options() {
 
 # Function to display the menu.
 show_context_menu() {
-    while true; do
+
+    # Flag to indicate, if a valid menu selection has been chosen by the user.
+    valid_menu_selection_chosen=false
+
+    # Get input from user until a valid selection has been chosen.
+    while ! $valid_menu_selection_chosen; do
         show_context_menu_options
         read -n 1 -p "Please select an option: " choice
         echo    # Move to a new line after reading input
         echo    # Add spacer for readability
 
+        # Indicate that a valid menu selection has been chosen, only reverse flag, if not.
+        valid_menu_selection_chosen=true
         case $choice in
             1)
                 show_services

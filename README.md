@@ -3,7 +3,6 @@ Quick info about swarm status and helpful commands collection
 
 # Backlog
 Stuff that just could not be finished in time:
- - Choosing quit in menus should always ultimately finish the program just like pressing CTRL+c would
  - Headings of individual scripts: Add bash command how to call them directly
  - Context menus 
    - Add context menu every time there is a context

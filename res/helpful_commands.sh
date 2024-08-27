@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # The space until the colon to align all output info to.
-output_tab_space=35 
+output_tab_space=30 
 
 # Global functions.
 source "$SCRIPT_DIR/functions.sh"
@@ -28,9 +28,76 @@ while getopts ":m" opt; do
   esac
 done
 
+
 # Helpful commands.
 echo
 echo "Helpful docker commands"
+echo
+echo
+echo "Basic swarm info"
+echo
+printf "%-${output_tab_space}s: %s\n" "View All Nodes" "docker node ls"
+printf "%-${output_tab_space}s: %s\n" "View Labels of Nodes" "docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}"
+echo
+echo
+echo
+echo "Labels"
+echo
+printf "%-${output_tab_space}s: %s\n" "View Labels of Nodes" "docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}"
+printf "%-${output_tab_space}s: %s\n" "Set Label" "docker node update --label-add <KEY>=<VALUE> <NODE_ID>"
+printf "%-${output_tab_space}s: %s\n" "Remove Label" "docker node update --label-rm <KEY> <NODE_ID>"
+echo
+echo
+echo
+echo "Local Node"
+echo
+printf "%-${output_tab_space}s: %s\n" "View Docker Version" "docker --version"
+printf "%-${output_tab_space}s: %s\n" "View Local Containers" "docker ps"
+printf "%-${output_tab_space}s: %s\n" "View Local Volumes" "docker volume ls"
+printf "%-${output_tab_space}s: %s\n" "Inspect Volume" "docker volume inspect <VOLUMENAME>"
+echo
+echo
+echo
+echo "Networks"
+echo
+printf "%-${output_tab_space}s: %s\n" "View All Networks" "docker network ls"
+printf "%-${output_tab_space}s: %s\n" "Create Network" "docker network create --driver overlay --attachable <NETWORKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Get Info" "docker network inspect <NETWORKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Remove Network" "docker network rm <NETWORKNAME>"
+echo
+echo
+echo
+echo "Secrets"
+echo
+printf "%-${output_tab_space}s: %s\n" "View All Secrets" "docker secret ls"
+printf "%-${output_tab_space}s: %s\n" "Create Secret" "vi secret.txt    (then insert secret and save file)"
+printf "%${output_tab_space}s  %s\n" "" "docker secret create <SECRETNAME> secret.txt"
+printf "%${output_tab_space}s  %s\n" "" "rm secret.txt"
+printf "%-${output_tab_space}s: %s\n" "Inspect Secret" "docker secret inspect --pretty <SECRETNAME>"
+printf "%-${output_tab_space}s: %s\n" "Remove Secret" "docker secret rm <SECRETNAME>"
+echo
+echo
+echo
+echo "Services"
+echo
+printf "%-${output_tab_space}s: %s\n" "View All Services" "docker service ls"
+printf "%-${output_tab_space}s: %s\n" "Get Information" "docker service ps <SERVICENAME> --no-trunc"
+printf "%-${output_tab_space}s: %s\n" "Read Logs" "docker service logs <SERVICENAME>"
+printf "%-${output_tab_space}s: %s\n" "Inspect Service" "docker service inspect <SERVICENAME> --pretty"
+printf "%-${output_tab_space}s: %s\n" "Remove Service" "docker service rm <SERVICENAME>"
+printf "%-${output_tab_space}s: %s\n" "Scale Service (1)" "docker service scale <SERVICENAME>=<AMOUNT_REPLICAS>"
+printf "%-${output_tab_space}s: %s\n" "Scale Service (2)" "docker service update --replicas=<AMOUNT_REPLICAS> <SERVICENAME>"
+echo
+echo
+echo
+echo "Stacks"
+echo
+printf "%-${output_tab_space}s: %s\n" "View All Stacks" "docker stack ls"
+printf "%-${output_tab_space}s: %s\n" "View Services of Stack" "docker stack services <STACKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Deploy Stack" "docker stack deploy -c <DEPLOYCONFIG> <STACKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Deploy Stack using .env" "docker stack deploy -c <(docker-compose -f <DEPLOYCONFIG> config) <STACKNAME>"
+printf "%-${output_tab_space}s: %s\n" "Remove Stack" "docker stack rm <STACKNAME>"
+echo
 echo
 echo
 echo "Troubleshooting"

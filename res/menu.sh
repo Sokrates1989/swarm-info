@@ -10,9 +10,10 @@ show_menu_options() {
     echo "1) Display whole swarm info waiting for keypress after output"
     echo "2) Display whole swarm info at once"
     echo "3) Show menu with individual information options"
-    echo "4) Show all options to call this script directly"
-    echo "5) List of helpful docker (swarm) commands"
+    echo "4) Show all options to call this script directly ( --help )"
+    echo "5) List of helpful docker (swarm) commands ( --commands )"
     echo
+    echo "s) Check this tool's state ( --state )"
     echo "h) Help"
     echo "q) Quit"
     echo
@@ -56,6 +57,11 @@ show_menu() {
                 ;;
             5)
                 show_helpful_docker_commands
+                echo
+                break
+                ;;
+            s)
+                check_tool_state
                 echo
                 break
                 ;;

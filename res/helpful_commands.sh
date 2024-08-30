@@ -38,6 +38,8 @@ echo "Basic swarm info"
 echo
 printf "%-${output_tab_space}s: %s\n" "View All Nodes" "docker node ls"
 printf "%-${output_tab_space}s: %s\n" "View Labels of Nodes" "docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}"
+printf "%-${output_tab_space}s: %s\n" "Join Token Manager" "docker swarm join-token manager"
+printf "%-${output_tab_space}s: %s\n" "Join Token Worker" "docker swarm join-token worker"
 echo
 echo
 echo

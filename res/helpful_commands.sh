@@ -88,6 +88,8 @@ printf "%-${output_tab_space}s: %s\n" "Read Logs" "docker service logs <SERVICEN
 printf "%-${output_tab_space}s: %s\n" "Inspect Service" "docker service inspect <SERVICENAME> --pretty"
 printf "%-${output_tab_space}s: %s\n" "Remove Service" "docker service rm <SERVICENAME>"
 printf "%-${output_tab_space}s: %s\n" "Force Service Restart" "docker service update --force <SERVICENAME>"
+printf "%-${output_tab_space}s: %s\n" "Service Node change (temp)" "docker service update --constraint-add 'node.hostname == <HOSTNAME>' <SERVICENAME>"
+printf "%${output_tab_space}s  %s\n" "" "docker service update --constraint-rm 'node.hostname == <HOSTNAME>' <SERVICENAME>"
 printf "%-${output_tab_space}s: %s\n" "Scale Service (1)" "docker service scale <SERVICENAME>=<AMOUNT_REPLICAS>"
 printf "%-${output_tab_space}s: %s\n" "Scale Service (2)" "docker service update --replicas=<AMOUNT_REPLICAS> <SERVICENAME>"
 echo

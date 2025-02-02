@@ -55,7 +55,8 @@ current_dir=$(pwd)
 # Change to the Git repository directory to make git commands work.
 cd $MAIN_DIR
 
-echo -e "Fetching state of swarm-info (this tool) ..."
+# Print user info.
+echo -e "Fetching state of swarm-info (this tool) (bash $MAIN_DIR/get_info.sh --state (--menu) ) ..."
 echo
 repo_url=https://github.com/Sokrates1989/swarm-info.git
 is_healthy=true

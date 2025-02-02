@@ -53,7 +53,7 @@ done
 
 # Swarm Status
 echo
-echo "Basic Swarm information"
+echo "Basic Swarm information (bash $MAIN_DIR/get_info.sh --basic (--menu) ) "
 echo
 echo
 swarm_status=$(docker info --format '{{.Swarm.LocalNodeState}}')

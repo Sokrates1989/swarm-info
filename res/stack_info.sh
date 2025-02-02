@@ -55,7 +55,7 @@ done
 
 ## List of Stacks ##
 echo
-echo "Stack information"
+echo "Stack information (bash $MAIN_DIR/get_info.sh --stacks (--menu) )"
 echo
 echo
 echo "List of Stacks (docker stack ls):"

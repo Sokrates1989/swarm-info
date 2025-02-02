@@ -31,7 +31,7 @@ done
 
 # Helpful commands.
 echo
-echo "Helpful docker commands"
+echo "Helpful docker commands (bash $MAIN_DIR/get_info.sh --commands (--menu) )"
 echo
 echo
 echo "Basic swarm info"

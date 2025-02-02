@@ -57,7 +57,7 @@ done
 
 ## List of Secrets ##
 echo
-echo "Secrets"
+echo "Secrets (bash $MAIN_DIR/get_info.sh --secrets (--menu) )"
 echo
 echo
 secrets_output=$(docker secret ls)

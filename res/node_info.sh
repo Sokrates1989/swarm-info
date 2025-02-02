@@ -77,19 +77,6 @@ echo
 
 
 
-# Print services grouped by node.
-echo
-echo
-echo "Nodes and the services running on them"
-echo
-for node in "${!node_services[@]}"; do
-    echo "Node: $node"
-    echo "${node_services[$node]}" | sed '/^$/d'  # Remove empty lines
-    echo
-done
-
-
-
 # Each Service on and their tasks and their nodes.
 echo
 echo
@@ -100,6 +87,19 @@ for service in $(docker service ls --format '{{.Name}}'); do
   echo "Service: $service (ID: $service_id)"
   docker service ps $service --filter "desired-state=running" --format 'Task ID: {{.ID}} | Task Name: {{.Name}} | Node: {{.Node}} | Status: {{.CurrentState}}'
   echo
+done
+
+
+
+# Print services grouped by node.
+echo
+echo
+echo "Nodes and the services running on them"
+echo
+for node in "${!node_services[@]}"; do
+    echo "Node: $node"
+    echo "${node_services[$node]}" | sed '/^$/d'  # Remove empty lines
+    echo
 done
 
 

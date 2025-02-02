@@ -53,6 +53,8 @@ done
 
 # Swarm Status
 echo
+echo
+echo
 echo "Basic Swarm information (bash $MAIN_DIR/get_info.sh --basic (--menu) ) "
 echo
 echo

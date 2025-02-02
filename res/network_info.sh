@@ -53,8 +53,10 @@ done
 
 
 # Print info about this menu item and how to navigate here.
-echo "Network info  (bash $MAIN_DIR/get_info.sh --network (--menu) )"
 echo
+echo
+echo
+echo "Network info  (bash $MAIN_DIR/get_info.sh --network (--menu) )"
 echo
 
 

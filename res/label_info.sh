@@ -53,6 +53,9 @@ done
 
 
 ## Node-Lables ##
+echo
+echo
+echo
 echo "Labels for each node (docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}'):"
 echo
 # Count chars of longest values.

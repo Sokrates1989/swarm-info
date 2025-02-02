@@ -31,8 +31,10 @@ done
 
 
 # Print info about this menu item and how to navigate here.
-echo "On what nodes are running which services?  (bash $MAIN_DIR/get_info.sh --node-services (--menu) )"
 echo
+echo
+echo
+echo "On what nodes are running which services?  (bash $MAIN_DIR/get_info.sh --node-services (--menu) )"
 echo
 
 

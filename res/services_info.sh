@@ -54,8 +54,9 @@ done
 
 ## Number of services on each node ##
 echo
-echo "Services (bash $MAIN_DIR/get_info.sh --services (--menu) )"
 echo
+echo
+echo "Services (bash $MAIN_DIR/get_info.sh --services (--menu) )"
 echo
 echo "Running services per node:"
 echo

@@ -31,8 +31,10 @@ done
 
 
 # Print info about this menu item and how to navigate here.
-echo "Stacks and their services (bash $MAIN_DIR/get_info.sh --stack-services (--menu) )"
 echo
+echo
+echo
+echo "Stacks and their services (bash $MAIN_DIR/get_info.sh --stack-services (--menu) )"
 echo
 
 

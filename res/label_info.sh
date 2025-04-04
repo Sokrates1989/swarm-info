@@ -94,6 +94,7 @@ for node in $(docker node ls --format '{{.ID}}'); do
 done
 echo
 echo "Helpful label commands:"
+echo "----------------------------------------------------------------------"
 output_tab_space=20
 printf "%-${output_tab_space}s: %s\n" "Set label" "docker node update --label-add <KEY>=<VALUE> <NODE_ID>"
 printf "%-${output_tab_space}s: %s\n" "Remove Label" "docker node update --label-rm <KEY> <NODE_ID>"

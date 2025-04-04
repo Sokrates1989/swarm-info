@@ -66,7 +66,9 @@ echo "----------------------------------------------------------------------"
 networks_output=$(docker network ls)
 echo "$networks_output"
 echo
+echo
 echo "Helpful network commands:"
+echo "----------------------------------------------------------------------"
 output_tab_space=20
 printf "%-${output_tab_space}s: %s\n" "Create Network" "docker network create --driver overlay --attachable <NETWORKNAME>"
 printf "%-${output_tab_space}s: %s\n" "Get Info" "docker network inspect <NETWORKNAME>"

@@ -73,12 +73,13 @@ echo
 
 # Only display context info as text, if the context menu does not open.
 if [[ "$output_type" != "single_with_menu" && "$output_type" != "part_of_whole_info_wait" ]]; then
+  echo
   echo "More details on nodes:"
+  echo "----------------------------------------------------------------------"
   output_tab_space=20
   printf "%-${output_tab_space}s: %s\n" "Services" "bash $MAIN_DIR/get_info.sh --node-services --menu"
   printf "%-${output_tab_space}s: %s\n" "Labels" "bash $MAIN_DIR/get_info.sh --labels --menu"
   printf "%-${output_tab_space}s: %s\n" "This node" "bash $MAIN_DIR/get_info.sh --local --menu"
-  echo
   echo
 fi
 
@@ -87,6 +88,7 @@ fi
 show_context_menu_options() {
     echo
     echo "Need context information?"
+    echo "----------------------------------------------------------------------"
     echo "1) Services within nodes    bash $MAIN_DIR/get_info.sh --node-services --menu"
     echo "2) Labels                   bash $MAIN_DIR/get_info.sh --labels --menu"
     echo "3) This node                bash $MAIN_DIR/get_info.sh --local --menu"

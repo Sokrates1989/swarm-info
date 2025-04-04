@@ -105,7 +105,7 @@ done
 echo
 echo
 echo "Nodes and the services running on them"
-echo
+echo "----------------------------------------------------------------------"
 for node in "${!node_services[@]}"; do
     echo "Node: $node"
     echo "${node_services[$node]}" | sed '/^$/d'  # Remove empty lines
@@ -118,12 +118,14 @@ done
 echo
 echo
 echo "Number of running services per node:"
-echo
+echo "----------------------------------------------------------------------"
 for node in "${!node_service_count[@]}"; do
     print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
 done
 echo
+echo
 echo "More details on nodes:"
+echo "----------------------------------------------------------------------"
 output_tab_space=20
 printf "%-${output_tab_space}s: %s\n" "Labels" "bash $MAIN_DIR/get_info.sh --labels --menu"
 printf "%-${output_tab_space}s: %s\n" "This node" "bash $MAIN_DIR/get_info.sh --local --menu"

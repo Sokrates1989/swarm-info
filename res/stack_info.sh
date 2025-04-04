@@ -65,7 +65,9 @@ echo "----------------------------------------------------------------------"
 stacks_output=$(docker stack ls)
 echo "$stacks_output"
 echo
+echo
 echo "Helpful stack commands:"
+echo "----------------------------------------------------------------------"
 output_tab_space=25
 printf "%-${output_tab_space}s: %s\n" "Services of stack" "docker stack services <STACKNAME>"
 printf "%-${output_tab_space}s: %s\n" "Remove stack" "docker stack rm <STACKNAME>"
@@ -92,6 +94,7 @@ fi
 show_context_menu_options() {
     echo
     echo "Need context information?"
+    echo "----------------------------------------------------------------------"
     echo "1) Services of each stack     bash $MAIN_DIR/get_info.sh --stack-services --menu"
     echo
     echo "m) Main menu                  bash $MAIN_DIR/get_info.sh --menu"

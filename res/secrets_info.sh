@@ -64,7 +64,9 @@ echo
 secrets_output=$(docker secret ls)
 echo "$secrets_output"
 echo
+echo
 echo "Helpful secret commands:"
+echo "----------------------------------------------------------------------"
 printf "%-${output_tab_space}s: %s\n" "Create Secret" "vi secret.txt    (then insert secret and save file)"
 printf "%${output_tab_space}s  %s\n" "" "docker secret create <SECRETNAME> secret.txt"
 printf "%${output_tab_space}s  %s\n" "" "rm secret.txt"

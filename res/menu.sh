@@ -7,6 +7,7 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Menu options.
 show_menu_options() {
     echo "Main menu"
+    echo "----------------------------------------------------------------------"
     echo "1) Display whole swarm info waiting for keypress after output"
     echo "2) Display whole swarm info at once"
     echo "3) Show menu with individual information options"
@@ -115,6 +116,7 @@ quit_script() {
 # Individual information options.
 show_individual_info_options() {
     echo "Individual information menu"
+    echo "----------------------------------------------------------------------"
     echo "1) Basic swarm info               (bash $MAIN_DIR/get_info.sh --basic (--menu) )"
     echo "2) Services                       (bash $MAIN_DIR/get_info.sh --services (--menu) )"
     echo "3) Stacks                         (bash $MAIN_DIR/get_info.sh --stacks (--menu) )"

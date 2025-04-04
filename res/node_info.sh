@@ -32,9 +32,10 @@ done
 
 # Print info about this menu item and how to navigate here.
 echo
-echo
-echo
+echo "-------------------------------------------------------------------------"
 echo "On what nodes are running which services?  (bash $MAIN_DIR/get_info.sh --node-services (--menu) )"
+echo "-------------------------------------------------------------------------"
+echo
 echo
 
 
@@ -77,7 +78,7 @@ done
 echo
 echo
 echo "Number of running services per node:"
-echo
+echo "----------------------------------------------------------------------"
 for node in "${!node_service_count[@]}"; do
     print_info "$node" "$max_name_length" "Running Services: ${node_service_count[$node]}" "25" 
 done
@@ -90,7 +91,7 @@ echo
 echo
 echo
 echo "Services and their tasks"
-echo
+echo "----------------------------------------------------------------------"
 for service in $(docker service ls --format '{{.Name}}'); do
   service_id=$(docker service ls --filter "name=$service" --format '{{.ID}}')
   echo "Service: $service (ID: $service_id)"

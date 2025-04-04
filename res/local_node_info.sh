@@ -32,9 +32,9 @@ done
 
 # Print info about this menu item and how to navigate here.
 echo
-echo
-echo
+echo "-------------------------------------------------------------------------"
 echo "Info about this node of the swarm  (bash $MAIN_DIR/get_info.sh --local (--menu) )"
+echo "-------------------------------------------------------------------------"
 echo
 
 
@@ -48,7 +48,7 @@ echo
 
 ## List of local containers ##
 echo "List of local containers (docker ps):"
-echo
+echo "----------------------------------------------------------------------"
 container_output=$(docker ps)
 echo "$container_output"
 echo
@@ -57,7 +57,7 @@ echo
 
 ## List of Volumes ##
 echo "List of Volumes:"
-echo
+echo "----------------------------------------------------------------------"
 
 # Count chars of longest values.
 max_name_length=0

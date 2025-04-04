@@ -31,13 +31,13 @@ done
 
 # Helpful commands.
 echo
-echo
-echo
+echo "-------------------------------------------------------------------------"
 echo "Helpful docker commands (bash $MAIN_DIR/get_info.sh --commands (--menu) )"
+echo "-------------------------------------------------------------------------"
 echo
 echo
 echo "Basic swarm info"
-echo
+echo "----------------------------------------------------------------------"
 printf "%-${output_tab_space}s: %s\n" "View All Nodes" "docker node ls"
 printf "%-${output_tab_space}s: %s\n" "View Labels of Nodes" "docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}"
 printf "%-${output_tab_space}s: %s\n" "Join Token Manager" "docker swarm join-token manager"
@@ -46,7 +46,7 @@ echo
 echo
 echo
 echo "Labels"
-echo
+echo "----------------------------------------------------------------------"
 printf "%-${output_tab_space}s: %s\n" "View Labels of Nodes" "docker node ls -q | xargs docker node inspect --format '{{ .ID }} [{{ .Description.Hostname }}]: {{ .Spec.Labels }}"
 printf "%-${output_tab_space}s: %s\n" "Set Label" "docker node update --label-add <KEY>=<VALUE> <NODE_ID>"
 printf "%-${output_tab_space}s: %s\n" "Remove Label" "docker node update --label-rm <KEY> <NODE_ID>"
@@ -54,7 +54,7 @@ echo
 echo
 echo
 echo "Local Node"
-echo
+echo "----------------------------------------------------------------------"
 printf "%-${output_tab_space}s: %s\n" "View Docker Version" "docker --version"
 printf "%-${output_tab_space}s: %s\n" "View Local Containers" "docker ps"
 printf "%-${output_tab_space}s: %s\n" "View Local Volumes" "docker volume ls"
@@ -63,7 +63,7 @@ echo
 echo
 echo
 echo "Networks"
-echo
+echo "----------------------------------------------------------------------"
 printf "%-${output_tab_space}s: %s\n" "View All Networks" "docker network ls"
 printf "%-${output_tab_space}s: %s\n" "Create Network" "docker network create --driver overlay --attachable <NETWORKNAME>"
 printf "%-${output_tab_space}s: %s\n" "Get Info" "docker network inspect <NETWORKNAME>"
@@ -72,7 +72,7 @@ echo
 echo
 echo
 echo "Secrets"
-echo
+echo "----------------------------------------------------------------------"
 printf "%-${output_tab_space}s: %s\n" "View All Secrets" "docker secret ls"
 printf "%-${output_tab_space}s: %s\n" "Create Secret" "vi secret.txt    (then insert secret and save file)"
 printf "%${output_tab_space}s  %s\n" "" "docker secret create <SECRETNAME> secret.txt"
@@ -83,7 +83,7 @@ echo
 echo
 echo
 echo "Services"
-echo
+echo "----------------------------------------------------------------------"
 printf "%-${output_tab_space}s: %s\n" "View All Services" "docker service ls"
 printf "%-${output_tab_space}s: %s\n" "Get Information" "docker service ps <SERVICENAME> --no-trunc"
 printf "%-${output_tab_space}s: %s\n" "Read Logs" "docker service logs <SERVICENAME>"
@@ -98,7 +98,7 @@ echo
 echo
 echo
 echo "Stacks"
-echo
+echo "----------------------------------------------------------------------"
 printf "%-${output_tab_space}s: %s\n" "View All Stacks" "docker stack ls"
 printf "%-${output_tab_space}s: %s\n" "View Services of Stack" "docker stack services <STACKNAME>"
 printf "%-${output_tab_space}s: %s\n" "Deploy Stack" "docker stack deploy -c <DEPLOYCONFIG> <STACKNAME>"
@@ -108,7 +108,7 @@ echo
 echo
 echo
 echo "Troubleshooting"
-echo
+echo "----------------------------------------------------------------------"
 printf "%-${output_tab_space}s: %s\n" "Get information" "docker service ps <SERVICE_NAME> --no-trunc"
 printf "%-${output_tab_space}s: %s\n" "Read logs" "docker service logs <SERVICE_NAME>"
 echo 

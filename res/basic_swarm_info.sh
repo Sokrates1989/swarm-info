@@ -53,9 +53,9 @@ done
 
 # Swarm Status
 echo
-echo
-echo
+echo "-------------------------------------------------------------------------"
 echo "Basic Swarm information (bash $MAIN_DIR/get_info.sh --basic (--menu) ) "
+echo "-------------------------------------------------------------------------"
 echo
 echo
 swarm_status=$(docker info --format '{{.Swarm.LocalNodeState}}')
@@ -66,7 +66,7 @@ echo
 
 ## List of Nodes ##
 echo "List of Nodes in the Swarm (docker node ls):"
-echo
+echo "----------------------------------------------------------------------"
 node_output=$(docker node ls)
 echo "$node_output"
 echo

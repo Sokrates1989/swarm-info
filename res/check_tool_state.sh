@@ -56,7 +56,10 @@ current_dir=$(pwd)
 cd $MAIN_DIR
 
 # Print user info.
+echo
+echo "------------------------------------------------------------------------------------------------"
 echo -e "Fetching state of swarm-info (this tool) (bash $MAIN_DIR/get_info.sh --state (--menu) ) ..."
+echo "------------------------------------------------------------------------------------------------"
 echo
 repo_url=https://github.com/Sokrates1989/swarm-info.git
 is_healthy=true

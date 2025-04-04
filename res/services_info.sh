@@ -54,12 +54,13 @@ done
 
 ## Number of services on each node ##
 echo
-echo
-echo
+echo "-------------------------------------------------------------------------"
 echo "Services (bash $MAIN_DIR/get_info.sh --services (--menu) )"
+echo "-------------------------------------------------------------------------"
+echo
 echo
 echo "Running services per node:"
-echo
+echo "----------------------------------------------------------------------"
 
 # Service Node Count.
 declare -A node_service_count
@@ -109,8 +110,9 @@ fi
 
 
 ## List of Services ##
-echo "List of Services (docker service ls):"
 echo
+echo "List of Services (docker service ls):"
+echo "----------------------------------------------------------------------"
 services_output=$(docker service ls)
 echo "$services_output"
 echo

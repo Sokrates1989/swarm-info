@@ -32,16 +32,17 @@ done
 
 # Print info about this menu item and how to navigate here.
 echo
-echo
-echo
+echo "-------------------------------------------------------------------------"
 echo "Stacks and their services (bash $MAIN_DIR/get_info.sh --stack-services (--menu) )"
+echo "-------------------------------------------------------------------------"
+echo
 echo
 
 
 
 ## Stacks and their services ##
 echo "Stacks and their services (docker stack services <STACKNAME>):"
-echo
+echo "----------------------------------------------------------------------"
 for stack in $(docker stack ls --format '{{.Name}}'); do
   echo "$stack"
   # Services of stack.

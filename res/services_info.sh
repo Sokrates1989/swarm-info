@@ -116,7 +116,9 @@ echo "----------------------------------------------------------------------"
 services_output=$(docker service ls)
 echo "$services_output"
 echo
+echo
 echo "Helpful service commands:"
+echo "----------------------------------------------------------------------"
 output_tab_space=25
 printf "%-${output_tab_space}s: %s\n" "Get information" "docker service ps <SERVICENAME> --no-trunc"
 printf "%-${output_tab_space}s: %s\n" "Read logs" "docker service logs <SERVICENAME>"

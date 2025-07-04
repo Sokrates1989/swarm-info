@@ -2,6 +2,18 @@
 
 ## Global functions ##
 
+# Function to get the script directory, handling symlinks properly.
+get_script_dir() {
+    # 🔧 Robust: Resolve actual script directory, even if called via symlink
+    SOURCE="${BASH_SOURCE[0]}"
+    while [ -L "$SOURCE" ]; do
+      DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+      SOURCE="$(readlink "$SOURCE")"
+      [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+    done
+    echo "$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+}
+
 # Function to print formatted output.
 print_info() {
     while [ "$#" -gt 0 ]; do

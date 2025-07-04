@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Get the directory of the script.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Global functions.
+source "$(dirname "$0")/functions.sh"
+
+# Get the directory of the script, handling symlinks properly.
+SCRIPT_DIR="$(get_script_dir)"
 MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # The space until the colon to align all output info to.
 output_tab_space=28 
-
-# Global functions.
-source "$SCRIPT_DIR/functions.sh"
 
 # Parse command-line options.
 output_type="single_without_menu"

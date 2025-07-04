@@ -1,12 +1,11 @@
 #!/bin/bash
 
-# Get the directory of the script.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-
 # Global functions.
-source "$SCRIPT_DIR/functions.sh"
+source "$(dirname "$0")/functions.sh"
+
+# Get the directory of the script, handling symlinks properly.
+SCRIPT_DIR="$(get_script_dir)"
+MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 
 # Display next menu item.

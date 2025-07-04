@@ -56,7 +56,7 @@ done
 ## List of Stacks ##
 echo
 echo "-------------------------------------------------------------------------"
-echo "Stack information (bash $MAIN_DIR/get_info.sh --stacks (--menu) )"
+echo "Stack information (swarm-info --stacks (--menu) )"
 echo "-------------------------------------------------------------------------"
 echo
 echo
@@ -82,7 +82,7 @@ echo
 if [[ "$output_type" != "single_with_menu" && "$output_type" != "part_of_whole_info_wait" ]]; then
   echo "Which services are running within each stack?"
   output_tab_space=18
-  printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --stack-services --menu"
+  printf "%-${output_tab_space}s: %s\n" "Command" "swarm-info --stack-services --menu"
   echo
   echo
 fi
@@ -95,9 +95,9 @@ show_context_menu_options() {
     echo
     echo "Need context information?"
     echo "----------------------------------------------------------------------"
-    echo "1) Services of each stack     bash $MAIN_DIR/get_info.sh --stack-services --menu"
+    echo "1) Services of each stack     swarm-info --stack-services --menu"
     echo
-    echo "m) Main menu                  bash $MAIN_DIR/get_info.sh --menu"
+    echo "m) Main menu                  swarm-info --menu"
     echo
 
     # Determine any other key button text.

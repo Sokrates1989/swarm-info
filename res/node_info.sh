@@ -33,7 +33,7 @@ done
 # Print info about this menu item and how to navigate here.
 echo
 echo "-------------------------------------------------------------------------"
-echo "On what nodes are running which services?  (bash $MAIN_DIR/get_info.sh --node-services (--menu) )"
+echo "On what nodes are running which services?  (swarm-info --node-services (--menu) )"
 echo "-------------------------------------------------------------------------"
 echo
 echo
@@ -127,8 +127,8 @@ echo
 echo "More details on nodes:"
 echo "----------------------------------------------------------------------"
 output_tab_space=20
-printf "%-${output_tab_space}s: %s\n" "Labels" "bash $MAIN_DIR/get_info.sh --labels --menu"
-printf "%-${output_tab_space}s: %s\n" "This node" "bash $MAIN_DIR/get_info.sh --local --menu"
+printf "%-${output_tab_space}s: %s\n" "Labels" "swarm-info --labels --menu"
+printf "%-${output_tab_space}s: %s\n" "This node" "swarm-info --local --menu"
 echo
 
 

@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Get the directory of the script.
@@ -33,7 +32,7 @@ done
 # Print info about this menu item and how to navigate here.
 echo
 echo "-------------------------------------------------------------------------"
-echo "Stacks and their services (bash $MAIN_DIR/get_info.sh --stack-services (--menu) )"
+echo "Stacks and their services (swarm-info --stack-services (--menu) )"
 echo "-------------------------------------------------------------------------"
 echo
 echo

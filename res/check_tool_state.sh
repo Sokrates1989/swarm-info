@@ -58,7 +58,7 @@ cd $MAIN_DIR
 # Print user info.
 echo
 echo "------------------------------------------------------------------------------------------------"
-echo -e "Fetching state of swarm-info (this tool) (bash $MAIN_DIR/get_info.sh --state (--menu) ) ..."
+echo -e "Fetching state of swarm-info (this tool) (swarm-info --state (--menu) ) ..."
 echo "------------------------------------------------------------------------------------------------"
 echo
 repo_url=https://github.com/Sokrates1989/swarm-info.git
@@ -138,3 +138,8 @@ case $output_type in
         display_next_menu_item
         ;;
 esac
+
+# Function to show main menu.
+show_main_menu() {
+    bash "$MAIN_DIR/get_info.sh" --menu
+}

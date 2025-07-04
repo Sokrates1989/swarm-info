@@ -55,7 +55,7 @@ done
 ## Number of services on each node ##
 echo
 echo "-------------------------------------------------------------------------"
-echo "Services (bash $MAIN_DIR/get_info.sh --services (--menu) )"
+echo "Services (swarm-info --services (--menu) )"
 echo "-------------------------------------------------------------------------"
 echo
 echo
@@ -101,7 +101,7 @@ echo
 if [[ "$output_type" != "single_with_menu" && "$output_type" != "part_of_whole_info_wait" ]]; then
   echo "Which services are running on which node?"
   output_tab_space=18
-  printf "%-${output_tab_space}s: %s\n" "Command" "bash $MAIN_DIR/get_info.sh --node-services --menu"
+  printf "%-${output_tab_space}s: %s\n" "Command" "swarm-info --node-services --menu"
   echo
   echo
 fi
@@ -137,9 +137,9 @@ show_context_menu_options() {
     echo
     echo "Need context information?"
     echo "----------------------------------------------------------------------"
-    echo "1) Services across nodes      bash $MAIN_DIR/get_info.sh --node-services --menu"
+    echo "1) Services across nodes      swarm-info --node-services --menu"
     echo
-    echo "m) Main menu                  bash $MAIN_DIR/get_info.sh --menu"
+    echo "m) Main menu                  swarm-info --menu"
     echo
 
     # Determine any other key button text.

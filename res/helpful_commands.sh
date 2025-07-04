@@ -32,7 +32,7 @@ done
 # Helpful commands.
 echo
 echo "-------------------------------------------------------------------------"
-echo "Helpful docker commands (bash $MAIN_DIR/get_info.sh --commands (--menu) )"
+echo "Helpful docker commands (swarm-info --commands (--menu) )"
 echo "-------------------------------------------------------------------------"
 echo
 echo

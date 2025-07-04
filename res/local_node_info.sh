@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Get the directory of the script.
@@ -33,7 +32,7 @@ done
 # Print info about this menu item and how to navigate here.
 echo
 echo "-------------------------------------------------------------------------"
-echo "Info about this node of the swarm  (bash $MAIN_DIR/get_info.sh --local (--menu) )"
+echo "Info about this node of the swarm  (swarm-info --local (--menu) )"
 echo "-------------------------------------------------------------------------"
 echo
 

@@ -53,10 +53,10 @@ swarm-info
 
 # 📄 JSON Output for messaging / automation
 
-Also writes percentages of server usage into files so that they can be mapped into docker images. These files can be used to monitor the server state and send server state infos via Telegram, email or other messaging tools.
+Collects Docker Swarm service health data and writes structured JSON. This data can be consumed by a watchdog (e.g. `swarm-info-watchdog`) to alert on unhealthy or crash-looping services via Telegram, email, or other messaging tools.
 
 ### 🔧 Default json output file
-Writes output to path/to/swarm-info/service_info.json
+Writes output to `path/to/swarm-info/swarm_info/swarm_info.json`
 ```bash
 swarm-info --json
 ```
@@ -64,15 +64,39 @@ swarm-info --json
 ### 📝 Custom file
 You can also provide a custom file where to write the json file to
 ```bash
-# Ensure custom file exists.
+# Ensure custom dir exists.
 mkdir -p /custom/path
-touch /custom/path/file.json
 
 # Command option short.
 swarm-info --json -o /custom/path/file.json
 # Command option long.
 swarm-info --json --output-file /custom/path/file.json
 ```
+
+### 📊 JSON Structure
+See `example-output/swarm-info.json` for a full example. Key fields per service:
+
+| Field | Description |
+|-------|-------------|
+| `name` | Docker service name (e.g. `reminderbot_bot`) |
+| `replicas_running` / `replicas_desired` | Current vs expected replica count |
+| `status` | `healthy`, `degraded`, or `down` |
+| `total_failures` | Total failed tasks (all time, as retained by Docker) |
+| `recent_failures` | Failed tasks within the last hour |
+| `restart_rate_per_hour` | Failures per hour (for crash-loop detection) |
+| `last_failure_ago_seconds` | How recently the last failure occurred |
+
+The `summary` section provides totals:
+```json
+"summary": {
+  "total_services": 12,
+  "healthy": 10,
+  "degraded": 2,
+  "down": 0
+}
+```
+
+The `unhealthy_services` array lists names of all non-healthy services for quick alerting.
 
 ---
 
@@ -85,14 +109,15 @@ Setup cron to get periodic swarm info.
 crontab -e
 ```
 
-### Example 1 – hourly at minute 59:
+### Example – every 5 minutes (recommended for health monitoring):
 ```bash
-# Execute command every hour at :59 min .
-59 * * * * /usr/local/bin/swarm-info --json --output-file /custom/path/file.json
-
-# Second Example as used on prod servers.
-59 * * * * /usr/local/bin/swarm-info --json --output-file /info_json/service_info.json
+# Check swarm health every 5 minutes.
+*/5 * * * * /usr/local/bin/swarm-info --json --output-file /info_json/swarm_info.json
 ```
 
+### Example – hourly at minute 59:
+```bash
+59 * * * * /usr/local/bin/swarm-info --json --output-file /info_json/swarm_info.json
+```
 
 

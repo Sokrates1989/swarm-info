@@ -1,3 +1,8 @@
 # Keep service-states dir, but do not track anything else within.
 service-states/*
 !service-states/.gitkeep
+
+# Runtime health and vulnerability JSON reports.
+swarm_info/*
+!swarm_info/.gitkeep
+res/swarm_info/*

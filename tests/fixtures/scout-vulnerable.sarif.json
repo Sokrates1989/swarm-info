@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "docker-scout",
+          "rules": [
+            {
+              "id": "CVE-2099-10001",
+              "shortDescription": {
+                "text": "Fictional critical package vulnerability"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2099-10001",
+              "properties": {
+                "security-severity": "9.8"
+              }
+            },
+            {
+              "id": "CVE-2099-10002",
+              "shortDescription": {
+                "text": "Fictional high package vulnerability"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2099-10002",
+              "properties": {
+                "severity": "high"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CVE-2099-10001",
+          "message": {
+            "text": "CVE-2099-10001 affects fictional-lib 1.0"
+          }
+        },
+        {
+          "ruleIndex": 1,
+          "message": {
+            "text": "CVE-2099-10002 affects sample-runtime 2.0"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -22,6 +22,14 @@ sudo yum update
 sudo yum install bash
 ```
 
+### Python
+
+Python 3.10 or newer is required for image vulnerability scanning.
+
+```bash
+python3 --version
+```
+
 # 🧰 First Setup
 
 Install `swarm-info` under `~/tools/swarm-info`, create a global command `swarm-info`, and make it permanently available:
@@ -97,6 +105,104 @@ The `summary` section provides totals:
 ```
 
 The `unhealthy_services` array lists names of all non-healthy services for quick alerting.
+
+---
+
+# Image vulnerability scanning
+
+`swarm-info` can manually scan every current Docker Swarm service image from a
+manager node. Images that share the same registry digest are scanned once and
+the report maps the result back to every consuming service and stack.
+
+The Slice 1 policy matches the Python API template:
+
+- Scanner: Docker Scout.
+- Source: exact service reference from the registry.
+- Platform: `linux/amd64` by default.
+- Findings: fixable `HIGH` and `CRITICAL` CVEs.
+- Output: a separate, atomically replaced JSON report.
+
+This is a policy scan rather than a complete inventory of all severities and
+unfixed vulnerabilities.
+
+## Scanner prerequisites
+
+Run the scan as the same operating-system user that owns the Docker Scout
+installation and registry credentials.
+
+```bash
+docker info --format 'swarm={{.Swarm.LocalNodeState}} manager={{.Swarm.ControlAvailable}}'
+docker scout version
+```
+
+Private registries must already be available through that user's Docker
+credential store. The command does not install Scout, run `docker login`, or
+write credentials into its report.
+
+## Run the scan
+
+```bash
+swarm-info --scan-vulnerabilities \
+  --platform linux/amd64 \
+  --output-file /info_json/vulnerability_scan.json
+scan_status=$?
+echo "scan exit code: $scan_status"
+```
+
+Without `--output-file`, the report is written to
+`swarm_info/vulnerability_scan.json` in the installed repository.
+
+Exit codes are deliberately automation-friendly:
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Every unique image was scanned and no policy findings exist. |
+| `2` | Every unique image was scanned and at least one finding exists. |
+| `3` | Inventory, one or more image scans, or report publication was incomplete. |
+
+Exit code `2` is an expected vulnerability result, not an execution failure.
+When one image fails, the command continues scanning the remaining images,
+publishes their findings, marks the report `incomplete`, and exits `3`.
+
+## Inspect and reconcile the result
+
+```bash
+python3 -m json.tool /info_json/vulnerability_scan.json | less
+
+docker service ls --format '{{.Name}}\t{{.Image}}'
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+report = json.loads(Path('/info_json/vulnerability_scan.json').read_text())
+print(json.dumps(report['summary'], indent=2))
+print('\nServices represented in the report:')
+names = {
+    service['name']
+    for image in report['images']
+    for service in image['services']
+}
+print('\n'.join(sorted(names)))
+PY
+```
+
+Confirm that `scope.service_count` matches `docker service ls -q | wc -l`.
+Check every image entry with `status: "error"`; authentication or registry
+failures are never treated as clean results.
+
+## Developer verification
+
+The tests use a deterministic fake Docker/Scout executable and make no network
+or Docker calls.
+
+```bash
+python3 -B -m unittest discover -s tests -v
+bash -n get_info.sh res/*.sh setup/*.sh
+```
+
+Slice 1 is manual only. Do not add it to the existing five-minute health cron;
+locked daily scheduling and stale-evidence handling belong to Slice 2.
 
 ---
 

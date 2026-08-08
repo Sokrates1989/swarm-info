@@ -5,7 +5,8 @@
 #
 # Description:
 #     Main command dispatcher for Docker Swarm status, inventory, diagnostics,
-#     JSON health collection, and manual image vulnerability scanning.
+#     guarded self-updates, JSON health collection, and manual image
+#     vulnerability scanning.
 #
 # Dependencies:
 #     - Bash 4+
@@ -247,6 +248,20 @@ check_tool_state() {
     fi
 }
 
+# -----------------------------------------------------------------------------
+# Safely fast-forward swarm-info to its configured Git upstream.
+#
+# Returns:
+#     0 when already current or updated successfully.
+#     1 when local changes, divergence, Git, or network access block the update.
+#
+# Side effects:
+#     Fetches the configured Git remote and may fast-forward this checkout.
+# -----------------------------------------------------------------------------
+update_swarm_info_tool() {
+    bash "$SCRIPT_DIR/update_tool.sh"
+}
+
 #
 # Health-report output configuration.
 # A caller-provided destination replaces the repository-local default.
@@ -390,6 +405,8 @@ display_help() {
     echo -e "  --stacks          Display stack information"
     echo -e "  --stack-services  Display services within stacks"
     echo -e "  --state           Check this tool's state"
+    echo -e "  -u                Alias for --update"
+    echo -e "  --update          Safely fast-forward swarm-info to its Git upstream"
     echo -e "  -w                Alias for --wait"
     echo -e "  --wait            Show swarm info and wait after outputs to make it easier to read"
 
@@ -496,6 +513,10 @@ while [ $# -gt 0 ]; do
             selected_action="state"
             shift
             ;;
+        -u|--update)
+            selected_action="update"
+            shift
+            ;;
         -w|--wait)
             selected_action="wait"
             shift
@@ -550,6 +571,9 @@ case "$selected_action" in
         ;;
     "state")
         check_tool_state
+        ;;
+    "update")
+        update_swarm_info_tool
         ;;
     "scan-vulnerabilities")
         scan_service_image_vulnerabilities

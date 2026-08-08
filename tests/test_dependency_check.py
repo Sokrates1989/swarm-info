@@ -7,6 +7,7 @@ native Bash executable is unavailable, while static wiring tests still run.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import shutil
@@ -17,7 +18,9 @@ import unittest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 DEPENDENCY_SCRIPT = REPOSITORY_ROOT / "res" / "dependency_check.sh"
+UPDATE_SCRIPT = REPOSITORY_ROOT / "res" / "update_tool.sh"
 FAKE_DOCKER = REPOSITORY_ROOT / "tests" / "fixtures" / "fake_docker.py"
+FAKE_GIT = REPOSITORY_ROOT / "tests" / "fixtures" / "fake_git.py"
 
 
 def native_bash_is_available() -> bool:
@@ -158,6 +161,117 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn("check_swarm_info_dependencies all", source)
         self.assertIn("check_swarm_info_dependencies scan", source)
         self.assertIn("sys.version_info < (3, 10)", source)
+
+
+class SelfUpdateTests(unittest.TestCase):
+    """Verify that self-update accepts only safe fast-forward states."""
+
+    def run_self_update(
+        self, scenario: str
+    ) -> tuple[subprocess.CompletedProcess[str], list[list[str]]]:
+        """Run the updater with a deterministic fake Git executable.
+
+        Args:
+            scenario: Git state selected through ``FAKE_GIT_SCENARIO``.
+
+        Returns:
+            Completed updater process and normalized Git invocation arrays.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            fake_bin = Path(temporary_directory)
+            fake_git = fake_bin / "git"
+            git_log = fake_bin / "git-calls.jsonl"
+            shutil.copy2(FAKE_GIT, fake_git)
+            fake_git.chmod(0o755)
+
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+            environment["FAKE_GIT_SCENARIO"] = scenario
+            environment["FAKE_GIT_LOG"] = str(git_log)
+            result = subprocess.run(
+                ["bash", str(UPDATE_SCRIPT)],
+                capture_output=True,
+                check=False,
+                env=environment,
+                text=True,
+                timeout=15,
+            )
+            commands = [
+                json.loads(line)
+                for line in git_log.read_text(encoding="utf-8").splitlines()
+            ]
+            return result, commands
+
+    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for shell execution.")
+    def test_current_checkout_succeeds_without_merge(self) -> None:
+        """Report an up-to-date checkout without changing Git history.
+
+        Returns:
+            Nothing.
+        """
+
+        result, commands = self.run_self_update("current")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("already up to date", result.stdout)
+        self.assertFalse(any(command[:1] == ["merge"] for command in commands))
+
+    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for shell execution.")
+    def test_behind_checkout_uses_fast_forward_merge(self) -> None:
+        """Apply a strictly behind upstream through `git merge --ff-only`.
+
+        Returns:
+            Nothing.
+        """
+
+        result, commands = self.run_self_update("behind")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(["merge", "--ff-only", "origin/main"], commands)
+        self.assertIn("swarm-info updated", result.stdout)
+
+    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for shell execution.")
+    def test_dirty_checkout_is_preserved(self) -> None:
+        """Refuse update before fetch when tracked work is modified.
+
+        Returns:
+            Nothing.
+        """
+
+        result, commands = self.run_self_update("dirty")
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("local changes", result.stderr)
+        self.assertFalse(any(command[:1] == ["fetch"] for command in commands))
+        self.assertFalse(any(command[:1] == ["merge"] for command in commands))
+
+    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for shell execution.")
+    def test_divergent_checkout_is_preserved(self) -> None:
+        """Refuse update when local and upstream commits have diverged.
+
+        Returns:
+            Nothing.
+        """
+
+        result, commands = self.run_self_update("diverged")
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("local branch is 1 commit(s) ahead", result.stderr)
+        self.assertFalse(any(command[:1] == ["merge"] for command in commands))
+
+    def test_entrypoint_exposes_short_update_option(self) -> None:
+        """Keep `swarm-info -u` wired to the guarded updater.
+
+        Returns:
+            Nothing.
+        """
+
+        source = (REPOSITORY_ROOT / "get_info.sh").read_text(encoding="utf-8")
+
+        self.assertIn("-u|--update", source)
+        self.assertIn('selected_action="update"', source)
+        self.assertIn('bash "$SCRIPT_DIR/update_tool.sh"', source)
 
 
 if __name__ == "__main__":

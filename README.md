@@ -108,6 +108,22 @@ tour. Automated `--json` collection avoids this optional Scout warning, while
 swarm-info
 ```
 
+## Safe self-update
+
+Update the installed checkout through swarm-info itself:
+
+```bash
+swarm-info -u
+# Equivalent long option:
+swarm-info --update
+```
+
+The updater fetches the current branch's configured upstream and accepts only
+a clean, strictly fast-forward update. It refuses to overwrite uncommitted
+files, untracked files, local commits, or a divergent branch. Resolve those
+states manually and rerun `swarm-info -u`; the updater never stashes, resets,
+or force-checks out user work.
+
 ---
 
 # 📄 JSON Output for messaging / automation
@@ -201,6 +217,19 @@ scan_status=$?
 echo "scan exit code: $scan_status"
 ```
 
+Use the installed `swarm-info` command for normal operation. If a damaged or
+legacy checkout reports `Permission denied` with exit code `126`, invoke the
+tracked script through Bash once and run the guarded updater:
+
+```bash
+cd ~/tools/swarm-info
+bash ./get_info.sh -u
+```
+
+Current releases track `get_info.sh` as executable, so a successful update
+repairs direct `./get_info.sh` and symlink execution without a local mode-only
+Git modification.
+
 Without `--output-file`, the report is written to
 `swarm_info/vulnerability_scan.json` in the installed repository.
 
@@ -245,8 +274,8 @@ failures are never treated as clean results.
 
 ## Developer verification
 
-The tests use a deterministic fake Docker/Scout executable and make no network
-or Docker calls.
+The tests use deterministic fake Docker/Scout and Git executables and make no
+network, registry, or Docker daemon calls.
 
 ```bash
 python3 -B -m unittest discover -s tests -v

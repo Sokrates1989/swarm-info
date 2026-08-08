@@ -161,6 +161,7 @@ record_scan_failure() {
 # -----------------------------------------------------------------------------
 check_core_dependencies() {
     local docker_state=""
+    local git_version=""
     local manager_state=""
     local swarm_state=""
 
@@ -171,8 +172,9 @@ check_core_dependencies() {
         record_required_failure "Bash 4 or newer is required; found ${BASH_VERSION}."
     fi
 
-    if command -v git >/dev/null 2>&1; then
-        echo "[OK] $(git --version 2>/dev/null)"
+    if command -v git >/dev/null 2>&1 &&
+        git_version="$(git --version 2>/dev/null)" && [ -n "$git_version" ]; then
+        echo "[OK] $git_version"
     else
         record_required_failure "Git is required for installation and update checks."
         show_git_install_help

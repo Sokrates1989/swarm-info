@@ -84,7 +84,7 @@ prepare_checkout() {
     fi
 
     echo "[INFO] Existing checkout found; skipping clone."
-    echo "[INFO] Update it independently with: git -C ${INSTALL_DIRECTORY} pull --ff-only"
+    echo "[INFO] After installation, update it safely with: swarm-info -u"
 }
 
 # -----------------------------------------------------------------------------
@@ -161,7 +161,7 @@ verify_runtime_dependencies() {
 
     if [ ! -f "$dependency_script" ]; then
         echo "[ERROR] Dependency checker is missing from the checkout." >&2
-        echo "        Update first: git -C ${INSTALL_DIRECTORY} pull --ff-only" >&2
+        echo "        Rerun the latest setup/linux-cli.sh bootstrap installer." >&2
         return 1
     fi
 

@@ -105,11 +105,9 @@ else
         if [ "$available_updates" = true ]; then
             echo -e "  Remote Repo updateable! $behind_count commits behind. Pull is recommended."
 
-            # Print user info how to update repo.
-            echo -e "\n  To update this tool do this:"
-            echo -e "  cd $MAIN_DIR"
-            echo -e "  git pull"
-            echo -e "  cd $current_dir\n"
+            # Direct operators through the guarded self-update workflow.
+            echo -e "\n  Update swarm-info with:"
+            echo -e "  swarm-info -u\n"
         fi
     fi
 fi

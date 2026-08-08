@@ -1,0 +1,5 @@
+# Shell entry points must remain executable by Linux Bash after any checkout.
+*.sh text eol=lf
+
+# Python modules include executable test fixtures with Linux shebangs.
+*.py text eol=lf

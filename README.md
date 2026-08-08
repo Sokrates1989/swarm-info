@@ -8,31 +8,61 @@ Stuff that just could not be finished in time:
    - Add context menu every time there is a context
    - Broaden context of context menus
 
-# Prerequisities
-### Bash
-Debian-based systems like Ubuntu
+# Prerequisites
+
+Core swarm inventory requires:
+
+- Linux with Bash 4 or newer.
+- Git for installation and update checks.
+- Docker Engine with access to its daemon.
+- An active Docker Swarm manager node. Worker nodes cannot inventory all
+  services.
+
+Install Bash and Git on Debian/Ubuntu:
+
 ```bash
 sudo apt update
-sudo apt install bash
+sudo apt install -y bash git
 ```
 
-Red Hat-based system
+On RHEL/Fedora:
+
 ```bash
-sudo yum update
-sudo yum install bash
+sudo dnf install -y bash git
 ```
 
-### Python
+Install Docker Engine using the official platform instructions:
+[Docker Engine installation](https://docs.docker.com/engine/install/).
 
-Python 3.10 or newer is required for image vulnerability scanning.
+Image vulnerability scanning additionally requires Python 3.10+ and the
+Docker Scout CLI plugin. Install Python on Debian/Ubuntu with:
 
 ```bash
+sudo apt-get update
+sudo apt-get install -y python3 curl
 python3 --version
 ```
 
+Install Docker Scout for the operating-system user that will run `swarm-info`:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
+docker scout version
+docker login
+```
+
+The install command follows Docker's documented
+[CLI-plugin installation](https://github.com/docker/scout-cli#cli-plugin-installation).
+See [Docker Scout documentation](https://docs.docker.com/scout/) for supported
+registries and authentication. Installing as `root` places the plugin in
+root's Docker configuration; a non-root cron or shell will not see that copy.
+
 # 🧰 First Setup
 
-Install `swarm-info` under `~/tools/swarm-info`, create a global command `swarm-info`, and make it permanently available:
+Install `swarm-info` under `~/tools/swarm-info`, create a global command
+`swarm-info`, and make it permanently available. The installer verifies core
+readiness and explains any missing Python or Docker Scout dependency. It does
+not install Docker, Python, Scout, or registry credentials automatically.
 
 ### 🚀 Simply run the following block in terminal:
 ```bash
@@ -47,6 +77,27 @@ rm -rf /tmp/swarm-info-setup
 export PATH="$HOME/.local/bin:$PATH"
 hash -r
 ```
+
+The installer fails when core Docker/manager readiness is unavailable. Missing
+scan tooling is reported as a warning so inventory-only use remains available.
+After installing any missing dependency, rerun the complete check:
+
+```bash
+swarm-info --check-dependencies
+```
+
+Dependency-check exit codes are:
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Core and vulnerability-scanning dependencies are ready. |
+| `1` | A core dependency, Docker daemon, Swarm, or manager check failed. |
+| `2` | Core commands are ready, but Python or Docker Scout is unavailable. |
+| `64` | The dependency checker received invalid arguments. |
+
+The interactive no-option run performs the same full check before opening the
+tour. Automated `--json` collection avoids this optional Scout warning, while
+`--scan-vulnerabilities` always enforces the scan-specific preflight.
 
 ---
 
@@ -128,7 +179,8 @@ unfixed vulnerabilities.
 ## Scanner prerequisites
 
 Run the scan as the same operating-system user that owns the Docker Scout
-installation and registry credentials.
+installation and registry credentials. Use the installation commands in
+[Prerequisites](#prerequisites) when Scout is unavailable.
 
 ```bash
 docker info --format 'swarm={{.Swarm.LocalNodeState}} manager={{.Swarm.ControlAvailable}}'

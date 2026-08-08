@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """Deterministic Docker CLI fake for vulnerability scanner tests.
 
 The executable supports Docker manager preflight, service inventory/inspect,
@@ -171,7 +173,9 @@ def main(arguments: list[str] | None = None) -> int:
     services = scenario_services(scenario)
     log_invocation(command)
     if command[:2] == ["info", "--format"]:
-        print("inactive\tfalse" if scenario == "not-manager" else "active\ttrue")
+        separator = "|" if len(command) > 2 and "|" in command[2] else "\t"
+        state = ("inactive", "false") if scenario == "not-manager" else ("active", "true")
+        print(separator.join(state))
         return 0
     if command == ["service", "ls", "--quiet"]:
         print("\n".join(services))

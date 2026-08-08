@@ -275,6 +275,27 @@ swarm_info_json() {
 }
 
 # -----------------------------------------------------------------------------
+# Verify core and optional host dependencies through the shared checker.
+#
+# Parameters:
+#     $1 - Check mode: core, scan, or all. Defaults to all.
+#
+# Returns:
+#     0 when every selected dependency is ready.
+#     1 when a required core dependency is unavailable.
+#     2 when core dependencies are ready but scan dependencies are unavailable.
+#     64 when the requested mode is invalid.
+#
+# Side effects:
+#     Runs Docker readiness commands and prints installation guidance.
+# -----------------------------------------------------------------------------
+check_swarm_info_dependencies() {
+    local check_mode="${1:-all}"
+
+    bash "$SCRIPT_DIR/dependency_check.sh" "--$check_mode"
+}
+
+# -----------------------------------------------------------------------------
 # Scan all current Swarm service images for fixable HIGH/CRITICAL CVEs.
 #
 # The scanner runs as a Python module from the repository root so its internal
@@ -294,18 +315,28 @@ swarm_info_json() {
 #     Runs Docker Scout through Python and atomically publishes a JSON report.
 # -----------------------------------------------------------------------------
 scan_service_image_vulnerabilities() {
+    local dependency_status=0
     local python_command=""
     local scanner_arguments=(
         -m scripts.vulnerability_scan
         --platform "$VULNERABILITY_PLATFORM"
     )
 
-    if command -v python3 >/dev/null 2>&1; then
+    check_swarm_info_dependencies scan || dependency_status=$?
+    if [ "$dependency_status" -ne 0 ]; then
+        echo "[WARN] The scan will publish an incomplete report when execution remains possible." >&2
+    fi
+
+    if command -v python3 >/dev/null 2>&1 &&
+        python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' \
+            >/dev/null 2>&1; then
         python_command="python3"
-    elif command -v python >/dev/null 2>&1; then
+    elif command -v python >/dev/null 2>&1 &&
+        python -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' \
+            >/dev/null 2>&1; then
         python_command="python"
     else
-        echo "[ERROR] Python 3 is required for vulnerability scanning." >&2
+        echo "[ERROR] Python 3.10 or newer is required for vulnerability scanning." >&2
         return 3
     fi
 
@@ -335,6 +366,8 @@ display_help() {
     echo -e "  --basic           Basic swarm info"
     echo -e "  -c                Alias for --commands"
     echo -e "  --commands        Display helpful commands"
+    echo -e "  --check-dependencies"
+    echo -e "                    Check core, Python, and Docker Scout readiness"
     echo -e "  -f                Alias for --fast"
     echo -e "  --fast            Do not wait for keypress and display all information"
     echo -e "  -h                Alias for --help"
@@ -382,6 +415,10 @@ while [ $# -gt 0 ]; do
             ;;
         -c|--commands)
             selected_action="commands"
+            shift
+            ;;
+        --check-dependencies)
+            selected_action="check-dependencies"
             shift
             ;;
         -f|--fast)
@@ -478,6 +515,9 @@ case "$selected_action" in
     "commands")
         display_helpful_commands
         ;;
+    "check-dependencies")
+        check_swarm_info_dependencies all
+        ;;
     "fast")
         display_all_swarm_info_fast
         ;;
@@ -527,6 +567,13 @@ case "$selected_action" in
             fi
         else
             # If no option is specified or an invalid option is provided, display menu or start tour.
+            dependency_status=0
+            check_swarm_info_dependencies all || dependency_status=$?
+            if [ "$dependency_status" -eq 1 ]; then
+                echo "[ERROR] Resolve the core dependency issues before running swarm-info." >&2
+                exit 1
+            fi
+
             if [ "$is_show_menu_option_selected" = "true" ]; then
                 display_menu
             else

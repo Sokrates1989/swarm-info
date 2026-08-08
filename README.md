@@ -184,13 +184,25 @@ the report maps the result back to every consuming service and stack.
 The Slice 1 policy matches the Python API template:
 
 - Scanner: Docker Scout.
-- Source: exact service reference from the registry.
+- Source: exact local digest first, with registry fallback when it is absent.
 - Platform: `linux/amd64` by default.
 - Findings: fixable `HIGH` and `CRITICAL` CVEs.
 - Output: a separate, atomically replaced JSON report.
 
 This is a policy scan rather than a complete inventory of all severities and
 unfixed vulnerabilities.
+
+Digest-pinned images are first scanned through Docker Scout's `local://`
+source. This avoids redundant registry access when the exact deployed artifact
+is present on the manager. A missing or unreadable local artifact falls back to
+`registry://`, which keeps multi-node and zero-replica service coverage intact.
+Mutable tag-only references remain registry-only because a local tag may have
+moved independently of the service specification.
+
+Registry fallback uses at most three attempts with short backoff for transient
+failures. Authentication, authorization, and permanent manifest errors stop
+immediately. Scout progress animation is removed from stored errors so the
+report retains the final actionable, credential-redacted diagnostic.
 
 ## Scanner prerequisites
 
@@ -271,6 +283,11 @@ PY
 Confirm that `scope.service_count` matches `docker service ls -q | wc -l`.
 Check every image entry with `status: "error"`; authentication or registry
 failures are never treated as clean results.
+
+Vulnerability report schema version 2 adds per-image `scan_source`,
+`scan_attempts`, and `registry_fallback` fields. The summary also reports
+`local_images`, `registry_images`, `retried_images`, and
+`registry_fallback_images`, making registry use directly auditable.
 
 ## Developer verification
 

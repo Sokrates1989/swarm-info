@@ -149,9 +149,16 @@ def handle_scout_cves(arguments: list[str], scenario: str) -> int:
     """
 
     reference = arguments[-1]
+    if (
+        scenario == "local-fallback"
+        and reference.startswith("local://")
+        and DIGEST_A in reference
+    ):
+        print("No such image in the local image store", file=sys.stderr)
+        return 1
     if DIGEST_C in reference:
         print(
-            "registry token=secret-value failed for "
+            "unauthorized: registry token=secret-value failed for "
             "https://fake-user:fake-password@private.example",
             file=sys.stderr,
         )

@@ -69,6 +69,12 @@ def scenario_services(scenario: str) -> dict[str, dict[str, Any]]:
             }
         }
     services = base_services()
+    if scenario == "mapping-change":
+        services["service-delta"] = {
+            "name": "core_delta",
+            "image": f"docker.io/acme/shared-third:1@{DIGEST_A}",
+            "stack": "core",
+        }
     if scenario == "partial-failure":
         services["service-delta"] = {
             "name": "ops_delta",

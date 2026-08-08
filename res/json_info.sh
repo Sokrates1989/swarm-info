@@ -392,8 +392,40 @@ json_data=$(cat <<EOF
 EOF
 )
 
-# Write JSON string to file.
-echo "$json_data" > "$output_file"
+# -----------------------------------------------------------------------------
+# Atomically replace the health JSON consumed by polling services.
+#
+# Parameters:
+#     $1 - Final output path.
+#     $2 - Complete JSON document.
+#
+# Returns:
+#     0 when a same-directory temporary file is flushed and renamed.
+#     Nonzero when temporary creation, writing, permissions, or rename fails.
+#
+# Side effects:
+#     Creates and removes a temporary file beside the final report.
+# -----------------------------------------------------------------------------
+write_health_json_atomic() {
+    local destination="$1"
+    local document="$2"
+    local temporary_file=""
+
+    temporary_file="$(mktemp "${destination}.tmp.XXXXXX")" || return 1
+    if ! printf '%s\n' "$document" > "$temporary_file"; then
+        rm -f -- "$temporary_file"
+        return 1
+    fi
+    if ! chmod 0644 "$temporary_file" || ! mv -f -- "$temporary_file" "$destination"; then
+        rm -f -- "$temporary_file"
+        return 1
+    fi
+}
+
+if ! write_health_json_atomic "$output_file" "$json_data"; then
+    echo "Error: Could not atomically publish $output_file" >&2
+    exit 1
+fi
 
 # Also print to stdout.
 echo "$json_data"

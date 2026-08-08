@@ -274,16 +274,69 @@ failures are never treated as clean results.
 
 ## Developer verification
 
-The tests use deterministic fake Docker/Scout and Git executables and make no
-network, registry, or Docker daemon calls.
+The tests use deterministic fake Docker/Scout, Git, locking, and crontab
+adapters and make no network, registry, or Docker daemon calls.
 
 ```bash
 python3 -B -m unittest discover -s tests -v
 bash -n get_info.sh res/*.sh setup/*.sh
 ```
 
-Slice 1 is manual only. Do not add it to the existing five-minute health cron;
-locked daily scheduling and stale-evidence handling belong to Slice 2.
+## Slice 2: locked daily operation
+
+Manual `--scan-vulnerabilities` remains a forced scan, but now uses the same
+non-blocking lock, atomic report publication, and history retention as the
+scheduled job. The default lock is beside the report as
+`vulnerability_scan.json.lock`; overlapping invocations exit successfully
+after logging that the active job owns the lock.
+
+Install an idempotent current-user daily cron entry at 03:17:
+
+```bash
+swarm-info --install-vulnerability-cron \
+  --output-file /info_json/vulnerability_scan.json \
+  --platform linux/amd64 \
+  --cron-hour 3 \
+  --cron-minute 17 \
+  --cache-age-hours 20 \
+  --max-age-hours 30 \
+  --history-days 14
+
+crontab -l
+```
+
+The installer preserves unrelated cron entries and replaces only the block
+between `BEGIN/END swarm-info managed vulnerability scan` markers. Remove only
+that managed block with:
+
+```bash
+swarm-info --remove-vulnerability-cron
+```
+
+The scheduled command inventories current service specifications first. It
+reuses a complete report only when its normalized image/service fingerprint,
+platform, and 20-hour rescan interval still match. An image, service mapping,
+stack, or alias change therefore scans immediately; unchanged repeated triggers
+within 20 hours reuse evidence. The separate 30-hour freshness limit gives a
+daily scan enough scheduling margin without suppressing the next daily Scout
+database refresh.
+
+Replaced valid reports are atomically archived under
+`/info_json/vulnerability_history/` and pruned after the configured retention
+period. Incomplete scans preserve the prior success time in
+`freshness.last_successful_at` while remaining explicitly incomplete.
+
+Inspect current evidence without contacting Docker or Scout:
+
+```bash
+swarm-info --vulnerability-status \
+  --output-file /info_json/vulnerability_scan.json \
+  --max-age-hours 30
+```
+
+Status exit codes retain the scan contract: `0` fresh clean, `2` fresh with
+findings, and `3` missing, stale, or incomplete. Keep this workload daily; do
+not add Docker Scout to the five-minute health collection cron.
 
 ---
 
@@ -299,12 +352,12 @@ crontab -e
 ### Example – every 5 minutes (recommended for health monitoring):
 ```bash
 # Check swarm health every 5 minutes.
-*/5 * * * * /usr/local/bin/swarm-info --json --output-file /info_json/swarm_info.json
+*/5 * * * * /root/.local/bin/swarm-info --json --output-file /info_json/swarm_info.json
 ```
 
 ### Example – hourly at minute 59:
 ```bash
-59 * * * * /usr/local/bin/swarm-info --json --output-file /info_json/swarm_info.json
+59 * * * * /root/.local/bin/swarm-info --json --output-file /info_json/swarm_info.json
 ```
 
 

@@ -211,6 +211,9 @@ main() {
     echo "[OK] Installation complete. Launch the tool with:"
     echo "     swarm-info"
     echo
+    echo "Optional daily vulnerability scan scheduling:"
+    echo "     swarm-info --install-vulnerability-cron"
+    echo
     echo "If the command is not visible in the parent shell yet, run:"
     echo '     export PATH="$HOME/.local/bin:$PATH"; hash -r'
 }

@@ -27,6 +27,7 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
 
 # Global functions.
 source "$SCRIPT_DIR/functions.sh"
+source "$SCRIPT_DIR/vulnerability_cli.sh"
 
 # Define the number of pages when showing all information.
 total_pages=6
@@ -311,61 +312,6 @@ check_swarm_info_dependencies() {
 }
 
 # -----------------------------------------------------------------------------
-# Scan all current Swarm service images for fixable HIGH/CRITICAL CVEs.
-#
-# The scanner runs as a Python module from the repository root so its internal
-# package imports remain stable when this entry point is called through a
-# symlink. A custom output path and platform are forwarded when configured.
-#
-# Global state:
-#     VULNERABILITY_PLATFORM selects the requested Docker platform.
-#     CUSTOM_OUTPUT_FILE optionally selects the report destination.
-#
-# Returns:
-#     0 when the complete scan is clean.
-#     2 when the complete scan contains policy findings.
-#     3 when inventory, scanning, or report publication is incomplete.
-#
-# Side effects:
-#     Runs Docker Scout through Python and atomically publishes a JSON report.
-# -----------------------------------------------------------------------------
-scan_service_image_vulnerabilities() {
-    local dependency_status=0
-    local python_command=""
-    local scanner_arguments=(
-        -m scripts.vulnerability_scan
-        --platform "$VULNERABILITY_PLATFORM"
-    )
-
-    check_swarm_info_dependencies scan || dependency_status=$?
-    if [ "$dependency_status" -ne 0 ]; then
-        echo "[WARN] The scan will publish an incomplete report when execution remains possible." >&2
-    fi
-
-    if command -v python3 >/dev/null 2>&1 &&
-        python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' \
-            >/dev/null 2>&1; then
-        python_command="python3"
-    elif command -v python >/dev/null 2>&1 &&
-        python -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' \
-            >/dev/null 2>&1; then
-        python_command="python"
-    else
-        echo "[ERROR] Python 3.10 or newer is required for vulnerability scanning." >&2
-        return 3
-    fi
-
-    if [ "$CUSTOM_OUTPUT_FILE" != "NONE" ]; then
-        scanner_arguments+=(--output-file "$CUSTOM_OUTPUT_FILE")
-    fi
-
-    (
-        cd "$MAIN_DIR" || exit 3
-        "$python_command" "${scanner_arguments[@]}"
-    )
-}
-
-# -----------------------------------------------------------------------------
 # Display command-line help, wait for acknowledgement, and reopen the menu.
 #
 # Returns:
@@ -383,30 +329,45 @@ display_help() {
     echo -e "  --commands        Display helpful commands"
     echo -e "  --check-dependencies"
     echo -e "                    Check core, Python, and Docker Scout readiness"
+    echo -e "  --cache-age-hours Vulnerability rescan interval (default: 20)"
+    echo -e "  --cron-hour       Daily vulnerability cron hour (default: 3)"
+    echo -e "  --cron-log-file   Optional vulnerability cron log destination"
+    echo -e "  --cron-minute     Daily vulnerability cron minute (default: 17)"
     echo -e "  -f                Alias for --fast"
     echo -e "  --fast            Do not wait for keypress and display all information"
     echo -e "  -h                Alias for --help"
     echo -e "  --help            Display this help message"
     echo -e "  --json            Save and display info in json format"
+    echo -e "  --history-days    Vulnerability report retention days (default: 14)"
+    echo -e "  --install-vulnerability-cron"
+    echo -e "                    Install/update the current user's managed daily scan"
     echo -e "  --local           Display local docker information (docker on this node)"
+    echo -e "  --lock-file       Optional vulnerability job lock-file destination"
     echo -e "  --labels          Display Node label info (What labels are set to each node)"
     echo -e "  -m                Alias for --menu"
     echo -e "  --menu            Show menu (after displaying info, if used in combination with any single information option)"
+    echo -e "  --max-age-hours   Vulnerability freshness limit (default: 30)"
     echo -e "  --net             Display network info"
     echo -e "  --network         Display network info"
     echo -e "  --node-services   Display service node information (What service is running on which node)"
     echo -e "  -o                Alias for --output-file"
-    echo -e "  --output-file     JSON destination for --json or --scan-vulnerabilities"
+    echo -e "  --output-file     Health or vulnerability JSON destination"
     echo -e "  --platform        Image platform for vulnerability scanning (default: linux/amd64)"
     echo -e "  --scan-vulnerabilities"
-    echo -e "                    Scan every Swarm service image with Docker Scout"
+    echo -e "                    Force a locked scan of every Swarm service image"
+    echo -e "  --scheduled-vulnerability-scan"
+    echo -e "                    Run a locked scan unless matching evidence is fresh"
     echo -e "  --secrets         Display infos for secrets"
     echo -e "  --services        Display services information"
     echo -e "  --stacks          Display stack information"
     echo -e "  --stack-services  Display services within stacks"
     echo -e "  --state           Check this tool's state"
+    echo -e "  --remove-vulnerability-cron"
+    echo -e "                    Remove only the managed daily scan from crontab"
     echo -e "  -u                Alias for --update"
     echo -e "  --update          Safely fast-forward swarm-info to its Git upstream"
+    echo -e "  --vulnerability-status"
+    echo -e "                    Check report completeness and freshness without Docker"
     echo -e "  -w                Alias for --wait"
     echo -e "  --wait            Show swarm info and wait after outputs to make it easier to read"
 
@@ -422,6 +383,13 @@ is_show_menu_option_selected="false"
 use_file_output="false"
 file_output_type="json"
 VULNERABILITY_PLATFORM="linux/amd64"
+VULNERABILITY_CACHE_AGE_HOURS="20"
+VULNERABILITY_MAX_AGE_HOURS="30"
+VULNERABILITY_HISTORY_DAYS="14"
+VULNERABILITY_LOCK_FILE="NONE"
+VULNERABILITY_CRON_HOUR="3"
+VULNERABILITY_CRON_MINUTE="17"
+VULNERABILITY_CRON_LOG_FILE="NONE"
 
 # Check for command-line options.
 while [ $# -gt 0 ]; do
@@ -438,6 +406,42 @@ while [ $# -gt 0 ]; do
             selected_action="check-dependencies"
             shift
             ;;
+        --cache-age-hours)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            VULNERABILITY_CACHE_AGE_HOURS="$1"
+            shift
+            ;;
+        --cron-hour)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            VULNERABILITY_CRON_HOUR="$1"
+            shift
+            ;;
+        --cron-log-file)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            VULNERABILITY_CRON_LOG_FILE="$1"
+            shift
+            ;;
+        --cron-minute)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            VULNERABILITY_CRON_MINUTE="$1"
+            shift
+            ;;
         -f|--fast)
             selected_action="fast"
             shift
@@ -451,8 +455,30 @@ while [ $# -gt 0 ]; do
             file_output_type="json"
             shift
             ;;
+        --history-days)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            VULNERABILITY_HISTORY_DAYS="$1"
+            shift
+            ;;
+        --install-vulnerability-cron)
+            selected_action="install-vulnerability-cron"
+            shift
+            ;;
         --local)
             selected_action="local"
+            shift
+            ;;
+        --lock-file)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            VULNERABILITY_LOCK_FILE="$1"
             shift
             ;;
         --labels)
@@ -461,6 +487,15 @@ while [ $# -gt 0 ]; do
             ;;
         -m|--menu)
             is_show_menu_option_selected="true"
+            shift
+            ;;
+        --max-age-hours)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            VULNERABILITY_MAX_AGE_HOURS="$1"
             shift
             ;;
         --net|--network)
@@ -493,6 +528,14 @@ while [ $# -gt 0 ]; do
             selected_action="scan-vulnerabilities"
             shift
             ;;
+        --scheduled-vulnerability-scan)
+            selected_action="scheduled-vulnerability-scan"
+            shift
+            ;;
+        --remove-vulnerability-cron)
+            selected_action="remove-vulnerability-cron"
+            shift
+            ;;
         --secrets)
             selected_action="secrets"
             shift
@@ -517,6 +560,10 @@ while [ $# -gt 0 ]; do
             selected_action="update"
             shift
             ;;
+        --vulnerability-status)
+            selected_action="vulnerability-status"
+            shift
+            ;;
         -w|--wait)
             selected_action="wait"
             shift
@@ -538,6 +585,9 @@ case "$selected_action" in
         ;;
     "check-dependencies")
         check_swarm_info_dependencies all
+        ;;
+    "install-vulnerability-cron")
+        configure_vulnerability_cron install
         ;;
     "fast")
         display_all_swarm_info_fast
@@ -576,7 +626,16 @@ case "$selected_action" in
         update_swarm_info_tool
         ;;
     "scan-vulnerabilities")
-        scan_service_image_vulnerabilities
+        run_service_image_vulnerability_job manual
+        ;;
+    "scheduled-vulnerability-scan")
+        run_service_image_vulnerability_job scheduled
+        ;;
+    "remove-vulnerability-cron")
+        configure_vulnerability_cron remove
+        ;;
+    "vulnerability-status")
+        inspect_vulnerability_report
         ;;
     "wait")
         display_all_swarm_info_waiting

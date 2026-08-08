@@ -155,12 +155,15 @@ class DependencyCheckTests(unittest.TestCase):
         """
 
         source = (REPOSITORY_ROOT / "get_info.sh").read_text(encoding="utf-8")
+        bridge = (REPOSITORY_ROOT / "res" / "vulnerability_cli.sh").read_text(
+            encoding="utf-8"
+        )
 
         self.assertIn("--check-dependencies", source)
         self.assertIn('selected_action="check-dependencies"', source)
         self.assertIn("check_swarm_info_dependencies all", source)
-        self.assertIn("check_swarm_info_dependencies scan", source)
-        self.assertIn("sys.version_info < (3, 10)", source)
+        self.assertIn("check_swarm_info_dependencies scan", bridge)
+        self.assertIn("sys.version_info < (3, 10)", bridge)
 
 
 class SelfUpdateTests(unittest.TestCase):

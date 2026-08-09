@@ -74,6 +74,20 @@ show_git_install_help() {
 }
 
 # -----------------------------------------------------------------------------
+# Print calculator installation guidance for restart-rate calculations.
+#
+# Returns:
+#     Nothing.
+# -----------------------------------------------------------------------------
+show_bc_install_help() {
+    local privilege_prefix=""
+
+    privilege_prefix="$(dependency_privilege_prefix)"
+    echo "       Debian/Ubuntu: ${privilege_prefix}apt-get install -y bc"
+    echo "       RHEL/Fedora:   ${privilege_prefix}dnf install -y bc"
+}
+
+# -----------------------------------------------------------------------------
 # Print Python installation guidance for the vulnerability scanner adapter.
 #
 # Returns:
@@ -178,6 +192,13 @@ check_core_dependencies() {
     else
         record_required_failure "Git is required for installation and update checks."
         show_git_install_help
+    fi
+
+    if command -v bc >/dev/null 2>&1; then
+        echo "[OK] bc is available for restart-rate calculations."
+    else
+        record_required_failure "bc is required for accurate restart-rate calculations."
+        show_bc_install_help
     fi
 
     if ! command -v docker >/dev/null 2>&1; then

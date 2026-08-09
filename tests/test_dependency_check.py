@@ -165,6 +165,19 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn("check_swarm_info_dependencies scan", bridge)
         self.assertIn("sys.version_info < (3, 10)", bridge)
 
+    def test_core_preflight_requires_restart_rate_calculator(self) -> None:
+        """Keep the JSON producer's ``bc`` dependency explicit.
+
+        Returns:
+            Nothing.
+        """
+
+        source = DEPENDENCY_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("command -v bc", source)
+        self.assertIn("apt-get install -y bc", source)
+        self.assertIn("accurate restart-rate calculations", source)
+
 
 class SelfUpdateTests(unittest.TestCase):
     """Verify that self-update accepts only safe fast-forward states."""

@@ -164,8 +164,8 @@ See `example-output/swarm-info.json` for a full example. Key fields per service:
 The `summary` section provides totals:
 ```json
 "summary": {
-  "total_services": 12,
-  "healthy": 10,
+  "total_services": 4,
+  "healthy": 2,
   "degraded": 2,
   "down": 0
 }

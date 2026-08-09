@@ -9,8 +9,8 @@
     "node_count": 1
   },
   "summary": {
-    "total_services": 12,
-    "healthy": 10,
+    "total_services": 4,
+    "healthy": 2,
     "degraded": 2,
     "down": 0
   },

@@ -108,6 +108,28 @@ tour. Automated `--json` collection avoids this optional Scout warning, while
 swarm-info
 ```
 
+The default tour keeps the operational signal together: the Docker service
+list includes a concise down/degraded summary and the next page shows the
+latest vulnerability evidence. A missing or older-than-30-hours scan is never
+presented as clean; the page offers an explicit scan and warns that it can take
+several minutes.
+
+Open either page directly:
+
+```bash
+# Down/degraded services only, with investigation commands
+swarm-info -d
+swarm-info --service-health
+
+# Latest vulnerability report, affected images, and remediation commands
+swarm-info -v
+swarm-info --vulnerabilities
+```
+
+`swarm-info -v --menu` offers an immediate all-image scan. The scan remains an
+explicit action because it can be network- and CPU-intensive. View the
+version-matched command reference with `swarm-info --help` or `man swarm-info`.
+
 ## Safe self-update
 
 Update the installed checkout through swarm-info itself:
@@ -212,6 +234,12 @@ The Slice 1 policy matches the Python API template:
 
 This is a policy scan rather than a complete inventory of all severities and
 unfixed vulnerabilities.
+
+For the latest evidence and copy-ready remediation commands, run:
+
+```bash
+swarm-info -v
+```
 
 Digest-pinned images are first scanned through Docker Scout's `local://`
 source. This avoids redundant registry access when the exact deployed artifact

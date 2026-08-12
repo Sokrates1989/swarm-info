@@ -19,6 +19,7 @@ set -e
 # Installation paths and repository source.
 INSTALL_DIRECTORY="${HOME}/tools/swarm-info"
 LOCAL_BIN_DIRECTORY="${HOME}/.local/bin"
+LOCAL_MAN_DIRECTORY="${HOME}/.local/share/man/man1"
 REPOSITORY_URL="https://github.com/Sokrates1989/swarm-info.git"
 EXPORT_LINE='export PATH="$HOME/.local/bin:$PATH"'
 
@@ -142,6 +143,24 @@ configure_command() {
 }
 
 # -----------------------------------------------------------------------------
+# Install the version-matched manual page in the current user's man path.
+# -----------------------------------------------------------------------------
+configure_manual() {
+    local manual_source="${INSTALL_DIRECTORY}/docs/man/swarm-info.1"
+
+    if [ ! -f "$manual_source" ]; then
+        echo "[ERROR] Manual page is missing from the checkout." >&2
+        return 1
+    fi
+    mkdir -p "$LOCAL_MAN_DIRECTORY"
+    install -m 0644 "$manual_source" "${LOCAL_MAN_DIRECTORY}/swarm-info.1"
+    if command -v mandb >/dev/null 2>&1; then
+        mandb -q "${HOME}/.local/share/man" >/dev/null 2>&1 || true
+    fi
+    echo "[OK] Manual installed at ${LOCAL_MAN_DIRECTORY}/swarm-info.1"
+}
+
+# -----------------------------------------------------------------------------
 # Run the repository-owned full dependency preflight after installation.
 #
 # Docker Scout and Python are optional for core inventory commands, so a scan-
@@ -196,19 +215,31 @@ verify_runtime_dependencies() {
 #     Creates the checkout/symlink, updates shell profiles, and queries Docker.
 # -----------------------------------------------------------------------------
 main() {
+    local locale_file=""
+    local installed_version=""
+
     echo
     echo "Installing swarm-info (Docker Swarm Information CLI)"
     echo "===================================================="
 
     check_installer_dependencies
     prepare_checkout
+    locale_file="${INSTALL_DIRECTORY}/res/locales/operator_en.sh"
+    if [[ "${SWARM_INFO_LOCALE:-${LANG:-en}}" == de* ]]; then
+        locale_file="${INSTALL_DIRECTORY}/res/locales/operator_de.sh"
+    fi
+    # shellcheck source=/dev/null
+    source "$locale_file"
+    installed_version="$(tr -d '[:space:]' < "${INSTALL_DIRECTORY}/VERSION")"
     configure_command
+    configure_manual
 
     echo
     verify_runtime_dependencies
 
     echo
-    echo "[OK] Installation complete. Launch the tool with:"
+    echo "[OK] $OP_INSTALL_COMPLETE $installed_version"
+    echo "     Launch the tool with:"
     echo "     swarm-info"
     echo
     echo "Optional daily vulnerability scan scheduling:"

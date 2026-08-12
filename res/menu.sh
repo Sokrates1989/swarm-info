@@ -7,6 +7,12 @@ source "$(dirname "$0")/functions.sh"
 SCRIPT_DIR="$(get_script_dir)"
 MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+if [[ "${SWARM_INFO_LOCALE:-${LANG:-en}}" == de* ]]; then
+    source "$SCRIPT_DIR/locales/operator_de.sh"
+else
+    source "$SCRIPT_DIR/locales/operator_en.sh"
+fi
+
 # Menu options.
 show_menu_options() {
     echo "Main menu"
@@ -16,6 +22,9 @@ show_menu_options() {
     echo "3) Show menu with individual information options"
     echo "4) Show all options to call this script directly ( --help )"
     echo "5) List of helpful docker (swarm) commands ( --commands )"
+    echo
+    echo "d) $OP_SERVICE_HEALTH ( -d )"
+    echo "v) $OP_VULNERABILITIES ( -v )"
     echo
     echo "s) Check this tool's state ( --state )"
     echo "h) Help"
@@ -64,6 +73,16 @@ show_menu() {
                 echo
                 break
                 ;;
+            d)
+                show_service_health
+                echo
+                break
+                ;;
+            v)
+                show_vulnerability_info
+                echo
+                break
+                ;;
             s)
                 check_tool_state
                 echo
@@ -99,7 +118,7 @@ show_swarm_info_fast() {
 
 # Function to show help.
 show_help() {
-    bash "$MAIN_DIR/get_info.sh" --help
+    bash "$MAIN_DIR/get_info.sh" --help --menu
 }
 
 # Function to show helpful docker commands.
@@ -130,6 +149,8 @@ show_individual_info_options() {
     echo "8) Secrets                        (swarm-info --secrets (--menu) )"
     echo "9) Show helpful docker commands   (swarm-info --commands (--menu) )"
     echo "0) Check this tool's state        (swarm-info --state (--menu) )"
+    echo "d) $OP_SERVICE_HEALTH        (swarm-info -d (--menu) )"
+    echo "v) $OP_VULNERABILITY_REMEDIATION     (swarm-info -v (--menu) )"
     echo
     echo "b) Back to main menu"
     echo "q) Quit"
@@ -202,6 +223,16 @@ show_individual_info_menu() {
                 echo
                 break
                 ;;
+            d)
+                show_service_health
+                echo
+                break
+                ;;
+            v)
+                show_vulnerability_info
+                echo
+                break
+                ;;
             b)
                 show_menu
                 echo
@@ -227,6 +258,16 @@ show_basic_swarm_info() {
 # Function to show services info.
 show_services_info() {
     bash "$MAIN_DIR/get_info.sh" --services --menu
+}
+
+# Function to show service health evidence.
+show_service_health() {
+    bash "$MAIN_DIR/get_info.sh" -d --menu
+}
+
+# Function to show vulnerability evidence and remediation.
+show_vulnerability_info() {
+    bash "$MAIN_DIR/get_info.sh" -v --menu
 }
 
 # Function to show stacks info.

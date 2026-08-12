@@ -18,6 +18,23 @@ SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIRECTORY}/.." >/dev/null 2>&1 && pwd)"
 ENTRYPOINT_PATH="${REPOSITORY_ROOT}/get_info.sh"
 
+if [[ "${SWARM_INFO_LOCALE:-${LANG:-en}}" == de* ]]; then
+    source "${SCRIPT_DIRECTORY}/locales/operator_de.sh"
+else
+    source "${SCRIPT_DIRECTORY}/locales/operator_en.sh"
+fi
+
+# -----------------------------------------------------------------------------
+# Read the authoritative version, allowing upgrades from legacy checkouts.
+# -----------------------------------------------------------------------------
+read_tool_version() {
+    if [ -f "${REPOSITORY_ROOT}/VERSION" ]; then
+        tr -d '[:space:]' < "${REPOSITORY_ROOT}/VERSION"
+    else
+        printf '%s' "$OP_UNVERSIONED"
+    fi
+}
+
 # -----------------------------------------------------------------------------
 # Run Git against the swarm-info repository regardless of caller location.
 #
@@ -157,6 +174,7 @@ ensure_entrypoint_executable() {
 update_swarm_info() {
     local ahead_count=0
     local before_revision=""
+    local before_version=""
     local behind_count=0
     local divergence=""
     local remote=""
@@ -167,6 +185,7 @@ update_swarm_info() {
         return 1
     fi
     verify_clean_checkout || return 1
+    before_version="$(read_tool_version)"
     upstream="$(resolve_upstream)" || return 1
     remote="$(upstream_remote "$upstream")" || return 1
 
@@ -194,7 +213,7 @@ update_swarm_info() {
     fi
     if [ "$behind_count" -eq 0 ]; then
         ensure_entrypoint_executable
-        echo "[OK] swarm-info is already up to date."
+        echo "[OK] $OP_UPDATE_CURRENT $(read_tool_version)."
         return 0
     fi
 
@@ -207,6 +226,7 @@ update_swarm_info() {
     ensure_entrypoint_executable || return 1
 
     echo "[OK] swarm-info updated: $before_revision -> $(repository_git rev-parse --short HEAD)"
+    echo "[OK] $OP_UPDATE_FINISHED: $before_version -> $(read_tool_version)"
     echo "[INFO] Rerun your swarm-info command to use the updated code."
     return 0
 }

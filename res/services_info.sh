@@ -15,9 +15,9 @@ source "$SCRIPT_DIR/functions.sh"
 # Display next menu item.
 display_next_menu_item() {
     if [ "$output_type" = "part_of_whole_info_wait" ]; then
-        bash "$SCRIPT_DIR/stack_info.sh" -t "$total_pages" -c "$current_page" -w
+        bash "$SCRIPT_DIR/vulnerability_info.sh" -t "$total_pages" -c "$current_page" -w
     elif [ "$output_type" = "part_of_whole_info_fast" ]; then
-        bash "$SCRIPT_DIR/stack_info.sh" -t "$total_pages" -c "$current_page" -f
+        bash "$SCRIPT_DIR/vulnerability_info.sh" -t "$total_pages" -c "$current_page" -f
     fi 
 }
 
@@ -120,6 +120,13 @@ services_output=$(docker service ls)
 echo "$services_output"
 echo
 echo
+
+# Show the cached or freshly collected lifecycle-aware down/degraded summary.
+bash "$MAIN_DIR/get_info.sh" --service-health || true
+# Health state 2 and unavailable state 3 are already explained by the renderer;
+# neither should prevent the surrounding inventory page from remaining usable.
+echo
+
 echo "Helpful service commands:"
 echo "----------------------------------------------------------------------"
 output_tab_space=25

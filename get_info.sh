@@ -28,12 +28,14 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
 # Global functions.
 source "$SCRIPT_DIR/functions.sh"
 source "$SCRIPT_DIR/vulnerability_cli.sh"
+source "$SCRIPT_DIR/operator_cli.sh"
 
 # Define the number of pages when showing all information.
-total_pages=6
+total_pages=7
 # Current pages belonging to info tour (in order of appearance).
 # basic_swarm_info.sh.
 # services_info.sh.
+# vulnerability_info.sh.
 # stack_info.
 # network_info.sh.
 # secrets_info.sh.
@@ -216,6 +218,36 @@ display_services_info() {
 }
 
 # -----------------------------------------------------------------------------
+# Display the concise service-health page and optional context navigation.
+# -----------------------------------------------------------------------------
+display_service_health_info() {
+    local arguments=()
+
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        arguments+=(-m)
+    fi
+    if [ "$CUSTOM_OUTPUT_FILE" != "NONE" ]; then
+        arguments+=(-o "$CUSTOM_OUTPUT_FILE")
+    fi
+    bash "$SCRIPT_DIR/service_health_info.sh" "${arguments[@]}"
+}
+
+# -----------------------------------------------------------------------------
+# Display vulnerability evidence, remediation commands, and scan navigation.
+# -----------------------------------------------------------------------------
+display_vulnerability_info() {
+    local arguments=()
+
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        arguments+=(-m)
+    fi
+    if [ "$CUSTOM_OUTPUT_FILE" != "NONE" ]; then
+        arguments+=(-o "$CUSTOM_OUTPUT_FILE")
+    fi
+    bash "$SCRIPT_DIR/vulnerability_info.sh" "${arguments[@]}"
+}
+
+# -----------------------------------------------------------------------------
 # Display the curated Docker and Swarm command reference.
 #
 # Global state:
@@ -321,7 +353,11 @@ check_swarm_info_dependencies() {
 #     Writes usage text and waits for terminal input.
 # -----------------------------------------------------------------------------
 display_help() {
-    echo -e "Usage: $0 [OPTIONS]"
+    local version=""
+
+    version="$(tr -d '[:space:]' < "$MAIN_DIR/VERSION")"
+    echo -e "swarm-info $version"
+    echo -e "Usage: swarm-info [OPTIONS]"
     echo -e "Options:"
     echo -e "  -b                Alias for --basic"
     echo -e "  --basic           Basic swarm info"
@@ -333,6 +369,7 @@ display_help() {
     echo -e "  --cron-hour       Daily vulnerability cron hour (default: 3)"
     echo -e "  --cron-log-file   Optional vulnerability cron log destination"
     echo -e "  --cron-minute     Daily vulnerability cron minute (default: 17)"
+    echo -e "  -d                Alias for --service-health"
     echo -e "  -f                Alias for --fast"
     echo -e "  --fast            Do not wait for keypress and display all information"
     echo -e "  -h                Alias for --help"
@@ -359,6 +396,7 @@ display_help() {
     echo -e "                    Run a locked scan unless matching evidence is fresh"
     echo -e "  --secrets         Display infos for secrets"
     echo -e "  --services        Display services information"
+    echo -e "  --service-health  $OP_HELP_SERVICE_HEALTH"
     echo -e "  --stacks          Display stack information"
     echo -e "  --stack-services  Display services within stacks"
     echo -e "  --state           Check this tool's state"
@@ -368,12 +406,24 @@ display_help() {
     echo -e "  --update          Safely fast-forward swarm-info to its Git upstream"
     echo -e "  --vulnerability-status"
     echo -e "                    Check report completeness and freshness without Docker"
+    echo -e "  -v                Alias for --vulnerabilities"
+    echo -e "  --vulnerabilities $OP_HELP_VULNERABILITIES"
+    echo -e "  -V, --version     $OP_HELP_VERSION"
     echo -e "  -w                Alias for --wait"
     echo -e "  --wait            Show swarm info and wait after outputs to make it easier to read"
 
-    echo
-    wait_for_user
-    display_menu
+    if [ "$is_show_menu_option_selected" = "true" ]; then
+        echo
+        wait_for_user
+        display_menu
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# Display the authoritative CLI version.
+# -----------------------------------------------------------------------------
+display_version() {
+    printf 'swarm-info %s\n' "$(tr -d '[:space:]' < "$MAIN_DIR/VERSION")"
 }
 
 
@@ -400,6 +450,10 @@ while [ $# -gt 0 ]; do
             ;;
         -c|--commands)
             selected_action="commands"
+            shift
+            ;;
+        -d|--service-health)
+            selected_action="service-health"
             shift
             ;;
         --check-dependencies)
@@ -446,7 +500,7 @@ while [ $# -gt 0 ]; do
             selected_action="fast"
             shift
             ;;
-        -h|--help)
+        -h|--help|help)
             selected_action="help"
             shift
             ;;
@@ -564,6 +618,14 @@ while [ $# -gt 0 ]; do
             selected_action="vulnerability-status"
             shift
             ;;
+        -v|--vulnerabilities)
+            selected_action="vulnerabilities"
+            shift
+            ;;
+        -V|--version|version)
+            selected_action="version"
+            shift
+            ;;
         -w|--wait)
             selected_action="wait"
             shift
@@ -574,6 +636,9 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
+
+# Preserve the chosen freshness policy through the script-based tour chain.
+export VULNERABILITY_MAX_AGE_HOURS
 
 # Execute the selected action
 case "$selected_action" in
@@ -613,6 +678,9 @@ case "$selected_action" in
     "services")
         display_services_info
         ;;
+    "service-health")
+        display_service_health_info
+        ;;
     "stacks")
         display_stack_info
         ;;
@@ -636,6 +704,12 @@ case "$selected_action" in
         ;;
     "vulnerability-status")
         inspect_vulnerability_report
+        ;;
+    "vulnerabilities")
+        display_vulnerability_info
+        ;;
+    "version")
+        display_version
         ;;
     "wait")
         display_all_swarm_info_waiting

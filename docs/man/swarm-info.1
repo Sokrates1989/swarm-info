@@ -1,0 +1,155 @@
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.0.0" "User Commands"
+.SH NAME
+swarm-info \- inspect Docker Swarm health and image vulnerabilities
+.SH SYNOPSIS
+.B swarm-info
+.RI [ options ]
+.SH DESCRIPTION
+.B swarm-info
+runs on a Docker Swarm manager. With no option it opens the interactive
+information tour. The service page includes a down/degraded summary and is
+followed by the latest Docker Scout vulnerability report.
+.PP
+Vulnerability scans are explicit because an all-image scan can take several
+minutes and may use registry bandwidth. Missing, incomplete, or stale evidence
+is never reported as clean.
+.SH OPERATOR PAGES
+.TP
+.BR \-d ", " \-\-service-health
+Show only down or degraded services and investigation commands.
+.TP
+.BR \-v ", " \-\-vulnerabilities
+Show the latest vulnerability evidence and image-specific remediation
+commands. Add
+.B \-\-menu
+to scan immediately or refresh the page.
+.SH INVENTORY OPTIONS
+.TP
+.BR \-b ", " \-\-basic
+Show basic Swarm information.
+.TP
+.BR \-\-services
+Show service inventory and the service-health summary.
+.TP
+.BR \-\-node-services
+Show services grouped by node.
+.TP
+.BR \-\-stacks
+Show stack inventory.
+.TP
+.BR \-\-stack-services
+Show services grouped by stack.
+.TP
+.BR \-\-network
+Show Swarm networks.
+.B \-\-net
+is an alias.
+.TP
+.BR \-\-secrets
+Show secret metadata without secret values.
+.TP
+.BR \-\-labels
+Show node labels.
+.TP
+.BR \-\-local
+Show local Docker information.
+.TP
+.BR \-c ", " \-\-commands
+Show the curated Docker and Swarm command reference.
+.TP
+.B \-\-state
+Check whether the installed swarm-info checkout is current and modified.
+.SH REPORT AND SCAN OPTIONS
+.TP
+.B \-\-json
+Collect and atomically publish the Swarm health JSON report.
+.TP
+.BI \-o " path" ", " \-\-output-file " path"
+Select the health or vulnerability report destination.
+.TP
+.B \-\-scan-vulnerabilities
+Force a locked scan of every unique current Swarm service image.
+.TP
+.B \-\-scheduled-vulnerability-scan
+Run the locked scan unless matching evidence is fresh.
+.TP
+.B \-\-vulnerability-status
+Check report completeness and freshness without Docker Scout.
+.TP
+.B \-\-install-vulnerability-cron
+Install or update the current user's managed daily scan.
+.TP
+.B \-\-remove-vulnerability-cron
+Remove only the managed daily scan block.
+.TP
+.BI \-\-platform " platform"
+Set the scan platform. Default: linux/amd64.
+.TP
+.BI \-\-max-age-hours " hours"
+Set the evidence freshness limit. Default: 30.
+.TP
+.BI \-\-cache-age-hours " hours"
+Set the scheduled rescan interval. Default: 20.
+.TP
+.BI \-\-history-days " days"
+Set vulnerability report retention. Default: 14.
+.TP
+.BI \-\-lock-file " path"
+Override the vulnerability job lock file.
+.TP
+.BI \-\-cron-hour " hour"
+Set the daily scan hour. Default: 3.
+.TP
+.BI \-\-cron-minute " minute"
+Set the daily scan minute. Default: 17.
+.TP
+.BI \-\-cron-log-file " path"
+Set the optional scheduled-scan log destination.
+.SH GENERAL OPTIONS
+.TP
+.BR \-m ", " \-\-menu
+Open context navigation after a single page.
+.TP
+.BR \-f ", " \-\-fast
+Run the complete tour without waiting between pages.
+.TP
+.BR \-w ", " \-\-wait
+Run the complete tour with page waits.
+.TP
+.BR \-u ", " \-\-update
+Fetch and apply only a clean, strict fast-forward update.
+.TP
+.B \-\-check-dependencies
+Check Bash, Git, Docker, Swarm manager, Python, and Docker Scout readiness.
+.TP
+.BR \-V ", " \-\-version
+Print the authoritative swarm-info version.
+.TP
+.BR \-h ", " \-\-help
+Print command help.
+.SH EXIT STATUS
+.TP
+.B 0
+Healthy/clean evidence or a successful operational action.
+.TP
+.B 1
+Invalid input, unavailable core dependency, or operational failure.
+.TP
+.B 2
+The requested operator report is valid and requires attention.
+.TP
+.B 3
+Vulnerability evidence is missing, incomplete, stale, or unavailable.
+.SH FILES
+.TP
+.I /info_json/swarm_info.json
+Preferred production health report.
+.TP
+.I /info_json/vulnerability_scan.json
+Preferred production vulnerability report.
+.TP
+.I ~/.local/share/man/man1/swarm-info.1
+User-installed manual page.
+.SH SEE ALSO
+.BR docker (1),
+.BR git (1)

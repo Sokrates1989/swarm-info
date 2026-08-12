@@ -32,6 +32,7 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Default output file location.
 DESTINATION_DIR="$MAIN_DIR/swarm_info"
 output_file="$DESTINATION_DIR/swarm_info.json"
+quiet_output="false"
 
 
 # -----------------------------------------------------------------------------
@@ -252,6 +253,10 @@ while [ $# -gt 0 ]; do
         --output-file)
             shift
             output_file="$1"
+            shift
+            ;;
+        --quiet)
+            quiet_output="true"
             shift
             ;;
         *)
@@ -560,8 +565,8 @@ if ! write_health_json_atomic "$output_file" "$json_data"; then
     exit 1
 fi
 
-# Also print to stdout.
-echo "$json_data"
-
-echo ""
-echo "Swarm service information has been saved to $output_file"
+if [ "$quiet_output" != "true" ]; then
+    echo "$json_data"
+    echo ""
+    echo "Swarm service information has been saved to $output_file"
+fi

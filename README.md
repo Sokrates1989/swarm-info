@@ -154,8 +154,13 @@ See `example-output/swarm-info.json` for a full example. Key fields per service:
 | Field | Description |
 |-------|-------------|
 | `name` | Docker service name (e.g. `reminderbot_bot`) |
-| `replicas_running` / `replicas_desired` | Current vs expected replica count |
-| `status` | `healthy`, `degraded`, or `down` |
+| `replicas_running` / `replicas_desired` | Current tasks vs Docker Swarm's desired task count |
+| `monitoring_expected_replicas` | Expected continuously running tasks after lifecycle detection |
+| `service_mode` | Docker service mode reported by Swarm |
+| `lifecycle` | `daemon`, `scheduled`, `one-shot`, `job`, or `ignored` |
+| `lifecycle_source` | Whether lifecycle came from Docker mode, swarm-cronjob, or an explicit label |
+| `latest_task_state` | Normalized latest terminal task state used for job health |
+| `status` | Availability/execution status such as `healthy`, `degraded`, `down`, `idle`, `completed`, or `failed` |
 | `total_failures` | Total failed tasks (all time, as retained by Docker) |
 | `recent_failures` | Failed tasks within the last hour |
 | `restart_rate_per_hour` | Failures per hour (for crash-loop detection) |
@@ -172,6 +177,22 @@ The `summary` section provides totals:
 ```
 
 The `unhealthy_services` array lists names of all non-healthy services for quick alerting.
+
+Services carrying `swarm.cronjob.enable=true` and native Docker jobs are
+recognized automatically. Other one-shot services can declare their intent
+without changing Docker's replica target:
+
+```yaml
+deploy:
+  labels:
+    - "swarm-info.monitoring.lifecycle=one-shot"
+  restart_policy:
+    condition: none
+```
+
+A completed or idle job is healthy while its latest failed execution remains
+degraded. Unknown lifecycle label values fall back to daemon behavior so a typo
+cannot suppress a real availability alert.
 
 ---
 

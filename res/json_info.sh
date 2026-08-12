@@ -125,6 +125,124 @@ parse_ago_to_seconds() {
 }
 
 
+# -----------------------------------------------------------------------------
+# Resolve the monitoring lifecycle for one Docker service.
+#
+# Explicit monitoring labels take precedence over scheduler and Docker mode
+# detection. Unknown labels deliberately fall back to daemon semantics so a
+# typo cannot silently suppress an availability alert.
+#
+# Args:
+#     $1 (str): Docker service mode from `docker service ls`.
+#     $2 (str): Value of the `swarm.cronjob.enable` service label.
+#     $3 (str): Value of the `swarm-info.monitoring.lifecycle` service label.
+#
+# Returns:
+#     Two pipe-separated values: lifecycle and detection source.
+# -----------------------------------------------------------------------------
+resolve_service_lifecycle() {
+    local service_mode="${1:-replicated}"
+    local cron_enabled="${2:-}"
+    local configured_lifecycle="${3:-}"
+    local normalized_mode=""
+    local normalized_lifecycle=""
+
+    normalized_mode=$(printf '%s' "$service_mode" | tr '[:upper:] ' '[:lower:]-')
+    normalized_lifecycle=$(printf '%s' "$configured_lifecycle" | tr '[:upper:]_ ' '[:lower:]--')
+
+    case "$normalized_lifecycle" in
+        daemon|scheduled|one-shot|job|ignored)
+            printf '%s|label' "$normalized_lifecycle"
+            return
+            ;;
+        ""|"<no-value>")
+            ;;
+        *)
+            printf 'daemon|invalid-label'
+            return
+            ;;
+    esac
+
+    if [ "${cron_enabled,,}" = "true" ]; then
+        printf 'scheduled|swarm-cronjob'
+    elif [ "$normalized_mode" = "replicated-job" ] || [ "$normalized_mode" = "global-job" ]; then
+        printf 'job|docker-mode'
+    else
+        printf 'daemon|docker-mode'
+    fi
+}
+
+
+# -----------------------------------------------------------------------------
+# Normalize a Docker task current-state string for monitoring decisions.
+#
+# Args:
+#     $1 (str): Docker task state such as `Complete 2 hours ago`.
+#
+# Returns:
+#     One of `complete`, `failed`, `shutdown`, or `unknown`.
+# -----------------------------------------------------------------------------
+normalize_terminal_task_state() {
+    local task_state="${1:-}"
+
+    if echo "$task_state" | grep -Eqi 'failed|rejected|orphaned'; then
+        printf 'failed'
+    elif echo "$task_state" | grep -qi 'complete'; then
+        printf 'complete'
+    elif echo "$task_state" | grep -qi 'shutdown'; then
+        printf 'shutdown'
+    else
+        printf 'unknown'
+    fi
+}
+
+
+# -----------------------------------------------------------------------------
+# Classify one service against its monitoring rather than orchestration target.
+#
+# Args:
+#     $1 (str): Monitoring lifecycle.
+#     $2 (int): Currently running replicas.
+#     $3 (int): Expected running replicas for monitoring.
+#     $4 (int): Failed tasks inside the recent window.
+#     $5 (str): Latest terminal task state.
+#
+# Returns:
+#     Pipe-separated healthy flag, status, and summary bucket.
+# -----------------------------------------------------------------------------
+classify_service_health() {
+    local lifecycle="$1"
+    local running="$2"
+    local expected="$3"
+    local recent_failures="$4"
+    local latest_task_state="$5"
+
+    if [ "$lifecycle" = "ignored" ]; then
+        printf 'true|ignored|healthy'
+    elif [ "$lifecycle" != "daemon" ]; then
+        if [ "$running" -gt 0 ] && [ "$recent_failures" -gt 0 ]; then
+            printf 'false|degraded|degraded'
+        elif [ "$running" -gt 0 ]; then
+            printf 'true|running|healthy'
+        elif [ "$latest_task_state" = "failed" ]; then
+            printf 'false|failed|degraded'
+        elif [ "$recent_failures" -gt 0 ]; then
+            printf 'false|degraded|degraded'
+        elif [ "$latest_task_state" = "complete" ]; then
+            printf 'true|completed|healthy'
+        else
+            printf 'true|idle|healthy'
+        fi
+    elif [ "$expected" -gt 0 ] && [ "$running" -eq 0 ]; then
+        printf 'false|down|down'
+    elif [ "$running" -lt "$expected" ] || [ "$recent_failures" -gt 0 ]; then
+        printf 'false|degraded|degraded'
+    else
+        printf 'true|healthy|healthy'
+    fi
+}
+
+
 # Check for command-line options.
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -183,23 +301,43 @@ total_degraded=0
 total_down=0
 
 # Iterate through each service in the swarm.
-while IFS=$'\t' read -r svc_name svc_image svc_replicas; do
+while IFS=$'\t' read -r svc_name svc_image svc_mode svc_replicas; do
 
-    # Parse desired and running replicas from the "REPLICAS" column (e.g. "1/1").
-    replicas_running=$(echo "$svc_replicas" | cut -d'/' -f1 | tr -d ' ')
-    replicas_desired=$(echo "$svc_replicas" | cut -d'/' -f2 | tr -d ' ')
+    # Parse the leading actual/desired pair. Docker appends completion detail
+    # for native jobs, for example `1/1 (3/5 completed)`.
+    replica_counts="${svc_replicas%% *}"
+    if [[ ! "$replica_counts" =~ ^[0-9]+/[0-9]+$ ]]; then
+        echo "Error: Unsupported replica state for $svc_name: $svc_replicas" >&2
+        exit 1
+    fi
+    replicas_running="${replica_counts%%/*}"
+    replicas_desired="${replica_counts#*/}"
+
+    service_metadata=$(docker service inspect "$svc_name" --format '{{index .Spec.Labels "swarm.cronjob.enable"}}|{{index .Spec.Labels "swarm-info.monitoring.lifecycle"}}' 2>/dev/null || true)
+    IFS='|' read -r cron_enabled configured_lifecycle <<< "$service_metadata"
+    lifecycle_result=$(resolve_service_lifecycle "$svc_mode" "$cron_enabled" "$configured_lifecycle")
+    IFS='|' read -r service_lifecycle lifecycle_source <<< "$lifecycle_result"
+    monitoring_expected_replicas="$replicas_desired"
+    if [ "$service_lifecycle" != "daemon" ]; then
+        monitoring_expected_replicas=0
+    fi
 
     # Count total failed tasks and recent failures within the time window.
     total_failures=0
     recent_failures=0
     last_failure_ago_seconds=0
     oldest_recent_failure_seconds=0
+    latest_task_state="none"
 
     # Get all shutdown/failed tasks for this service.
     while IFS=$'\t' read -r task_state task_err; do
 
+        if [ "$latest_task_state" = "none" ] && [ -n "$task_state" ]; then
+            latest_task_state=$(normalize_terminal_task_state "$task_state")
+        fi
+
         # Only count tasks that actually failed (have an error or "Failed" state).
-        if echo "$task_state" | grep -qi "failed"; then
+        if echo "$task_state" | grep -Eqi 'failed|rejected|orphaned'; then
             total_failures=$((total_failures + 1))
 
             # Parse how long ago this failure happened.
@@ -232,30 +370,20 @@ while IFS=$'\t' read -r svc_name svc_image svc_replicas; do
         fi
     fi
 
-    # Determine health status.
-    # - "healthy":  running == desired AND no recent failures.
-    # - "degraded": running == desired BUT recent failures exist (crash-loop recovering).
-    #              OR running < desired but > 0.
-    # - "down":     running == 0 AND desired > 0.
-    svc_healthy="true"
-    svc_status="healthy"
-    if [ "$replicas_desired" -gt 0 ] && [ "$replicas_running" -eq 0 ]; then
-        svc_healthy="false"
-        svc_status="down"
-        total_down=$((total_down + 1))
+    classification=$(classify_service_health \
+        "$service_lifecycle" \
+        "$replicas_running" \
+        "$monitoring_expected_replicas" \
+        "$recent_failures" \
+        "$latest_task_state")
+    IFS='|' read -r svc_healthy svc_status summary_bucket <<< "$classification"
+    case "$summary_bucket" in
+        healthy) total_healthy=$((total_healthy + 1)) ;;
+        degraded) total_degraded=$((total_degraded + 1)) ;;
+        down) total_down=$((total_down + 1)) ;;
+    esac
+    if [ "$svc_healthy" = "false" ]; then
         unhealthy_services+=("$svc_name")
-    elif [ "$replicas_running" -lt "$replicas_desired" ]; then
-        svc_healthy="false"
-        svc_status="degraded"
-        total_degraded=$((total_degraded + 1))
-        unhealthy_services+=("$svc_name")
-    elif [ "$recent_failures" -gt 0 ]; then
-        svc_healthy="false"
-        svc_status="degraded"
-        total_degraded=$((total_degraded + 1))
-        unhealthy_services+=("$svc_name")
-    else
-        total_healthy=$((total_healthy + 1))
     fi
 
     # Convert last_failure_ago to human readable (only if there was a failure).
@@ -276,6 +404,11 @@ while IFS=$'\t' read -r svc_name svc_image svc_replicas; do
       "image": "$svc_image_escaped",
       "replicas_running": $replicas_running,
       "replicas_desired": $replicas_desired,
+      "monitoring_expected_replicas": $monitoring_expected_replicas,
+      "service_mode": "$svc_mode",
+      "lifecycle": "$service_lifecycle",
+      "lifecycle_source": "$lifecycle_source",
+      "latest_task_state": "$latest_task_state",
       "status": "$svc_status",
       "healthy": $svc_healthy,
       "total_failures": $total_failures,
@@ -289,7 +422,7 @@ SVCEOF
 )
     services_json_array+=("$svc_json")
 
-done < <(docker service ls --format '{{.Name}}\t{{.Image}}\t{{.Replicas}}' 2>/dev/null)
+done < <(docker service ls --format '{{.Name}}\t{{.Image}}\t{{.Mode}}\t{{.Replicas}}' 2>/dev/null)
 
 
 # =============================================================================

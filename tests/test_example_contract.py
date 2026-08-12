@@ -53,7 +53,11 @@ class HealthExampleTests(unittest.TestCase):
         self.assertIsInstance(services, list)
         self.assertIsInstance(summary, dict)
         self.assertEqual(summary["total_services"], len(services))
-        for state in ("healthy", "degraded", "down"):
+        self.assertEqual(
+            summary["healthy"],
+            sum(service["healthy"] for service in services),
+        )
+        for state in ("degraded", "down"):
             self.assertEqual(
                 summary[state],
                 sum(service["status"] == state for service in services),

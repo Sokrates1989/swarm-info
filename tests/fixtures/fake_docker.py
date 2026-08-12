@@ -60,6 +60,52 @@ def scenario_services(scenario: str) -> dict[str, dict[str, Any]]:
 
     if scenario == "zero-services":
         return {}
+    if scenario == "health-lifecycle":
+        return {
+            "daemon": {
+                "name": "demo_api",
+                "image": "example/api:1",
+                "stack": "demo",
+                "mode": "replicated",
+                "replicas": "1/1",
+                "terminal_states": [],
+            },
+            "cron-complete": {
+                "name": "demo_schedule",
+                "image": "example/job:1",
+                "stack": "demo",
+                "mode": "replicated",
+                "replicas": "0/1",
+                "cron": "true",
+                "terminal_states": ["Complete 10 minutes ago"],
+            },
+            "cron-failed": {
+                "name": "demo_failed_schedule",
+                "image": "example/job:1",
+                "stack": "demo",
+                "mode": "replicated",
+                "replicas": "0/1",
+                "cron": "true",
+                "terminal_states": ["Failed 10 minutes ago"],
+            },
+            "migration": {
+                "name": "demo_migration",
+                "image": "example/migration:1",
+                "stack": "demo",
+                "mode": "replicated",
+                "replicas": "0/1",
+                "lifecycle": "one-shot",
+                "terminal_states": ["Complete 20 minutes ago"],
+            },
+            "native-job": {
+                "name": "demo_native_job",
+                "image": "example/native-job:1",
+                "stack": "demo",
+                "mode": "replicated job",
+                "replicas": "0/1 (1/1 completed)",
+                "terminal_states": ["Complete 30 minutes ago"],
+            },
+        }
     if scenario == "mutable-reference":
         return {
             "service-redis": {
@@ -186,19 +232,72 @@ def main(arguments: list[str] | None = None) -> int:
     services = scenario_services(scenario)
     log_invocation(command)
     if command[:2] == ["info", "--format"]:
-        separator = "|" if len(command) > 2 and "|" in command[2] else "\t"
         state = ("inactive", "false") if scenario == "not-manager" else ("active", "true")
-        print(separator.join(state))
+        template = command[2] if len(command) > 2 else ""
+        if ".ControlAvailable" in template:
+            separator = "|" if "|" in template else "\t"
+            print(separator.join(state))
+        else:
+            print(state[0])
         return 0
     if command == ["service", "ls", "--quiet"]:
         print("\n".join(services))
         return 0
+    if command[:3] == ["node", "ls", "--format"]:
+        print("node-1")
+        return 0
+    if command[:3] == ["service", "ls", "--format"]:
+        template = command[3] if len(command) > 3 else ""
+        if template == "{{.ID}}":
+            print("\n".join(services))
+            return 0
+        if "{{.Mode}}" in template and "{{.Replicas}}" in template:
+            for service in services.values():
+                print(
+                    "\t".join(
+                        (
+                            service["name"],
+                            service["image"],
+                            service.get("mode", "replicated"),
+                            service.get("replicas", "1/1"),
+                        )
+                    )
+                )
+            return 0
     if command[:2] == ["service", "inspect"]:
-        service = services.get(command[2]) if len(command) > 2 else None
+        identifier = command[2] if len(command) > 2 else ""
+        service = services.get(identifier) or next(
+            (
+                candidate
+                for candidate in services.values()
+                if candidate["name"] == identifier
+            ),
+            None,
+        )
         if service is None:
             print("service not found", file=sys.stderr)
             return 1
-        print(json.dumps(inspect_payload(service)))
+        if "--format" in command and scenario == "health-lifecycle":
+            print(f"{service.get('cron', '')}|{service.get('lifecycle', '')}")
+        else:
+            print(json.dumps(inspect_payload(service)))
+        return 0
+    if command[:2] == ["service", "ps"] and scenario == "health-lifecycle":
+        identifier = command[2] if len(command) > 2 else ""
+        service = services.get(identifier) or next(
+            (
+                candidate
+                for candidate in services.values()
+                if candidate["name"] == identifier
+            ),
+            None,
+        )
+        if service is None:
+            print("service not found", file=sys.stderr)
+            return 1
+        for state in service.get("terminal_states", []):
+            error = "process exited with code 1" if state.startswith("Failed") else ""
+            print(f"{state}\t{error}")
         return 0
     if command == ["scout", "version"]:
         if scenario == "missing-scout":

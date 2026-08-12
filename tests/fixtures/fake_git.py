@@ -96,6 +96,18 @@ def main(arguments: list[str] | None = None) -> int:
         return 0
     if command == ["fetch", "--quiet", "--prune", "origin"]:
         return 1 if scenario == "fetch-error" else 0
+    if command[:2] == ["ls-remote", "--exit-code"]:
+        return 0
+    if command == ["status", "--porcelain"]:
+        if scenario == "dirty":
+            print(" M get_info.sh")
+        return 0
+    if command == ["fetch", "-q"]:
+        return 1 if scenario == "fetch-error" else 0
+    if command == ["rev-list", "HEAD..origin/main", "--count"]:
+        _, behind = divergence_for_scenario(scenario)
+        print(behind)
+        return 0
     if command == ["rev-list", "--left-right", "--count", "HEAD...origin/main"]:
         ahead, behind = divergence_for_scenario(scenario)
         print(f"{ahead}\t{behind}")

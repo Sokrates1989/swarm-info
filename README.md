@@ -1,5 +1,6 @@
 # swarm-info
-Quick info about swarm status and helpful commands collection
+Docker Swarm status, remediation guidance, and portable container-image
+security checks for Linux hosts including QNAP Container Station.
 
 # Backlog
 Stuff that just could not be finished in time:
@@ -17,6 +18,15 @@ Core swarm inventory requires:
 - Docker Engine with access to its daemon.
 - An active Docker Swarm manager node. Worker nodes cannot inventory all
   services.
+
+Portable local-container security mode requires only:
+
+- Linux with Bash 3 or newer.
+- Docker CLI access to the local daemon (QNAP: Container Station plus SSH).
+- Python 3.10 or newer and Docker Scout.
+
+Git is still required by the repository installer and guarded self-update.
+Local-container mode does not require Swarm, `bc`, or Docker Compose.
 
 Install Bash and Git on Debian/Ubuntu:
 
@@ -43,17 +53,23 @@ sudo apt-get install -y python3 curl
 python3 --version
 ```
 
-Install Docker Scout for the operating-system user that will run `swarm-info`:
+Install Docker Scout for the operating-system user that will run `swarm-info`.
+Download and inspect Docker's official installer before executing it:
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
+curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh -o install-scout.sh
+sed -n '1,240p' install-scout.sh
+sh install-scout.sh
 docker scout version
+# Needed only for private-registry or Swarm registry-fallback scans:
 docker login
 ```
 
 The install command follows Docker's documented
-[CLI-plugin installation](https://github.com/docker/scout-cli#cli-plugin-installation).
-See [Docker Scout documentation](https://docs.docker.com/scout/) for supported
+[Docker Scout installation](https://docs.docker.com/scout/install/). QNAP
+systems for which the convenience installer is unsuitable can use Docker's
+architecture-matched manual CLI-plugin instructions on that page. See
+[Docker Scout documentation](https://docs.docker.com/scout/) for supported
 registries and authentication. Installing as `root` places the plugin in
 root's Docker configuration; a non-root cron or shell will not see that copy.
 
@@ -78,13 +94,17 @@ export PATH="$HOME/.local/bin:$PATH"
 hash -r
 ```
 
-The installer fails when core Docker/manager readiness is unavailable. Missing
-scan tooling is reported as a warning so inventory-only use remains available.
+The installer detects manager capability. It validates the full Swarm runtime
+on a manager and the portable security runtime on a standalone Docker/QNAP
+host. Missing scan tooling is reported as a warning.
 After installing any missing dependency, rerun the complete check:
 
 ```bash
 swarm-info --check-dependencies
 ```
+
+That command auto-selects full Swarm-manager readiness or the narrower
+standalone/QNAP security readiness from the local Docker capability.
 
 Dependency-check exit codes are:
 
@@ -95,9 +115,9 @@ Dependency-check exit codes are:
 | `2` | Core commands are ready, but Python or Docker Scout is unavailable. |
 | `64` | The dependency checker received invalid arguments. |
 
-The interactive no-option run performs the same full check before opening the
-tour. Automated `--json` collection avoids this optional Scout warning, while
-`--scan-vulnerabilities` always enforces the scan-specific preflight.
+The interactive no-option run remains the Swarm-manager tour. Automated
+`--json` collection avoids the optional Scout warning, while image scan
+commands always enforce their applicable preflight.
 
 ---
 
@@ -125,6 +145,55 @@ swarm-info --service-health
 swarm-info -v
 swarm-info --vulnerabilities
 ```
+
+## QNAP and standalone Docker security mode
+
+Use the explicit compatibility command on QNAP or any Linux host with a local
+Docker daemon:
+
+```bash
+# Auto-select Swarm-wide service coverage on a manager; otherwise local containers
+swarm-info --security-check
+
+# Equivalent explicit QNAP/local-container form
+swarm-info --security-check --container-mode --os=qnap
+
+# Scan only currently running containers instead of all defined containers
+swarm-info --security-check \
+  --runtime-mode containers \
+  --container-scope running \
+  --os qnap \
+  --output-file /share/Public/swarm-info/security_scan.json
+```
+
+Auto mode reads Docker capability rather than guessing from a distribution:
+
+- A manager scans every Swarm service image with the established exact-digest
+  local-first and registry-fallback policy.
+- Any other Docker host scans the exact content-addressed image IDs attached to
+  local containers. The default scope is `all`, including stopped containers;
+  use `--container-scope running` for a narrower check.
+- Local-container mode uses Docker Scout `local://` only. It never substitutes
+  a registry tag, so the report cannot silently describe a different image.
+- QNAP is detected from `/etc/config/uLinux.conf` or `ID=qts` in
+  `/etc/os-release`. `--os=qnap` is an auditable hint, not a way to bypass
+  Docker capability checks.
+- `--platform` defaults to the Docker daemon platform in this mode, supporting
+  common QNAP `amd64` and `arm64` systems.
+- The Python3 QPKG is discovered from `/etc/config/qpkg.conf` even when QNAP
+  exposes only the unrelated Python 2.7 command on `PATH`.
+- The installer and guarded updater likewise discover the QGit QPKG when its
+  `git` executable is not on `PATH`.
+
+Without `--output-file`, compatibility evidence is atomically written to
+`swarm_info/security_scan.json`, separate from the Swarm watchdog's
+`vulnerability_scan.json`. Exit code `0` means clean, `2` means fixable HIGH or
+CRITICAL findings, and `3` means incomplete evidence.
+
+This first compatibility mode is deliberately read-only. It scans images used
+by defined containers; it does not patch QTS, change containers, inspect unused
+images, audit Docker runtime hardening (privileged mode, mounts, ports), or run
+Swarm deployment mapping/remediation on a standalone host.
 
 When a fresh vulnerable report is shown in an interactive terminal,
 `swarm-info -v` continues directly into the remediation menu. It offers:

@@ -3,7 +3,8 @@
 """Deterministic Docker CLI fake for vulnerability scanner tests.
 
 The executable supports Docker manager preflight, service inventory/inspect,
-Scout version, and Scout CVE scans. It never accesses Docker or the network.
+local-container inventory, Scout version, and Scout CVE scans. It never
+accesses Docker or the network.
 """
 
 from __future__ import annotations
@@ -130,6 +131,38 @@ def scenario_services(scenario: str) -> dict[str, dict[str, Any]]:
     return services
 
 
+def scenario_containers(scenario: str) -> dict[str, dict[str, Any]]:
+    """Build a local-container inventory for compatibility-mode scenarios."""
+
+    if scenario == "local-empty":
+        return {}
+    if not scenario.startswith("local-containers"):
+        return {}
+    return {
+        "container-alpha": {
+            "name": "/qnap_web",
+            "image": "acme/shared:1",
+            "image_id": DIGEST_A,
+            "project": "qnap-app",
+            "running": True,
+        },
+        "container-beta": {
+            "name": "/qnap_worker",
+            "image": "docker.io/acme/shared-alias:1",
+            "image_id": DIGEST_A,
+            "project": "qnap-app",
+            "running": False,
+        },
+        "container-gamma": {
+            "name": "/qnap_gateway",
+            "image": "private.example/gateway:2",
+            "image_id": DIGEST_B,
+            "project": "gateway",
+            "running": True,
+        },
+    }
+
+
 def log_invocation(arguments: list[str]) -> None:
     """Append one fake Docker invocation to the configured JSON-lines log.
 
@@ -168,6 +201,22 @@ def inspect_payload(service: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def container_inspect_payload(container: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert one fake local container to Docker inspect JSON form."""
+
+    return [
+        {
+            "Id": container["image_id"].removeprefix("sha256:")[:12],
+            "Name": container["name"],
+            "Image": container["image_id"],
+            "Config": {
+                "Image": container["image"],
+                "Labels": {"com.docker.compose.project": container["project"]},
+            },
+        }
+    ]
+
+
 def emit_sarif(filename: str, exit_code: int) -> int:
     """Print a checked-in SARIF fixture and return its Scout exit code.
 
@@ -195,6 +244,13 @@ def handle_scout_cves(arguments: list[str], scenario: str) -> int:
     """
 
     reference = arguments[-1]
+    if (
+        scenario == "local-containers-local-failure"
+        and reference.startswith("local://")
+        and DIGEST_A in reference
+    ):
+        print("No such image in the local image store", file=sys.stderr)
+        return 1
     if (
         scenario == "local-fallback"
         and reference.startswith("local://")
@@ -230,15 +286,42 @@ def main(arguments: list[str] | None = None) -> int:
     command = list(sys.argv[1:] if arguments is None else arguments)
     scenario = os.environ.get("FAKE_DOCKER_SCENARIO", "default")
     services = scenario_services(scenario)
+    containers = scenario_containers(scenario)
     log_invocation(command)
+    if command == ["info"]:
+        return 0
     if command[:2] == ["info", "--format"]:
-        state = ("inactive", "false") if scenario == "not-manager" else ("active", "true")
+        local_mode = (
+            scenario == "not-manager"
+            or scenario == "local-empty"
+            or scenario.startswith("local-containers")
+        )
+        state = ("inactive", "false") if local_mode else ("active", "true")
         template = command[2] if len(command) > 2 else ""
-        if ".ControlAvailable" in template:
+        if ".OSType" in template and ".Architecture" in template:
+            print("linux\tx86_64")
+        elif ".ControlAvailable" in template:
             separator = "|" if "|" in template else "\t"
             print(separator.join(state))
         else:
             print(state[0])
+        return 0
+    if command[:2] == ["container", "ls"]:
+        include_all = "--all" in command
+        selected = [
+            container_id
+            for container_id, container in containers.items()
+            if include_all or container["running"]
+        ]
+        print("\n".join(selected))
+        return 0
+    if command[:2] == ["container", "inspect"]:
+        container_id = command[2] if len(command) > 2 else ""
+        container = containers.get(container_id)
+        if container is None:
+            print("container not found", file=sys.stderr)
+            return 1
+        print(json.dumps(container_inspect_payload(container)))
         return 0
     if command == ["service", "ls", "--quiet"]:
         print("\n".join(services))

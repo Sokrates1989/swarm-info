@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.3.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.4.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -6,9 +6,10 @@ swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .RI [ options ]
 .SH DESCRIPTION
 .B swarm-info
-runs on a Docker Swarm manager. With no option it opens the interactive
-information tour. The service page includes a down/degraded summary and is
-followed by the latest Docker Scout vulnerability report.
+runs its full information tour on a Docker Swarm manager. The explicit
+.B \-\-security-check
+compatibility command also supports standalone Linux Docker hosts and QNAP
+Container Station without activating Swarm.
 .PP
 Vulnerability scans are explicit because an all-image scan can take several
 minutes and may use registry bandwidth. Missing, incomplete, or stale evidence
@@ -115,6 +116,42 @@ and remains disabled by default.
 .B \-\-scan-vulnerabilities
 Force a locked scan of every unique current Swarm service image.
 .TP
+.B \-\-security-check
+Auto-detect manager capability. A manager receives Swarm-wide service-image
+coverage; any other Docker host receives exact local-container image coverage.
+The local mode is read-only, includes stopped containers by default, uses
+Docker Scout
+.B local://
+only, and never substitutes a registry image.
+.TP
+.BI \-\-runtime-mode " mode"
+Set security inventory to
+.BR auto ,
+.BR swarm ,
+or
+.BR containers .
+Default: auto.
+.TP
+.B \-\-container-mode
+Alias for
+.BR "\-\-runtime-mode containers" .
+.TP
+.BI \-\-container-scope " scope"
+Select
+.B all
+defined local containers or only
+.BR running .
+Default: all.
+.TP
+.BI \-\-os " host"
+Use host hint
+.BR auto ,
+.BR qnap ,
+or
+.BR linux .
+Default: auto. The hint changes metadata and guidance but never bypasses
+Docker capability checks.
+.TP
 .B \-\-scheduled-vulnerability-scan
 Run the locked scan unless matching evidence is fresh.
 .TP
@@ -128,7 +165,8 @@ Install or update the current user's managed daily scan.
 Remove only the managed daily scan block.
 .TP
 .BI \-\-platform " platform"
-Set the scan platform. Default: linux/amd64.
+Set the scan platform. Swarm scan default: linux/amd64. Compatibility security
+check default: auto-detect from the Docker daemon.
 .TP
 .BI \-\-max-age-hours " hours"
 Set the evidence freshness limit. Default: 30.
@@ -165,7 +203,8 @@ Run the complete tour with page waits.
 Fetch and apply only a clean, strict fast-forward update.
 .TP
 .B \-\-check-dependencies
-Check Bash, Git, Docker, Swarm manager, Python, and Docker Scout readiness.
+Auto-detect and check full Swarm-manager readiness or the narrower portable
+Docker/Python/Scout readiness without requiring Swarm, Git, bc, or Compose.
 .TP
 .BR \-V ", " \-\-version
 Print the authoritative swarm-info version.
@@ -193,6 +232,10 @@ Preferred production health report.
 .TP
 .I /info_json/vulnerability_scan.json
 Preferred production vulnerability report.
+.TP
+.I swarm_info/security_scan.json
+Default standalone/QNAP compatibility security report. It is separate from
+watchdog evidence.
 .TP
 .I /info_json/service_deployment_map.json
 Suggested path for an explicitly generated deployment-map acceptance report.
@@ -234,6 +277,13 @@ Show the current vulnerability evidence:
 .PP
 .nf
 swarm-info -v
+.fi
+.PP
+Scan exact images used by local QNAP containers:
+.PP
+.nf
+swarm-info --security-check --container-mode --os=qnap \
+  --output-file /share/Public/swarm-info/security_scan.json
 .fi
 .PP
 Open remediation directly with an accepted search root and policy:

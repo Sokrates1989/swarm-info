@@ -5,12 +5,13 @@
 #
 # Description:
 #     Verifies the host capabilities used by swarm-info. Core checks cover the
-#     Docker manager environment and Git-backed update status. Security checks
-#     add Python 3.10+ and Docker Scout; remediation checks additionally require
-#     Docker Compose v2. Guidance never modifies the host.
+#     Docker manager environment and Git-backed update status. Portable security
+#     mode requires only Bash 3+, local Docker access, Python 3.10+, and Docker
+#     Scout. Remediation additionally requires Docker Compose v2. Guidance never
+#     modifies the host.
 #
 # Dependencies:
-#     - Bash 4+
+#     - Bash 3+ for --security; Bash 4+ for Swarm modes
 #     - Standard POSIX userland commands
 # =============================================================================
 
@@ -25,10 +26,11 @@ CHECK_MODE="all"
 #     Nothing.
 # -----------------------------------------------------------------------------
 show_dependency_check_help() {
-    echo "Usage: $0 [--core|--scan|--remediation|--all]"
+    echo "Usage: $0 [--core|--scan|--security|--remediation|--all]"
     echo
     echo "  --core  Require Docker, an active manager node, and Git."
     echo "  --scan  Require core dependencies, Python 3.10+, and Docker Scout."
+    echo "  --security  Require portable local-container security dependencies only."
     echo "  --remediation  Add Docker Compose v2 for deployment mapping/remediation."
     echo "  --all   Report core, scanning, and remediation readiness (default)."
 }
@@ -56,8 +58,10 @@ dependency_privilege_prefix() {
 # -----------------------------------------------------------------------------
 show_docker_install_help() {
     echo "       Install Docker Engine: https://docs.docker.com/engine/install/"
+    echo "       QNAP: install and start Container Station, then enable SSH access."
+    echo "       QNAP guide: https://docs.qnap.com/application/container-station/"
     echo "       Verify access: docker info"
-    echo "       Run swarm-info from a Docker Swarm manager node."
+    echo "       Swarm inventory requires a manager; --security-check can use local containers."
 }
 
 # -----------------------------------------------------------------------------
@@ -100,6 +104,8 @@ show_python_install_help() {
     privilege_prefix="$(dependency_privilege_prefix)"
     echo "       Debian/Ubuntu: ${privilege_prefix}apt-get install -y python3"
     echo "       RHEL/Fedora:   ${privilege_prefix}dnf install -y python3"
+    echo "       QNAP: install/enable the Python3 QPKG. swarm-info also checks its Install_Path."
+    echo "       QNAP verify: \"\$(getcfg Python3 Install_Path -f /etc/config/qpkg.conf)/bin/python3\" --version"
     echo "       Required version: Python 3.10 or newer."
 }
 
@@ -113,18 +119,46 @@ show_python_install_help() {
 #     Nothing.
 # -----------------------------------------------------------------------------
 show_docker_scout_install_help() {
-    local privilege_prefix=""
     local scout_installer_url="https://raw.githubusercontent.com/docker/scout-cli/main/install.sh"
 
-    privilege_prefix="$(dependency_privilege_prefix)"
     echo "       Install Docker Scout for the current user:"
-    echo "       ${privilege_prefix}apt-get update"
-    echo "       ${privilege_prefix}apt-get install -y curl"
-    echo "       curl -sSfL ${scout_installer_url} | sh -s --"
+    echo "       Download and inspect the official installer before running it:"
+    echo "       curl -fsSL ${scout_installer_url} -o install-scout.sh"
+    echo "       sed -n '1,240p' install-scout.sh"
+    echo "       sh install-scout.sh"
     echo "       docker scout version"
-    echo "       docker login"
+    echo "       Registry-backed Swarm scans may additionally require: docker login"
     echo "       About: https://docs.docker.com/scout/"
     echo "       Guide: https://github.com/docker/scout-cli#cli-plugin-installation"
+}
+
+# -----------------------------------------------------------------------------
+# Verify the minimum host capabilities for local-container security scanning.
+#
+# This intentionally excludes Git, bc, Docker Compose, and Swarm manager access
+# so NAS hosts can run the read-only image check without pretending that Swarm
+# inventory and remediation are available.
+# -----------------------------------------------------------------------------
+check_security_core_dependencies() {
+    echo "Portable container-security dependencies:"
+    if [ "${BASH_VERSINFO[0]}" -ge 3 ]; then
+        echo "[OK] Bash ${BASH_VERSION}"
+    else
+        record_required_failure "Bash 3 or newer is required; found ${BASH_VERSION}."
+    fi
+
+    if ! command -v docker >/dev/null 2>&1; then
+        record_required_failure "The Docker CLI is required."
+        show_docker_install_help
+        return 0
+    fi
+    echo "[OK] Docker CLI found at $(command -v docker)"
+    if docker info >/dev/null 2>&1; then
+        echo "[OK] Docker daemon access is available for local inventory."
+    else
+        record_required_failure "Docker daemon access could not be verified."
+        show_docker_install_help
+    fi
 }
 
 # -----------------------------------------------------------------------------
@@ -254,9 +288,21 @@ check_core_dependencies() {
 # -----------------------------------------------------------------------------
 resolve_scanner_python() {
     local candidate=""
+    local qnap_python_root=""
+    local candidates=(python3 python)
 
-    for candidate in python3 python; do
-        if command -v "$candidate" >/dev/null 2>&1 &&
+    if command -v getcfg >/dev/null 2>&1; then
+        qnap_python_root="$(getcfg Python3 Install_Path -f /etc/config/qpkg.conf 2>/dev/null || true)"
+        if [ -n "$qnap_python_root" ]; then
+            candidates+=(
+                "$qnap_python_root/bin/python3"
+                "$qnap_python_root/bin/python"
+            )
+        fi
+    fi
+
+    for candidate in "${candidates[@]}"; do
+        if { command -v "$candidate" >/dev/null 2>&1 || [ -x "$candidate" ]; } &&
             "$candidate" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' \
                 >/dev/null 2>&1; then
             printf '%s' "$candidate"
@@ -290,7 +336,11 @@ check_scan_dependencies() {
     if command -v docker >/dev/null 2>&1 &&
         docker scout version >/dev/null 2>&1; then
         echo "[OK] Docker Scout is available to user $(id -un)."
-        echo "[INFO] Private images require registry access for this same user (docker login)."
+        if [ "$CHECK_MODE" = "security" ]; then
+            echo "[INFO] Local-container mode scans exact local image IDs and needs no registry login."
+        else
+            echo "[INFO] Private registry fallback requires access for this same user (docker login)."
+        fi
     else
         record_scan_failure "Docker Scout is unavailable to user $(id -un)."
         show_docker_scout_install_help
@@ -343,6 +393,9 @@ parse_dependency_arguments() {
         --scan)
             CHECK_MODE="scan"
             ;;
+        --security)
+            CHECK_MODE="security"
+            ;;
         --remediation)
             CHECK_MODE="remediation"
             ;;
@@ -379,12 +432,17 @@ main() {
 
     echo "swarm-info dependency check"
     echo "==========================="
-    check_core_dependencies
-    if [ "$CHECK_MODE" != "core" ]; then
+    if [ "$CHECK_MODE" = "security" ]; then
+        check_security_core_dependencies
         check_scan_dependencies
-    fi
-    if [ "$CHECK_MODE" = "all" ] || [ "$CHECK_MODE" = "remediation" ]; then
-        check_remediation_dependencies
+    else
+        check_core_dependencies
+        if [ "$CHECK_MODE" != "core" ]; then
+            check_scan_dependencies
+        fi
+        if [ "$CHECK_MODE" = "all" ] || [ "$CHECK_MODE" = "remediation" ]; then
+            check_remediation_dependencies
+        fi
     fi
 
     echo

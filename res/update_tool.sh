@@ -10,19 +10,43 @@
 #     preserved and reported instead of being overwritten.
 #
 # Dependencies:
-#     - Bash 4+
+#     - Bash 3+
 #     - Git with network access to the configured upstream remote
 # =============================================================================
 
 SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 REPOSITORY_ROOT="$(cd "${SCRIPT_DIRECTORY}/.." >/dev/null 2>&1 && pwd)"
 ENTRYPOINT_PATH="${REPOSITORY_ROOT}/get_info.sh"
+GIT_COMMAND="git"
 
 if [[ "${SWARM_INFO_LOCALE:-${LANG:-en}}" == de* ]]; then
     source "${SCRIPT_DIRECTORY}/locales/operator_de.sh"
 else
     source "${SCRIPT_DIRECTORY}/locales/operator_en.sh"
 fi
+
+# -----------------------------------------------------------------------------
+# Resolve Git from PATH or QNAP's QGit QPKG installation.
+# -----------------------------------------------------------------------------
+resolve_update_git() {
+    local candidate=""
+    local qgit_root=""
+
+    if command -v git >/dev/null 2>&1; then
+        printf '%s' 'git'
+        return 0
+    fi
+    if command -v getcfg >/dev/null 2>&1; then
+        qgit_root="$(getcfg QGit Install_Path -f /etc/config/qpkg.conf 2>/dev/null || true)"
+    fi
+    for candidate in "$qgit_root/bin/git" "$qgit_root/usr/bin/git"; do
+        if [ -n "$qgit_root" ] && [ -x "$candidate" ]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
 
 # -----------------------------------------------------------------------------
 # Read the authoritative version, allowing upgrades from legacy checkouts.
@@ -48,7 +72,7 @@ read_tool_version() {
 #     Exit status from Git.
 # -----------------------------------------------------------------------------
 repository_git() {
-    git -C "$REPOSITORY_ROOT" "$@"
+    "$GIT_COMMAND" -C "$REPOSITORY_ROOT" "$@"
 }
 
 # -----------------------------------------------------------------------------
@@ -180,7 +204,7 @@ update_swarm_info() {
     local remote=""
     local upstream=""
 
-    if ! command -v git >/dev/null 2>&1; then
+    if ! GIT_COMMAND="$(resolve_update_git)"; then
         echo "[ERROR] Git is required for swarm-info self-update." >&2
         return 1
     fi

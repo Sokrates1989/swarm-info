@@ -78,6 +78,12 @@ class DependencyCheckTests(unittest.TestCase):
             )
             fake_git.chmod(0o755)
 
+            # The dependency contract checks presence only; keep this fixture
+            # independent from the host/container package set.
+            fake_bc = fake_bin / "bc"
+            fake_bc.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_bc.chmod(0o755)
+
             environment = os.environ.copy()
             environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
             environment["FAKE_DOCKER_SCENARIO"] = scenario
@@ -160,8 +166,8 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("Swarm is not active", result.stderr)
 
-    def test_installer_runs_shared_full_preflight(self) -> None:
-        """Ensure installation validates the checked-out runtime dependencies.
+    def test_installer_runs_shared_capability_preflight(self) -> None:
+        """Ensure installation validates the applicable checked-out runtime.
 
         Returns:
             Nothing.
@@ -171,8 +177,10 @@ class DependencyCheckTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn('bash "$dependency_script" --all', source)
-        self.assertIn("Core swarm-info is installed", source)
+        self.assertIn('local check_mode="all"', source)
+        self.assertIn('check_mode="security"', source)
+        self.assertIn('bash "$dependency_script" "--$check_mode"', source)
+        self.assertIn("swarm-info is installed", source)
         self.assertIn("chmod +x \"${INSTALL_DIRECTORY}/res/dependency_check.sh\"", source)
 
     def test_cli_exposes_explicit_and_initial_preflight(self) -> None:
@@ -207,6 +215,26 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn("accurate restart-rate calculations", source)
         self.assertIn("docker compose version", source)
         self.assertIn("docker-compose-plugin", source)
+
+    def test_portable_security_preflight_excludes_swarm_only_dependencies(self) -> None:
+        """Keep standalone/QNAP readiness separate from manager operations."""
+
+        dependency_source = DEPENDENCY_SCRIPT.read_text(encoding="utf-8")
+        bridge_source = (
+            REPOSITORY_ROOT / "res" / "vulnerability_cli.sh"
+        ).read_text(encoding="utf-8")
+        installer_source = (
+            REPOSITORY_ROOT / "setup" / "linux-cli.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("check_security_core_dependencies", dependency_source)
+        self.assertIn('CHECK_MODE="security"', dependency_source)
+        self.assertIn("Docker daemon access is available for local inventory", dependency_source)
+        self.assertIn("getcfg Python3 Install_Path", dependency_source)
+        self.assertIn("getcfg Python3 Install_Path", bridge_source)
+        self.assertIn("getcfg QGit Install_Path", installer_source)
+        self.assertIn('"$GIT_COMMAND" clone', installer_source)
+        self.assertIn('check_mode="security"', installer_source)
 
 
 class SelfUpdateTests(unittest.TestCase):

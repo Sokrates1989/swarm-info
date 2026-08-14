@@ -103,7 +103,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.3.0")
+        self.assertEqual(version, "1.4.0")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:
@@ -162,6 +162,11 @@ class CliOperatorContractTests(unittest.TestCase):
             "--deployment-map-file",
             "--force-auto-remedy-attempt",
             "--allow-runtime-override",
+            "--security-check",
+            "--runtime-mode",
+            "--container-mode",
+            "--container-scope",
+            "--os",
             "--version",
         ):
             self.assertIn(command, entrypoint)

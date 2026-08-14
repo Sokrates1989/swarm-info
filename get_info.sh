@@ -6,12 +6,12 @@
 # Description:
 #     Main command dispatcher for Docker Swarm status, inventory, diagnostics,
 #     guarded self-updates, JSON health collection, and manual image
-#     vulnerability scanning.
+#     vulnerability scanning, and portable local-container security checks.
 #
 # Dependencies:
-#     - Bash 4+
+#     - Bash 4+ for Swarm operations; Bash 3+ for --security-check
 #     - Docker CLI
-#     - Python 3 and Docker Scout for --scan-vulnerabilities
+#     - Python 3.10+ and Docker Scout for image security checks
 # =============================================================================
 
 # Get the directory of the script, handling symlinks properly.
@@ -339,7 +339,7 @@ swarm_info_json() {
 # Verify core and optional host dependencies through the shared checker.
 #
 # Parameters:
-#     $1 - Check mode: core, scan, or all. Defaults to all.
+#     $1 - Check mode: core, scan, security, remediation, or all.
 #
 # Returns:
 #     0 when every selected dependency is ready.
@@ -354,6 +354,20 @@ check_swarm_info_dependencies() {
     local check_mode="${1:-all}"
 
     bash "$SCRIPT_DIR/dependency_check.sh" "--$check_mode"
+}
+
+# -----------------------------------------------------------------------------
+# Check full Swarm readiness on a manager, otherwise portable security readiness.
+# -----------------------------------------------------------------------------
+check_applicable_swarm_info_dependencies() {
+    local docker_state=""
+
+    docker_state="$(docker info --format '{{.Swarm.LocalNodeState}}|{{.Swarm.ControlAvailable}}' 2>/dev/null || true)"
+    if [ "$docker_state" = "active|true" ]; then
+        check_swarm_info_dependencies all
+    else
+        check_swarm_info_dependencies security
+    fi
 }
 
 # -----------------------------------------------------------------------------
@@ -377,7 +391,7 @@ display_help() {
     echo -e "  -c                Alias for --commands"
     echo -e "  --commands        Display helpful commands"
     echo -e "  --check-dependencies"
-    echo -e "                    Check core, Python, and Docker Scout readiness"
+    echo -e "                    Auto-check full Swarm or portable security readiness"
     echo -e "  --cache-age-hours Vulnerability rescan interval (default: 20)"
     echo -e "  --cron-hour       Daily vulnerability cron hour (default: 3)"
     echo -e "  --cron-log-file   Optional vulnerability cron log destination"
@@ -409,9 +423,14 @@ display_help() {
     echo -e "  --node-services   Display service node information (What service is running on which node)"
     echo -e "  -o                Alias for --output-file"
     echo -e "  --output-file     Health, vulnerability, or deployment-map JSON destination"
-    echo -e "  --platform        Image platform for vulnerability scanning (default: linux/amd64)"
+    echo -e "  --platform        Swarm default: linux/amd64; security-check default: auto"
     echo -e "  --scan-vulnerabilities"
     echo -e "                    Force a locked scan of every Swarm service image"
+    echo -e "  --security-check  Auto-detect Swarm manager or local-container image scanning"
+    echo -e "  --runtime-mode    Security inventory: auto, swarm, or containers (default: auto)"
+    echo -e "  --container-mode  Alias for --runtime-mode containers"
+    echo -e "  --container-scope Local containers: all or running (default: all)"
+    echo -e "  --os              Host hint: auto, qnap, or linux (default: auto)"
     echo -e "  --scheduled-vulnerability-scan"
     echo -e "                    Run a locked scan unless matching evidence is fresh"
     echo -e "  --secrets         Display infos for secrets"
@@ -442,6 +461,8 @@ display_help() {
     echo
     echo "$OP_HELP_DEPLOYMENT_REQUIREMENT"
     echo "$OP_HELP_EXAMPLES"
+    echo "  swarm-info --security-check"
+    echo "  swarm-info --security-check --container-mode --os=qnap"
     echo "  swarm-info --map-service-deployments --deploy-root /swarm"
     echo "  swarm-info -v"
     echo "  swarm-info --remediate-vulnerabilities --deploy-root /swarm"
@@ -467,6 +488,10 @@ is_show_menu_option_selected="false"
 use_file_output="false"
 file_output_type="json"
 VULNERABILITY_PLATFORM="linux/amd64"
+SECURITY_PLATFORM="auto"
+SECURITY_RUNTIME_MODE="auto"
+SECURITY_HOST_OS="auto"
+SECURITY_CONTAINER_SCOPE="all"
 VULNERABILITY_CACHE_AGE_HOURS="20"
 VULNERABILITY_MAX_AGE_HOURS="30"
 VULNERABILITY_HISTORY_DAYS="14"
@@ -642,6 +667,54 @@ while [ $# -gt 0 ]; do
             fi
             shift
             VULNERABILITY_PLATFORM="$1"
+            SECURITY_PLATFORM="$1"
+            shift
+            ;;
+        --security-check)
+            selected_action="security-check"
+            shift
+            ;;
+        --runtime-mode)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            SECURITY_RUNTIME_MODE="$1"
+            shift
+            ;;
+        --runtime-mode=*)
+            SECURITY_RUNTIME_MODE="${1#--runtime-mode=}"
+            shift
+            ;;
+        --container-mode)
+            SECURITY_RUNTIME_MODE="containers"
+            shift
+            ;;
+        --container-scope)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            SECURITY_CONTAINER_SCOPE="$1"
+            shift
+            ;;
+        --container-scope=*)
+            SECURITY_CONTAINER_SCOPE="${1#--container-scope=}"
+            shift
+            ;;
+        --os)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            SECURITY_HOST_OS="$1"
+            shift
+            ;;
+        --os=*)
+            SECURITY_HOST_OS="${1#--os=}"
             shift
             ;;
         --scan-vulnerabilities)
@@ -741,7 +814,7 @@ case "$selected_action" in
         display_helpful_commands
         ;;
     "check-dependencies")
-        check_swarm_info_dependencies all
+        check_applicable_swarm_info_dependencies
         ;;
     "install-vulnerability-cron")
         configure_vulnerability_cron install
@@ -793,6 +866,9 @@ case "$selected_action" in
         ;;
     "scan-vulnerabilities")
         run_service_image_vulnerability_job manual
+        ;;
+    "security-check")
+        run_compatibility_security_check
         ;;
     "scheduled-vulnerability-scan")
         run_service_image_vulnerability_job scheduled

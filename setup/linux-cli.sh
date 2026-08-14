@@ -10,7 +10,7 @@
 #     installed automatically.
 #
 # Dependencies:
-#     - Bash 4+
+#     - Bash 3+ (Bash 4+ remains required for Swarm inventory operations)
 #     - Git for cloning the repository
 # =============================================================================
 
@@ -22,6 +22,30 @@ LOCAL_BIN_DIRECTORY="${HOME}/.local/bin"
 LOCAL_MAN_DIRECTORY="${HOME}/.local/share/man/man1"
 REPOSITORY_URL="https://github.com/Sokrates1989/swarm-info.git"
 EXPORT_LINE='export PATH="$HOME/.local/bin:$PATH"'
+GIT_COMMAND="git"
+
+# -----------------------------------------------------------------------------
+# Resolve Git from PATH or the QNAP QGit package installation.
+# -----------------------------------------------------------------------------
+resolve_installer_git() {
+    local candidate=""
+    local qgit_root=""
+
+    if command -v git >/dev/null 2>&1; then
+        printf '%s' 'git'
+        return 0
+    fi
+    if command -v getcfg >/dev/null 2>&1; then
+        qgit_root="$(getcfg QGit Install_Path -f /etc/config/qpkg.conf 2>/dev/null || true)"
+    fi
+    for candidate in "$qgit_root/bin/git" "$qgit_root/usr/bin/git"; do
+        if [ -n "$qgit_root" ] && [ -x "$candidate" ]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
 
 # -----------------------------------------------------------------------------
 # Select the privilege prefix used in package-installation guidance.
@@ -50,13 +74,16 @@ installer_privilege_prefix() {
 check_installer_dependencies() {
     local privilege_prefix=""
 
-    if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
-        echo "[ERROR] Bash 4 or newer is required; found ${BASH_VERSION}." >&2
+    if [ "${BASH_VERSINFO[0]}" -lt 3 ]; then
+        echo "[ERROR] Bash 3 or newer is required; found ${BASH_VERSION}." >&2
         return 1
     fi
+    if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+        echo "[INFO] Bash ${BASH_VERSION} supports portable security checks; Swarm operations require Bash 4+."
+    fi
 
-    if command -v git >/dev/null 2>&1; then
-        echo "[OK] $(git --version 2>/dev/null)"
+    if GIT_COMMAND="$(resolve_installer_git)"; then
+        echo "[OK] $($GIT_COMMAND --version 2>/dev/null)"
         return 0
     fi
 
@@ -64,6 +91,7 @@ check_installer_dependencies() {
     echo "[ERROR] Git is required to install swarm-info." >&2
     echo "        Debian/Ubuntu: ${privilege_prefix}apt-get install -y git" >&2
     echo "        RHEL/Fedora:   ${privilege_prefix}dnf install -y git" >&2
+    echo "        QNAP: install/enable the QGit QPKG." >&2
     return 1
 }
 
@@ -80,7 +108,7 @@ prepare_checkout() {
     if [ ! -d "${INSTALL_DIRECTORY}/.git" ]; then
         echo "[INFO] Cloning swarm-info into ${INSTALL_DIRECTORY}..."
         mkdir -p "$INSTALL_DIRECTORY"
-        git clone "$REPOSITORY_URL" "$INSTALL_DIRECTORY"
+        "$GIT_COMMAND" clone "$REPOSITORY_URL" "$INSTALL_DIRECTORY"
         return
     fi
 
@@ -153,7 +181,12 @@ configure_manual() {
         return 1
     fi
     mkdir -p "$LOCAL_MAN_DIRECTORY"
-    install -m 0644 "$manual_source" "${LOCAL_MAN_DIRECTORY}/swarm-info.1"
+    if command -v install >/dev/null 2>&1; then
+        install -m 0644 "$manual_source" "${LOCAL_MAN_DIRECTORY}/swarm-info.1"
+    else
+        cp "$manual_source" "${LOCAL_MAN_DIRECTORY}/swarm-info.1"
+        chmod 0644 "${LOCAL_MAN_DIRECTORY}/swarm-info.1"
+    fi
     if command -v mandb >/dev/null 2>&1; then
         mandb -q "${HOME}/.local/share/man" >/dev/null 2>&1 || true
     fi
@@ -178,6 +211,8 @@ configure_manual() {
 verify_runtime_dependencies() {
     local dependency_status=0
     local dependency_script="${INSTALL_DIRECTORY}/res/dependency_check.sh"
+    local docker_state=""
+    local check_mode="all"
 
     if [ ! -f "$dependency_script" ]; then
         echo "[ERROR] Dependency checker is missing from the checkout." >&2
@@ -185,21 +220,26 @@ verify_runtime_dependencies() {
         return 1
     fi
 
-    bash "$dependency_script" --all || dependency_status=$?
+    docker_state="$(docker info --format '{{.Swarm.LocalNodeState}}|{{.Swarm.ControlAvailable}}' 2>/dev/null || true)"
+    if [ "$docker_state" != "active|true" ]; then
+        check_mode="security"
+        echo "[INFO] Swarm manager control was not detected; validating portable container-security mode."
+    fi
+    bash "$dependency_script" "--$check_mode" || dependency_status=$?
     case "$dependency_status" in
         0)
             return 0
             ;;
         2)
             echo
-            echo "[WARN] Core swarm-info is installed, but one or more security workflows are not ready."
+            echo "[WARN] swarm-info is installed, but one or more security workflows are not ready."
             echo "[WARN] Follow the Python/Docker Scout/Compose instructions above, then run:"
             echo "       swarm-info --check-dependencies"
             return 0
             ;;
         *)
             echo
-            echo "[ERROR] swarm-info was installed, but core runtime checks failed." >&2
+            echo "[ERROR] swarm-info was installed, but the selected runtime checks failed." >&2
             echo "[ERROR] Resolve the issues above and rerun this installer." >&2
             return 1
             ;;

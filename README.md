@@ -126,9 +126,25 @@ swarm-info -v
 swarm-info --vulnerabilities
 ```
 
-`swarm-info -v --menu` offers an immediate all-image scan. The scan remains an
-explicit action because it can be network- and CPU-intensive. View the
-version-matched command reference with `swarm-info --help` or `man swarm-info`.
+When a fresh vulnerable report is shown in an interactive terminal,
+`swarm-info -v` continues directly into the remediation menu. It offers:
+
+1. A complete service list, including how many services share each image.
+2. A complete vulnerable-image list, including all consuming services.
+3. Priority guidance ordered by critical findings and then high findings.
+4. Policy-gated auto-remediation with a dry-run plan, candidate scan, diff,
+   confirmations, convergence checks, post-validation, and rollback.
+
+`swarm-info -v --menu` additionally offers an immediate all-image scan. The
+scan remains explicit because it can be network- and CPU-intensive. Open the
+same remediation workflow directly with:
+
+```bash
+swarm-info --remediate-vulnerabilities --deploy-root /swarm
+```
+
+View the version-matched command reference with `swarm-info --help` or
+`man swarm-info`.
 
 ## Verify service deployment paths
 
@@ -152,8 +168,91 @@ directories become `ambiguous`; stale images, missing Compose support, and
 insufficient evidence remain `unknown` instead of being guessed.
 
 The JSON report records every service and all candidate files involved in an
-unresolved result. Review all mapped paths on the manager before allowing a
-future guided remediation workflow to use them.
+unresolved result. Review all mapped paths on the manager before allowing the
+guided remediation workflow to use them. You can pass an accepted report with
+`--deployment-map-file`; auto-remediation still regenerates live mapping
+evidence before planning a mutation.
+
+## Guided and safe auto-remediation
+
+Docker Scout's `--only-fixed` result means a package-level fix exists. It does
+not guarantee that a ready replacement image tag exists. A durable fix normally
+requires one of the following:
+
+- First-party image: update its base image and dependencies, rebuild it, push
+  it, and scan the exact candidate digest.
+- Third-party image: choose a maintained patched upstream tag and scan its exact
+  digest.
+- False-positive/not-exploitable finding: document a reviewed VEX exception;
+  do not silently suppress it.
+
+The targeted and guided modes explain these steps and show the verified
+deployment directory, owning stack file, Scout commands, deployment command,
+service verification, and final full scan. They never change Docker or files.
+
+Auto-remediation requires an installation-owned policy. Keep this file in the
+Git repository that owns the deployment configuration:
+
+```bash
+cd /swarm/administration/swarm-info-watchdog
+swarm_info_dir="$(dirname "$(readlink -f "$(command -v swarm-info)")")"
+install -d -m 0750 configs
+install -m 0640 \
+  "$swarm_info_dir/config/remediation-policy.example.json" \
+  configs/remediation-policy.json
+
+# Edit and review explicit targets using the companion documentation.
+${EDITOR:-nano} configs/remediation-policy.json
+git diff -- configs/remediation-policy.json
+
+swarm-info --remediate-vulnerabilities \
+  --deploy-root /swarm \
+  --remediation-policy "$PWD/configs/remediation-policy.json" \
+  --remediation-plan-file /info_json/vulnerability_remediation_plan.json
+```
+
+See
+[`config/remediation-policy.example.json.md`](config/remediation-policy.example.json.md)
+for the complete schema and an example target. Never place credentials, Docker
+secrets, passwords, or tokens in this policy.
+
+Configure one target per distinct stack/source-key image update. If several
+services in one stack share that source, one representative service is enough;
+use separate targets for consumers owned by different stacks or keys. The final
+all-image scan verifies the complete consumer set.
+
+The auto-remediation sequence is intentionally strict:
+
+1. Require fresh, complete scan evidence and live manager access.
+2. Regenerate conservative service-to-stack mappings.
+3. Merge scan, mapping, and policy into an atomic plan with a stable plan ID.
+4. Require both an immutable current image for exact rollback and a tagged
+   candidate pinned to a full SHA-256 digest in the same image repository, plus
+   an explicit `backup.status=not_required` justification.
+5. Scan the candidate and reject it unless critical/high counts improve and no
+   new critical/high CVE identifier appears.
+6. For a mapped source, recheck the old value, show a unified diff, and ask
+   before writing. Ambiguous YAML, aliases, interpolation, duplicate keys,
+   symlinks, path escapes, and stale values fail closed.
+7. Ask separately before deployment (default `Y` only after the source change
+   was explicitly accepted), wait for the service to converge, and scan the
+   immutable candidate again.
+8. Restore the original source and previous rendered stack when deployment or
+   post-validation fails, then verify rollback convergence.
+9. After any successful deployment, run and atomically publish a locked,
+   complete all-image confirmation scan with the normal freshness/history
+   metadata so the next CLI/UI/watchdog view uses fresh Swarm-wide evidence.
+
+`--force-auto-remedy-attempt` overrides only `auto_eligible=false`. It cannot
+bypass a disabled entry, backup classification, immutable digest, repository
+match, candidate scan, source precondition, review prompt, convergence check,
+post-validation, or rollback.
+
+When deployment source remains unknown, the workflow prints the exact guarded
+`docker service update` and rollback commands. Execution requires both
+`--allow-runtime-override` and a separate default-No confirmation. This is a
+temporary runtime override and therefore configuration drift; update the
+declarative stack source as soon as it is found.
 
 ## Safe self-update
 

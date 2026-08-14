@@ -237,6 +237,7 @@ display_service_health_info() {
 # -----------------------------------------------------------------------------
 display_vulnerability_info() {
     local arguments=()
+    local deployment_root_value="${SWARM_INFO_DEPLOY_ROOTS:-}"
 
     if [ "$is_show_menu_option_selected" = "true" ]; then
         arguments+=(-m)
@@ -244,7 +245,19 @@ display_vulnerability_info() {
     if [ "$CUSTOM_OUTPUT_FILE" != "NONE" ]; then
         arguments+=(-o "$CUSTOM_OUTPUT_FILE")
     fi
-    bash "$SCRIPT_DIR/vulnerability_info.sh" "${arguments[@]}"
+    if [ "${#DEPLOYMENT_ROOTS[@]}" -gt 0 ]; then
+        deployment_root_value="$(IFS=:; printf '%s' "${DEPLOYMENT_ROOTS[*]}")"
+    fi
+    SWARM_INFO_DEPLOY_ROOTS="$deployment_root_value" \
+        DEPLOYMENT_MAP_FILE="$DEPLOYMENT_MAP_FILE" \
+        REMEDIATION_POLICY_FILE="$REMEDIATION_POLICY_FILE" \
+        REMEDIATION_PLAN_FILE="$REMEDIATION_PLAN_FILE" \
+        FORCE_AUTO_REMEDY_ATTEMPT="$FORCE_AUTO_REMEDY_ATTEMPT" \
+        ALLOW_RUNTIME_OVERRIDE="$ALLOW_RUNTIME_OVERRIDE" \
+        VULNERABILITY_MAX_AGE_HOURS="$VULNERABILITY_MAX_AGE_HOURS" \
+        VULNERABILITY_HISTORY_DAYS="$VULNERABILITY_HISTORY_DAYS" \
+        VULNERABILITY_LOCK_FILE="$VULNERABILITY_LOCK_FILE" \
+        bash "$SCRIPT_DIR/vulnerability_info.sh" "${arguments[@]}"
 }
 
 # -----------------------------------------------------------------------------
@@ -370,6 +383,8 @@ display_help() {
     echo -e "  --cron-log-file   Optional vulnerability cron log destination"
     echo -e "  --cron-minute     Daily vulnerability cron minute (default: 17)"
     echo -e "  --deploy-root     $OP_HELP_DEPLOY_ROOT"
+    echo -e "  --deployment-map-file"
+    echo -e "                    $OP_HELP_DEPLOYMENT_MAP_FILE"
     echo -e "  -d                Alias for --service-health"
     echo -e "  -f                Alias for --fast"
     echo -e "  --fast            Do not wait for keypress and display all information"
@@ -377,6 +392,8 @@ display_help() {
     echo -e "  --help            Display this help message"
     echo -e "  --json            Save and display info in json format"
     echo -e "  --history-days    Vulnerability report retention days (default: 14)"
+    echo -e "  --force-auto-remedy-attempt"
+    echo -e "                    $OP_HELP_FORCE_REMEDY"
     echo -e "  --install-vulnerability-cron"
     echo -e "                    Install/update the current user's managed daily scan"
     echo -e "  --local           Display local docker information (docker on this node)"
@@ -411,6 +428,14 @@ display_help() {
     echo -e "                    Check report completeness and freshness without Docker"
     echo -e "  -v                Alias for --vulnerabilities"
     echo -e "  --vulnerabilities $OP_HELP_VULNERABILITIES"
+    echo -e "  --remediate-vulnerabilities"
+    echo -e "                    $OP_HELP_REMEDIATE"
+    echo -e "  --remediation-policy"
+    echo -e "                    $OP_HELP_REMEDIATION_POLICY"
+    echo -e "  --remediation-plan-file"
+    echo -e "                    $OP_HELP_REMEDIATION_PLAN"
+    echo -e "  --allow-runtime-override"
+    echo -e "                    $OP_HELP_RUNTIME_OVERRIDE"
     echo -e "  -V, --version     $OP_HELP_VERSION"
     echo -e "  -w                Alias for --wait"
     echo -e "  --wait            Show swarm info and wait after outputs to make it easier to read"
@@ -419,6 +444,7 @@ display_help() {
     echo "$OP_HELP_EXAMPLES"
     echo "  swarm-info --map-service-deployments --deploy-root /swarm"
     echo "  swarm-info -v"
+    echo "  swarm-info --remediate-vulnerabilities --deploy-root /swarm"
 
     if [ "$is_show_menu_option_selected" = "true" ]; then
         echo
@@ -449,6 +475,11 @@ VULNERABILITY_CRON_HOUR="3"
 VULNERABILITY_CRON_MINUTE="17"
 VULNERABILITY_CRON_LOG_FILE="NONE"
 DEPLOYMENT_ROOTS=()
+DEPLOYMENT_MAP_FILE="NONE"
+REMEDIATION_POLICY_FILE="NONE"
+REMEDIATION_PLAN_FILE="NONE"
+FORCE_AUTO_REMEDY_ATTEMPT="false"
+ALLOW_RUNTIME_OVERRIDE="false"
 
 # Check for command-line options.
 while [ $# -gt 0 ]; do
@@ -514,6 +545,15 @@ while [ $# -gt 0 ]; do
             DEPLOYMENT_ROOTS+=("$1")
             shift
             ;;
+        --deployment-map-file)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            DEPLOYMENT_MAP_FILE="$1"
+            shift
+            ;;
         -f|--fast)
             selected_action="fast"
             shift
@@ -534,6 +574,10 @@ while [ $# -gt 0 ]; do
             fi
             shift
             VULNERABILITY_HISTORY_DAYS="$1"
+            shift
+            ;;
+        --force-auto-remedy-attempt)
+            FORCE_AUTO_REMEDY_ATTEMPT="true"
             shift
             ;;
         --install-vulnerability-cron)
@@ -610,6 +654,32 @@ while [ $# -gt 0 ]; do
             ;;
         --remove-vulnerability-cron)
             selected_action="remove-vulnerability-cron"
+            shift
+            ;;
+        --remediate-vulnerabilities)
+            selected_action="remediate-vulnerabilities"
+            shift
+            ;;
+        --remediation-policy)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            REMEDIATION_POLICY_FILE="$1"
+            shift
+            ;;
+        --remediation-plan-file)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            REMEDIATION_PLAN_FILE="$1"
+            shift
+            ;;
+        --allow-runtime-override)
+            ALLOW_RUNTIME_OVERRIDE="true"
             shift
             ;;
         --secrets)
@@ -693,6 +763,9 @@ case "$selected_action" in
         ;;
     "map-service-deployments")
         display_service_deployment_map
+        ;;
+    "remediate-vulnerabilities")
+        run_vulnerability_remediation_menu
         ;;
     "nodes")
         display_node_info

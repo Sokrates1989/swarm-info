@@ -103,7 +103,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.1.0")
+        self.assertEqual(version, "1.2.0")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:
@@ -120,6 +120,15 @@ class CliOperatorContractTests(unittest.TestCase):
         self.assertIn('-V|--version|version)', entrypoint)
         self.assertIn('"$SCRIPT_DIR/vulnerability_info.sh"', services)
         self.assertIn('--service-health', services)
+        self.assertIn('SWARM_INFO_DEPLOY_ROOTS="$deployment_root_value"', entrypoint)
+        self.assertIn('REMEDIATION_POLICY_FILE="$REMEDIATION_POLICY_FILE"', entrypoint)
+        vulnerability_page = (
+            REPOSITORY_ROOT / "res" / "vulnerability_info.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'read -r -a DEPLOYMENT_ROOTS <<< "$SWARM_INFO_DEPLOY_ROOTS"',
+            vulnerability_page,
+        )
 
     def test_deployment_mapper_is_wired_as_a_read_only_public_action(self) -> None:
         """Keep the standalone acceptance command connected to its Python CLI."""
@@ -147,6 +156,12 @@ class CliOperatorContractTests(unittest.TestCase):
             "--vulnerabilities",
             "--map-service-deployments",
             "--deploy-root",
+            "--remediate-vulnerabilities",
+            "--remediation-policy",
+            "--remediation-plan-file",
+            "--deployment-map-file",
+            "--force-auto-remedy-attempt",
+            "--allow-runtime-override",
             "--version",
         ):
             self.assertIn(command, entrypoint)

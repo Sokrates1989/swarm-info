@@ -119,6 +119,34 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn("docker scout version", output)
         self.assertIn("https://docs.docker.com/scout/", output)
 
+    @unittest.skipUnless(
+        BASH_AVAILABLE, "Native Bash is required for shell execution."
+    )
+    def test_missing_compose_explains_declarative_remediation_dependency(
+        self,
+    ) -> None:
+        """Keep mapping unavailable instead of silently guessing stack source."""
+
+        result = self.run_dependency_check("missing-compose", "all")
+        output = result.stdout + result.stderr
+
+        self.assertEqual(result.returncode, 2, output)
+        self.assertIn("docker-compose-plugin", output)
+        self.assertIn("docker compose version", output)
+        self.assertIn("declarative remediation", output)
+
+    @unittest.skipUnless(
+        BASH_AVAILABLE, "Native Bash is required for shell execution."
+    )
+    def test_missing_compose_does_not_block_scan_only_mode(self) -> None:
+        """Keep Docker Compose independent from the all-image Scout scan."""
+
+        result = self.run_dependency_check("missing-compose", "scan")
+        output = result.stdout + result.stderr
+
+        self.assertEqual(result.returncode, 0, output)
+        self.assertNotIn("docker-compose-plugin", output)
+
     @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for shell execution.")
     def test_non_manager_is_a_core_failure(self) -> None:
         """Reject a Docker node that cannot inventory all Swarm services.
@@ -177,6 +205,8 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn("command -v bc", source)
         self.assertIn("apt-get install -y bc", source)
         self.assertIn("accurate restart-rate calculations", source)
+        self.assertIn("docker compose version", source)
+        self.assertIn("docker-compose-plugin", source)
 
 
 class SelfUpdateTests(unittest.TestCase):

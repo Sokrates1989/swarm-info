@@ -174,4 +174,72 @@ display_service_deployment_map() {
     )
 }
 
+# -----------------------------------------------------------------------------
+# Open the localized interactive remediation workflow.
+#
+# Global state:
+#     Reads deployment roots, report freshness, optional accepted mapping,
+#     installation policy, plan output, and the two independent override gates.
+#
+# Returns:
+#     0 completed/cancelled, 2 no policy entry is currently eligible, or 3 when
+#     evidence or a safety precondition blocks the workflow.
+# -----------------------------------------------------------------------------
+run_vulnerability_remediation_menu() {
+    local deploy_root=""
+    local invocation_directory="$PWD"
+    local selected_map_file="${DEPLOYMENT_MAP_FILE:-NONE}"
+    local selected_plan_file="${REMEDIATION_PLAN_FILE:-NONE}"
+    local selected_policy_file="${REMEDIATION_POLICY_FILE:-NONE}"
+    local python_command=""
+    local remediation_arguments=(-m scripts.remediation_cli)
+
+    python_command="$(resolve_vulnerability_python)" || return 3
+    remediation_arguments+=(
+        --report-file "$(resolve_vulnerability_report_for_operator)"
+        --max-age-hours "$VULNERABILITY_MAX_AGE_HOURS"
+        --history-days "${VULNERABILITY_HISTORY_DAYS:-14}"
+    )
+    if [ "${VULNERABILITY_LOCK_FILE:-NONE}" != "NONE" ]; then
+        remediation_arguments+=(--lock-file "$VULNERABILITY_LOCK_FILE")
+    fi
+    for deploy_root in "${DEPLOYMENT_ROOTS[@]}"; do
+        remediation_arguments+=(--deploy-root "$deploy_root")
+    done
+    if [ "$selected_map_file" != "NONE" ]; then
+        case "$selected_map_file" in
+            /*) ;;
+            *) selected_map_file="$invocation_directory/$selected_map_file" ;;
+        esac
+        remediation_arguments+=(--deployment-map-file "$selected_map_file")
+    fi
+    if [ "$selected_policy_file" = "NONE" ] && [ -r "$invocation_directory/configs/remediation-policy.json" ]; then
+        selected_policy_file="$invocation_directory/configs/remediation-policy.json"
+    fi
+    if [ "$selected_policy_file" != "NONE" ]; then
+        case "$selected_policy_file" in
+            /*) ;;
+            *) selected_policy_file="$invocation_directory/$selected_policy_file" ;;
+        esac
+        remediation_arguments+=(--remediation-policy "$selected_policy_file")
+    fi
+    if [ "$selected_plan_file" != "NONE" ]; then
+        case "$selected_plan_file" in
+            /*) ;;
+            *) selected_plan_file="$invocation_directory/$selected_plan_file" ;;
+        esac
+        remediation_arguments+=(--plan-output "$selected_plan_file")
+    fi
+    if [ "${FORCE_AUTO_REMEDY_ATTEMPT:-false}" = "true" ]; then
+        remediation_arguments+=(--force-auto-remedy-attempt)
+    fi
+    if [ "${ALLOW_RUNTIME_OVERRIDE:-false}" = "true" ]; then
+        remediation_arguments+=(--allow-runtime-override)
+    fi
+    (
+        cd "$MAIN_DIR" || exit 3
+        "$python_command" "${remediation_arguments[@]}"
+    )
+}
+
 load_operator_locale

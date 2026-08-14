@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.1.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.2.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -20,7 +20,8 @@ Show only down or degraded services and investigation commands.
 .TP
 .BR \-v ", " \-\-vulnerabilities
 Show the latest vulnerability evidence and image-specific remediation
-commands. Add
+commands. In an interactive terminal, a vulnerable report continues into the
+guided remediation menu. Add
 .B \-\-menu
 to scan immediately or refresh the page.
 .TP
@@ -28,6 +29,12 @@ to scan immediately or refresh the page.
 Render candidate YAML through Docker Compose and map every live service only
 when its stack namespace, exact service name, and deployed image agree. The
 command is read-only and reports weak evidence as unknown or ambiguous.
+.TP
+.B \-\-remediate-vulnerabilities
+Open the interactive remediation workflow. It offers targeted service and
+image guidance, priority-ordered guidance, and policy-gated auto-remediation.
+No mutation is available without a terminal, a fresh complete scan, current
+manager access, and separate confirmations.
 .SH INVENTORY OPTIONS
 .TP
 .BR \-b ", " \-\-basic
@@ -77,6 +84,30 @@ Set an absolute directory searched recursively by deployment mapping. Repeat
 the option for multiple roots. Default: /swarm. The
 .B SWARM_INFO_DEPLOY_ROOTS
 environment variable provides a path-separated default.
+.TP
+.BI \-\-deployment-map-file " path"
+Load a previously reviewed deployment-map JSON for guidance. Auto-remediation
+regenerates live mapping evidence before it plans any mutation.
+.TP
+.BI \-\-remediation-policy " path"
+Load an installation-owned JSON policy containing exact services, immutable
+candidate images, backup classifications, and optional source adapters.
+.TP
+.BI \-\-remediation-plan-file " path"
+Select the atomically written dry-run plan and sanitized execution record.
+.TP
+.B \-\-force-auto-remedy-attempt
+Allow policy entries with
+.B auto_eligible=false
+to be attempted. This cannot bypass disabled entries, backup requirements,
+repository/digest checks, candidate scans, source preconditions, confirmation,
+convergence, post-validation, or rollback.
+.TP
+.B \-\-allow-runtime-override
+Permit a separately confirmed
+.B docker service update
+fallback for an unresolved deployment source. This creates configuration drift
+and remains disabled by default.
 .TP
 .B \-\-scan-vulnerabilities
 Force a locked scan of every unique current Swarm service image.
@@ -163,6 +194,14 @@ Preferred production vulnerability report.
 .I /info_json/service_deployment_map.json
 Suggested path for an explicitly generated deployment-map acceptance report.
 .TP
+.I /info_json/vulnerability_remediation_plan.json
+Default atomic remediation dry-run and sanitized execution record when the
+directory is writable.
+.TP
+.I config/remediation-policy.example.json
+Empty safe policy template; copy it into the installation's deployment
+repository and configure explicit targets there.
+.TP
 .I ~/.local/share/man/man1/swarm-info.1
 User-installed manual page.
 .SH ENVIRONMENT
@@ -171,6 +210,11 @@ User-installed manual page.
 Path-separated default deployment roots used when
 .B \-\-deploy-root
 is absent. Default: /swarm.
+.TP
+.B SWARM_INFO_REMEDIATION_POLICY
+Default installation-owned remediation policy path. An explicit
+.B \-\-remediation-policy
+value takes precedence.
 .TP
 .B SWARM_INFO_LOCALE
 Set to a value beginning with
@@ -187,6 +231,13 @@ Show the current vulnerability evidence:
 .PP
 .nf
 swarm-info -v
+.fi
+.PP
+Open remediation directly with an accepted search root and policy:
+.PP
+.nf
+swarm-info --remediate-vulnerabilities --deploy-root /swarm \
+  --remediation-policy /swarm/administration/swarm-info-watchdog/configs/remediation-policy.json
 .fi
 .SH AUTHOR
 Maintained by Sokrates1989.

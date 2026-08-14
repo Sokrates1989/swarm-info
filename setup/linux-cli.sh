@@ -168,7 +168,8 @@ configure_manual() {
 # 1 remains fatal because the tool cannot inspect the Swarm correctly.
 #
 # Returns:
-#     0 when core dependencies are ready, including when scanning is optional.
+#     0 when core dependencies are ready, including when optional security
+#     workflows still need tools.
 #     1 when core dependencies are unavailable or the checker cannot run.
 #
 # Side effects:
@@ -191,8 +192,8 @@ verify_runtime_dependencies() {
             ;;
         2)
             echo
-            echo "[WARN] Core swarm-info is installed, but vulnerability scanning is not ready."
-            echo "[WARN] Follow the Python/Docker Scout instructions above, then run:"
+            echo "[WARN] Core swarm-info is installed, but one or more security workflows are not ready."
+            echo "[WARN] Follow the Python/Docker Scout/Compose instructions above, then run:"
             echo "       swarm-info --check-dependencies"
             return 0
             ;;

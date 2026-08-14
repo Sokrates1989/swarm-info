@@ -5,9 +5,9 @@
 #
 # Description:
 #     Verifies the host capabilities used by swarm-info. Core checks cover the
-#     Docker manager environment and Git-backed update status. Scan checks add
-#     Python 3.10+ and Docker Scout, and print actionable installation guidance
-#     without modifying the host.
+#     Docker manager environment and Git-backed update status. Security checks
+#     add Python 3.10+ and Docker Scout; remediation checks additionally require
+#     Docker Compose v2. Guidance never modifies the host.
 #
 # Dependencies:
 #     - Bash 4+
@@ -25,11 +25,12 @@ CHECK_MODE="all"
 #     Nothing.
 # -----------------------------------------------------------------------------
 show_dependency_check_help() {
-    echo "Usage: $0 [--core|--scan|--all]"
+    echo "Usage: $0 [--core|--scan|--remediation|--all]"
     echo
     echo "  --core  Require Docker, an active manager node, and Git."
     echo "  --scan  Require core dependencies, Python 3.10+, and Docker Scout."
-    echo "  --all   Report core and scanning readiness (default)."
+    echo "  --remediation  Add Docker Compose v2 for deployment mapping/remediation."
+    echo "  --all   Report core, scanning, and remediation readiness (default)."
 }
 
 # -----------------------------------------------------------------------------
@@ -124,6 +125,23 @@ show_docker_scout_install_help() {
     echo "       docker login"
     echo "       About: https://docs.docker.com/scout/"
     echo "       Guide: https://github.com/docker/scout-cli#cli-plugin-installation"
+}
+
+# -----------------------------------------------------------------------------
+# Explain the Docker Compose v2 plugin required by deployment mapping.
+#
+# Returns:
+#     Nothing.
+# -----------------------------------------------------------------------------
+show_docker_compose_install_help() {
+    local privilege_prefix=""
+
+    privilege_prefix="$(dependency_privilege_prefix)"
+    echo "       Install the Docker Compose v2 CLI plugin:"
+    echo "       Debian/Ubuntu: ${privilege_prefix}apt-get install -y docker-compose-plugin"
+    echo "       RHEL/Fedora:   ${privilege_prefix}dnf install -y docker-compose-plugin"
+    echo "       Verify: docker compose version"
+    echo "       Guide: https://docs.docker.com/compose/install/linux/"
 }
 
 # -----------------------------------------------------------------------------
@@ -280,6 +298,27 @@ check_scan_dependencies() {
 }
 
 # -----------------------------------------------------------------------------
+# Verify Docker Compose v2 for deployment mapping and declarative remediation.
+#
+# Side effects:
+#     Updates SCAN_FAILURES and prints installation guidance.
+#
+# Returns:
+#     Always 0; the caller evaluates the accumulated failure count.
+# -----------------------------------------------------------------------------
+check_remediation_dependencies() {
+    echo
+    echo "Deployment remediation dependencies:"
+    if command -v docker >/dev/null 2>&1 &&
+        docker compose version >/dev/null 2>&1; then
+        echo "[OK] Docker Compose v2 is available for deployment mapping and remediation."
+    else
+        record_scan_failure "Docker Compose v2 is required for deployment mapping and declarative remediation."
+        show_docker_compose_install_help
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # Parse the requested check scope.
 #
 # Parameters:
@@ -303,6 +342,9 @@ parse_dependency_arguments() {
             ;;
         --scan)
             CHECK_MODE="scan"
+            ;;
+        --remediation)
+            CHECK_MODE="remediation"
             ;;
         --all)
             CHECK_MODE="all"
@@ -328,7 +370,8 @@ parse_dependency_arguments() {
 # Returns:
 #     0 when every selected dependency is ready.
 #     1 when one or more required core dependencies are unavailable.
-#     2 when core dependencies are ready but scan dependencies are unavailable.
+#     2 when core dependencies are ready but selected security tools are
+#       unavailable.
 #     64 when command-line arguments are invalid.
 # -----------------------------------------------------------------------------
 main() {
@@ -340,6 +383,9 @@ main() {
     if [ "$CHECK_MODE" != "core" ]; then
         check_scan_dependencies
     fi
+    if [ "$CHECK_MODE" = "all" ] || [ "$CHECK_MODE" = "remediation" ]; then
+        check_remediation_dependencies
+    fi
 
     echo
     if [ "$REQUIRED_FAILURES" -gt 0 ]; then
@@ -347,7 +393,7 @@ main() {
         return 1
     fi
     if [ "$SCAN_FAILURES" -gt 0 ]; then
-        echo "[WARN] Core commands are ready, but vulnerability scanning has $SCAN_FAILURES issue(s)." >&2
+        echo "[WARN] Core commands are ready, but selected security workflows have $SCAN_FAILURES issue(s)." >&2
         return 2
     fi
 

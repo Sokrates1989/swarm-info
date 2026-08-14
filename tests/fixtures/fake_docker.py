@@ -305,6 +305,12 @@ def main(arguments: list[str] | None = None) -> int:
             return 1
         print("version: v1.24.0")
         return 0
+    if command == ["compose", "version"]:
+        if scenario == "missing-compose":
+            print("docker: 'compose' is not a docker command", file=sys.stderr)
+            return 1
+        print("Docker Compose version v2.29.0")
+        return 0
     if command[:2] == ["scout", "cves"]:
         return handle_scout_cves(command, scenario)
     print(f"unsupported fake Docker command: {command}", file=sys.stderr)

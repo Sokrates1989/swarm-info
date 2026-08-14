@@ -115,9 +115,10 @@ Dependency-check exit codes are:
 | `2` | Core commands are ready, but Python or Docker Scout is unavailable. |
 | `64` | The dependency checker received invalid arguments. |
 
-The interactive no-option run remains the Swarm-manager tour. Automated
-`--json` collection avoids the optional Scout warning, while image scan
-commands always enforce their applicable preflight.
+The no-option run opens the established tour on a Swarm manager and selects
+the local-container security check on a standalone Docker host. Automated
+`--json` collection remains Swarm-specific, while image scan commands always
+enforce their applicable preflight.
 
 ---
 
@@ -168,6 +169,9 @@ swarm-info --security-check \
 
 Auto mode reads Docker capability rather than guessing from a distribution:
 
+- With no arguments, a manager opens the established Swarm tour while a
+  standalone host starts the compatible local-container security check and
+  warns that it may take several minutes.
 - A manager scans every Swarm service image with the established exact-digest
   local-first and registry-fallback policy.
 - Any other Docker host scans the exact content-addressed image IDs attached to
@@ -181,9 +185,23 @@ Auto mode reads Docker capability rather than guessing from a distribution:
 - `--platform` defaults to the Docker daemon platform in this mode, supporting
   common QNAP `amd64` and `arm64` systems.
 - The Python3 QPKG is discovered from `/etc/config/qpkg.conf` even when QNAP
-  exposes only the unrelated Python 2.7 command on `PATH`.
+  exposes only the unrelated Python 2.7 command on `PATH`. The supported QNAP
+  layout includes `<Install_Path>/opt/python3/bin/python3`.
 - The installer and guarded updater likewise discover the QGit QPKG when its
   `git` executable is not on `PATH`.
+- Docker Scout may be used through `docker scout` or directly from
+  `~/.docker/cli-plugins/docker-scout`. This supports vendor Docker builds that
+  do not expose an otherwise valid user plugin.
+
+QNAP's `/tmp` is commonly small. If Docker Scout extraction fails with a short
+write, rerun Docker's reviewed installer with temporary files on the data
+volume:
+
+```bash
+mkdir -p "$HOME/.tmp-scout"
+TMPDIR="$HOME/.tmp-scout" sh install-scout.sh
+"$HOME/.docker/cli-plugins/docker-scout" version
+```
 
 Without `--output-file`, compatibility evidence is atomically written to
 `swarm_info/security_scan.json`, separate from the Swarm watchdog's

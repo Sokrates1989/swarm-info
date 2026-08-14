@@ -231,6 +231,9 @@ class ContainerSecurityCheckTests(unittest.TestCase):
 
         self.assertIn('selected_action="security-check"', entrypoint)
         self.assertIn('"security-check")', entrypoint)
+        self.assertIn("select_default_action_for_docker_capability", entrypoint)
+        self.assertIn('ORIGINAL_ARGUMENT_COUNT="$#"', entrypoint)
+        self.assertIn('SECURITY_RUNTIME_MODE="containers"', entrypoint)
         self.assertIn("--container-mode", entrypoint)
         self.assertIn("--os=*", entrypoint)
         self.assertIn("-m scripts.security_check", bridge)

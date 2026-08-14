@@ -160,10 +160,8 @@ configure_command() {
     ln -sf "${INSTALL_DIRECTORY}/get_info.sh" "${LOCAL_BIN_DIRECTORY}/swarm-info"
     echo "[OK] Command created at ${LOCAL_BIN_DIRECTORY}/swarm-info"
 
-    # Guarantee at least one persistent shell profile for minimal Linux users.
-    if [ ! -f "${HOME}/.bashrc" ] && [ ! -f "${HOME}/.profile" ]; then
-        touch "${HOME}/.profile"
-    fi
+    # POSIX login shells such as QNAP's /bin/sh read .profile, not .bashrc.
+    touch "${HOME}/.profile"
     append_export_line "${HOME}/.bashrc"
     append_export_line "${HOME}/.profile"
 

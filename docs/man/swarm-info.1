@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.4.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.4.1" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -6,7 +6,9 @@ swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .RI [ options ]
 .SH DESCRIPTION
 .B swarm-info
-runs its full information tour on a Docker Swarm manager. The explicit
+runs its full information tour on a Docker Swarm manager. With no arguments on
+a standalone Docker host it instead starts the compatible local-container
+security check. The explicit
 .B \-\-security-check
 compatibility command also supports standalone Linux Docker hosts and QNAP
 Container Station without activating Swarm.

@@ -105,7 +105,7 @@ show_python_install_help() {
     echo "       Debian/Ubuntu: ${privilege_prefix}apt-get install -y python3"
     echo "       RHEL/Fedora:   ${privilege_prefix}dnf install -y python3"
     echo "       QNAP: install/enable the Python3 QPKG. swarm-info also checks its Install_Path."
-    echo "       QNAP verify: \"\$(getcfg Python3 Install_Path -f /etc/config/qpkg.conf)/bin/python3\" --version"
+    echo "       QNAP verified layout: <Install_Path>/opt/python3/bin/python3"
     echo "       Required version: Python 3.10 or newer."
 }
 
@@ -126,7 +126,10 @@ show_docker_scout_install_help() {
     echo "       curl -fsSL ${scout_installer_url} -o install-scout.sh"
     echo "       sed -n '1,240p' install-scout.sh"
     echo "       sh install-scout.sh"
+    echo '       QNAP: mkdir -p "$HOME/.tmp-scout"'
+    echo '       QNAP: TMPDIR="$HOME/.tmp-scout" sh install-scout.sh'
     echo "       docker scout version"
+    echo '       Direct fallback: "$HOME/.docker/cli-plugins/docker-scout" version'
     echo "       Registry-backed Swarm scans may additionally require: docker login"
     echo "       About: https://docs.docker.com/scout/"
     echo "       Guide: https://github.com/docker/scout-cli#cli-plugin-installation"
@@ -297,6 +300,8 @@ resolve_scanner_python() {
             candidates+=(
                 "$qnap_python_root/bin/python3"
                 "$qnap_python_root/bin/python"
+                "$qnap_python_root/opt/python3/bin/python3"
+                "$qnap_python_root/opt/python3/bin/python"
             )
         fi
     fi
@@ -305,6 +310,33 @@ resolve_scanner_python() {
         if { command -v "$candidate" >/dev/null 2>&1 || [ -x "$candidate" ]; } &&
             "$candidate" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' \
                 >/dev/null 2>&1; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Resolve Docker Scout through Docker or its standalone per-user executable.
+# -----------------------------------------------------------------------------
+resolve_docker_scout() {
+    local candidate=""
+    local candidates=(
+        "${SWARM_INFO_DOCKER_SCOUT_COMMAND:-}"
+        "$(command -v docker-scout 2>/dev/null || true)"
+        "$HOME/.docker/cli-plugins/docker-scout"
+        "$HOME/.docker/scout/docker-scout"
+    )
+
+    if command -v docker >/dev/null 2>&1 &&
+        docker scout version >/dev/null 2>&1; then
+        printf '%s' 'docker scout'
+        return 0
+    fi
+    for candidate in "${candidates[@]}"; do
+        if [ -n "$candidate" ] && [ -x "$candidate" ] &&
+            "$candidate" version >/dev/null 2>&1; then
             printf '%s' "$candidate"
             return 0
         fi
@@ -323,6 +355,7 @@ resolve_scanner_python() {
 # -----------------------------------------------------------------------------
 check_scan_dependencies() {
     local python_command=""
+    local scout_command=""
 
     echo
     echo "Vulnerability scanning dependencies:"
@@ -333,9 +366,8 @@ check_scan_dependencies() {
         show_python_install_help
     fi
 
-    if command -v docker >/dev/null 2>&1 &&
-        docker scout version >/dev/null 2>&1; then
-        echo "[OK] Docker Scout is available to user $(id -un)."
+    if scout_command="$(resolve_docker_scout)"; then
+        echo "[OK] Docker Scout is available to user $(id -un) via $scout_command."
         if [ "$CHECK_MODE" = "security" ]; then
             echo "[INFO] Local-container mode scans exact local image IDs and needs no registry login."
         else

@@ -371,6 +371,22 @@ check_applicable_swarm_info_dependencies() {
 }
 
 # -----------------------------------------------------------------------------
+# Select the only safe default tour for the detected Docker capability.
+# -----------------------------------------------------------------------------
+select_default_action_for_docker_capability() {
+    local docker_state=""
+
+    docker_state="$(docker info --format '{{.Swarm.LocalNodeState}}|{{.Swarm.ControlAvailable}}' 2>/dev/null || true)"
+    if [ "$docker_state" = "active|true" ]; then
+        return 0
+    fi
+    selected_action="security-check"
+    SECURITY_RUNTIME_MODE="containers"
+    echo "[INFO] No Swarm manager detected; running the compatible local-container security check."
+    echo "[INFO] Scanning all referenced images can take several minutes."
+}
+
+# -----------------------------------------------------------------------------
 # Display command-line help, wait for acknowledgement, and reopen the menu.
 #
 # Returns:
@@ -483,6 +499,7 @@ display_version() {
 
 
 # Default values for the selected action.
+ORIGINAL_ARGUMENT_COUNT="$#"
 selected_action="none"
 is_show_menu_option_selected="false"
 use_file_output="false"
@@ -804,6 +821,10 @@ done
 
 # Preserve the chosen freshness policy through the script-based tour chain.
 export VULNERABILITY_MAX_AGE_HOURS
+
+if [ "$ORIGINAL_ARGUMENT_COUNT" -eq 0 ]; then
+    select_default_action_for_docker_capability
+fi
 
 # Execute the selected action
 case "$selected_action" in

@@ -53,12 +53,16 @@ BASH_AVAILABLE = native_bash_is_available()
 class DependencyCheckTests(unittest.TestCase):
     """Verify readiness exit codes, guidance, and entry-point integration."""
 
-    def run_dependency_check(self, scenario: str, mode: str) -> subprocess.CompletedProcess[str]:
+    def run_dependency_check(
+        self, scenario: str, mode: str, standalone_scout: bool = False
+    ) -> subprocess.CompletedProcess[str]:
         """Run the dependency checker with a fake Docker executable.
 
         Args:
             scenario: Behavior selected through ``FAKE_DOCKER_SCENARIO``.
             mode: Dependency-check mode without the leading double dash.
+            standalone_scout: Provide a working direct Scout executable while
+                Docker's plugin dispatcher remains unavailable.
 
         Returns:
             Completed Bash process with captured text output.
@@ -83,6 +87,16 @@ class DependencyCheckTests(unittest.TestCase):
             fake_bc = fake_bin / "bc"
             fake_bc.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             fake_bc.chmod(0o755)
+
+            if standalone_scout:
+                fake_scout = fake_bin / "docker-scout"
+                fake_scout.write_text(
+                    "#!/bin/sh\n"
+                    "[ \"$1\" = version ] || exit 1\n"
+                    "echo 'version: v1.24.0 (linux/amd64)'\n",
+                    encoding="utf-8",
+                )
+                fake_scout.chmod(0o755)
 
             environment = os.environ.copy()
             environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
@@ -124,6 +138,18 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn("docker/scout-cli/main/install.sh", output)
         self.assertIn("docker scout version", output)
         self.assertIn("https://docs.docker.com/scout/", output)
+
+    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for shell execution.")
+    def test_standalone_scout_satisfies_qnap_security_preflight(self) -> None:
+        """Accept a valid direct binary when vendor Docker ignores plugins."""
+
+        result = self.run_dependency_check(
+            "missing-scout", "security", standalone_scout=True
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("via ", result.stdout)
+        self.assertIn("docker-scout", result.stdout)
 
     @unittest.skipUnless(
         BASH_AVAILABLE, "Native Bash is required for shell execution."
@@ -231,10 +257,14 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn('CHECK_MODE="security"', dependency_source)
         self.assertIn("Docker daemon access is available for local inventory", dependency_source)
         self.assertIn("getcfg Python3 Install_Path", dependency_source)
+        self.assertIn("opt/python3/bin/python3", dependency_source)
         self.assertIn("getcfg Python3 Install_Path", bridge_source)
+        self.assertIn("opt/python3/bin/python3", bridge_source)
+        self.assertIn(".tmp-scout", dependency_source)
         self.assertIn("getcfg QGit Install_Path", installer_source)
         self.assertIn('"$GIT_COMMAND" clone', installer_source)
         self.assertIn('check_mode="security"', installer_source)
+        self.assertIn('touch "${HOME}/.profile"', installer_source)
 
 
 class SelfUpdateTests(unittest.TestCase):

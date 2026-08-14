@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.0.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.1.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -23,6 +23,11 @@ Show the latest vulnerability evidence and image-specific remediation
 commands. Add
 .B \-\-menu
 to scan immediately or refresh the page.
+.TP
+.B \-\-map-service-deployments
+Render candidate YAML through Docker Compose and map every live service only
+when its stack namespace, exact service name, and deployed image agree. The
+command is read-only and reports weak evidence as unknown or ambiguous.
 .SH INVENTORY OPTIONS
 .TP
 .BR \-b ", " \-\-basic
@@ -65,7 +70,13 @@ Check whether the installed swarm-info checkout is current and modified.
 Collect and atomically publish the Swarm health JSON report.
 .TP
 .BI \-o " path" ", " \-\-output-file " path"
-Select the health or vulnerability report destination.
+Select the health, vulnerability, or deployment-map report destination.
+.TP
+.BI \-\-deploy-root " path"
+Set an absolute directory searched recursively by deployment mapping. Repeat
+the option for multiple roots. Default: /swarm. The
+.B SWARM_INFO_DEPLOY_ROOTS
+environment variable provides a path-separated default.
 .TP
 .B \-\-scan-vulnerabilities
 Force a locked scan of every unique current Swarm service image.
@@ -136,7 +147,8 @@ Healthy/clean evidence or a successful operational action.
 Invalid input, unavailable core dependency, or operational failure.
 .TP
 .B 2
-The requested operator report is valid and requires attention.
+The requested operator report requires attention, or deployment mapping found
+unknown or ambiguous services.
 .TP
 .B 3
 Vulnerability evidence is missing, incomplete, stale, or unavailable.
@@ -148,8 +160,36 @@ Preferred production health report.
 .I /info_json/vulnerability_scan.json
 Preferred production vulnerability report.
 .TP
+.I /info_json/service_deployment_map.json
+Suggested path for an explicitly generated deployment-map acceptance report.
+.TP
 .I ~/.local/share/man/man1/swarm-info.1
 User-installed manual page.
+.SH ENVIRONMENT
+.TP
+.B SWARM_INFO_DEPLOY_ROOTS
+Path-separated default deployment roots used when
+.B \-\-deploy-root
+is absent. Default: /swarm.
+.TP
+.B SWARM_INFO_LOCALE
+Set to a value beginning with
+.B de
+for German operator output; otherwise English is used.
+.SH EXAMPLES
+Verify service-to-stack mappings without changing the Swarm:
+.PP
+.nf
+swarm-info --map-service-deployments --deploy-root /swarm --output-file /info_json/service_deployment_map.json
+.fi
+.PP
+Show the current vulnerability evidence:
+.PP
+.nf
+swarm-info -v
+.fi
+.SH AUTHOR
+Maintained by Sokrates1989.
 .SH SEE ALSO
 .BR docker (1),
 .BR git (1)

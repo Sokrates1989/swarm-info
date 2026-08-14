@@ -369,6 +369,7 @@ display_help() {
     echo -e "  --cron-hour       Daily vulnerability cron hour (default: 3)"
     echo -e "  --cron-log-file   Optional vulnerability cron log destination"
     echo -e "  --cron-minute     Daily vulnerability cron minute (default: 17)"
+    echo -e "  --deploy-root     $OP_HELP_DEPLOY_ROOT"
     echo -e "  -d                Alias for --service-health"
     echo -e "  -f                Alias for --fast"
     echo -e "  --fast            Do not wait for keypress and display all information"
@@ -382,13 +383,15 @@ display_help() {
     echo -e "  --lock-file       Optional vulnerability job lock-file destination"
     echo -e "  --labels          Display Node label info (What labels are set to each node)"
     echo -e "  -m                Alias for --menu"
+    echo -e "  --map-service-deployments"
+    echo -e "                    $OP_HELP_DEPLOYMENT_MAP"
     echo -e "  --menu            Show menu (after displaying info, if used in combination with any single information option)"
     echo -e "  --max-age-hours   Vulnerability freshness limit (default: 30)"
     echo -e "  --net             Display network info"
     echo -e "  --network         Display network info"
     echo -e "  --node-services   Display service node information (What service is running on which node)"
     echo -e "  -o                Alias for --output-file"
-    echo -e "  --output-file     Health or vulnerability JSON destination"
+    echo -e "  --output-file     Health, vulnerability, or deployment-map JSON destination"
     echo -e "  --platform        Image platform for vulnerability scanning (default: linux/amd64)"
     echo -e "  --scan-vulnerabilities"
     echo -e "                    Force a locked scan of every Swarm service image"
@@ -411,6 +414,11 @@ display_help() {
     echo -e "  -V, --version     $OP_HELP_VERSION"
     echo -e "  -w                Alias for --wait"
     echo -e "  --wait            Show swarm info and wait after outputs to make it easier to read"
+    echo
+    echo "$OP_HELP_DEPLOYMENT_REQUIREMENT"
+    echo "$OP_HELP_EXAMPLES"
+    echo "  swarm-info --map-service-deployments --deploy-root /swarm"
+    echo "  swarm-info -v"
 
     if [ "$is_show_menu_option_selected" = "true" ]; then
         echo
@@ -440,6 +448,7 @@ VULNERABILITY_LOCK_FILE="NONE"
 VULNERABILITY_CRON_HOUR="3"
 VULNERABILITY_CRON_MINUTE="17"
 VULNERABILITY_CRON_LOG_FILE="NONE"
+DEPLOYMENT_ROOTS=()
 
 # Check for command-line options.
 while [ $# -gt 0 ]; do
@@ -496,6 +505,15 @@ while [ $# -gt 0 ]; do
             VULNERABILITY_CRON_MINUTE="$1"
             shift
             ;;
+        --deploy-root)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            DEPLOYMENT_ROOTS+=("$1")
+            shift
+            ;;
         -f|--fast)
             selected_action="fast"
             shift
@@ -541,6 +559,10 @@ while [ $# -gt 0 ]; do
             ;;
         -m|--menu)
             is_show_menu_option_selected="true"
+            shift
+            ;;
+        --map-service-deployments)
+            selected_action="map-service-deployments"
             shift
             ;;
         --max-age-hours)
@@ -668,6 +690,9 @@ case "$selected_action" in
         ;;
     "network")
         display_network_info
+        ;;
+    "map-service-deployments")
+        display_service_deployment_map
         ;;
     "nodes")
         display_node_info

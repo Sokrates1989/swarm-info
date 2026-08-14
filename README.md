@@ -130,6 +130,31 @@ swarm-info --vulnerabilities
 explicit action because it can be network- and CPU-intensive. View the
 version-matched command reference with `swarm-info --help` or `man swarm-info`.
 
+## Verify service deployment paths
+
+Before guided remediation uses local deployment paths, verify the conservative
+service mapper independently. It renders candidate YAML through Docker Compose
+but never changes Docker, stack files, or environment files:
+
+```bash
+swarm-info --map-service-deployments \
+  --deploy-root /swarm \
+  --output-file /info_json/service_deployment_map.json
+```
+
+`--deploy-root` is repeatable and defaults to `/swarm`. A path-separated
+`SWARM_INFO_DEPLOY_ROOTS` environment value can provide a different default.
+swarm-info extracts only `STACK_NAME` itself from a sibling `.env` file. Docker
+Compose receives that file to render the candidate; rendered environment data
+is neither printed nor stored. A mapping is accepted only when the live stack
+namespace, full Swarm service name, and rendered image all match. Competing
+directories become `ambiguous`; stale images, missing Compose support, and
+insufficient evidence remain `unknown` instead of being guessed.
+
+The JSON report records every service and all candidate files involved in an
+unresolved result. Review all mapped paths on the manager before allowing a
+future guided remediation workflow to use them.
+
 ## Safe self-update
 
 Update the installed checkout through swarm-info itself:

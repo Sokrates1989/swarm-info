@@ -4,7 +4,6 @@
 # Module: json_info.sh
 # Author: Sokrates1989
 # Date: 2026-02-10
-# Version: 1.0.0
 #
 # Description:
 #     Collects Docker Swarm service health data and outputs structured JSON.

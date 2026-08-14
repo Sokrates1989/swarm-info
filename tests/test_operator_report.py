@@ -103,7 +103,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.0.0")
+        self.assertEqual(version, "1.1.0")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:
@@ -121,6 +121,19 @@ class CliOperatorContractTests(unittest.TestCase):
         self.assertIn('"$SCRIPT_DIR/vulnerability_info.sh"', services)
         self.assertIn('--service-health', services)
 
+    def test_deployment_mapper_is_wired_as_a_read_only_public_action(self) -> None:
+        """Keep the standalone acceptance command connected to its Python CLI."""
+
+        entrypoint = (REPOSITORY_ROOT / "get_info.sh").read_text(encoding="utf-8")
+        bridge = (REPOSITORY_ROOT / "res" / "operator_cli.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('selected_action="map-service-deployments"', entrypoint)
+        self.assertIn('"map-service-deployments")', entrypoint)
+        self.assertIn("-m scripts.deployment_mapper", bridge)
+        self.assertNotIn("docker service update", bridge)
+
     def test_help_and_manual_cover_new_public_commands(self) -> None:
         """Prevent drift between help routing and the installed manual."""
 
@@ -129,7 +142,13 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        for command in ("--service-health", "--vulnerabilities", "--version"):
+        for command in (
+            "--service-health",
+            "--vulnerabilities",
+            "--map-service-deployments",
+            "--deploy-root",
+            "--version",
+        ):
             self.assertIn(command, entrypoint)
             self.assertIn(command.replace("--", r"\-\-"), manual)
 

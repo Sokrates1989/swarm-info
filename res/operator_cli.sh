@@ -146,4 +146,32 @@ display_vulnerability_guidance() {
     return "$result"
 }
 
+# -----------------------------------------------------------------------------
+# Map live services to conservatively verified local stack-file candidates.
+#
+# Global state:
+#     Reads DEPLOYMENT_ROOTS and CUSTOM_OUTPUT_FILE from the public dispatcher.
+#
+# Returns:
+#     0 when every service maps, 2 for unknown/ambiguous services, or 3 when
+#     inventory or report generation fails.
+# -----------------------------------------------------------------------------
+display_service_deployment_map() {
+    local deploy_root=""
+    local python_command=""
+    local mapper_arguments=(-m scripts.deployment_mapper)
+
+    python_command="$(resolve_vulnerability_python)" || return 3
+    for deploy_root in "${DEPLOYMENT_ROOTS[@]}"; do
+        mapper_arguments+=(--deploy-root "$deploy_root")
+    done
+    if [ "${CUSTOM_OUTPUT_FILE:-NONE}" != "NONE" ]; then
+        mapper_arguments+=(--output-file "$CUSTOM_OUTPUT_FILE")
+    fi
+    (
+        cd "$MAIN_DIR" || exit 3
+        "$python_command" "${mapper_arguments[@]}"
+    )
+}
+
 load_operator_locale

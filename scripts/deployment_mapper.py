@@ -80,6 +80,7 @@ def render_deployment_map(
             mapped=summary.get("mapped", 0),
             unknown=summary.get("unknown", 0),
             ambiguous=summary.get("ambiguous", 0),
+            unverified=summary.get("source_unverified", 0),
         )
     )
     if not isinstance(renderer, Mapping) or renderer.get("available") is not True:
@@ -102,6 +103,17 @@ def render_deployment_map(
                     image=safe_text(service.get("image") or "unknown"),
                 )
             )
+            if service.get("source_verified") is False:
+                lines.append(
+                    message(
+                        catalog,
+                        "deployment.sourceUnverified",
+                        reason=reason_text(catalog, service.get("reason")),
+                        declared_image=safe_text(
+                            service.get("declared_image") or catalog["common.none"]
+                        ),
+                    )
+                )
         else:
             lines.append(
                 message(
@@ -171,7 +183,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
         )
     summary = report["summary"]
-    return 0 if summary["unknown"] == 0 and summary["ambiguous"] == 0 else 2
+    return (
+        0
+        if summary["unknown"] == 0
+        and summary["ambiguous"] == 0
+        and summary.get("source_unverified", 0) == 0
+        else 2
+    )
 
 
 if __name__ == "__main__":

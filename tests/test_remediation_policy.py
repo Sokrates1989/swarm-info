@@ -230,6 +230,29 @@ class RemediationPolicyTests(unittest.TestCase):
         self.assertEqual(plan["entries"][0]["action"], "runtime-override")
         self.assertEqual(vulnerable_items(vulnerability_report())[0]["critical"], 2)
 
+    def test_unverified_mapped_source_uses_runtime_override(self) -> None:
+        """Never auto-edit a path found through drift or fallback rendering."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stack_file = root / "swarm-stack.yml"
+            stack_file.write_text("services: {}\n", encoding="utf-8")
+            mapping = deployment_map(root, stack_file)
+            mapping["services"][0]["source_verified"] = False
+            policy = load_policy(
+                write_policy(
+                    root,
+                    policy_payload(
+                        source={"type": "yaml_image", "file": "swarm-stack.yml"}
+                    ),
+                )
+            )
+
+            plan = build_plan(vulnerability_report(), mapping, policy)
+
+        self.assertEqual(plan["entries"][0]["action"], "runtime-override")
+        self.assertTrue(plan["entries"][0]["eligible"])
+
     def test_mutable_current_image_blocks_exact_rollback_plan(self) -> None:
         """Refuse automatic mutation when the previous artifact cannot be restored."""
 
@@ -340,6 +363,31 @@ class RemediationSourceTests(unittest.TestCase):
                 prepare_source_change(policy.targets[0], plan["entries"][0])
 
         self.assertEqual(context.exception.code, "source-image-stale")
+
+    def test_unverified_mapper_source_is_rejected_before_file_read(self) -> None:
+        """Enforce the mapper safety flag at the source-edit boundary too."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stack_file = root / "swarm-stack.yml"
+            stack_file.write_text("services: {}\n", encoding="utf-8")
+            policy = load_policy(
+                write_policy(
+                    root,
+                    policy_payload(
+                        source={"type": "yaml_image", "file": "swarm-stack.yml"}
+                    ),
+                )
+            )
+            mapping = deployment_map(root, stack_file)
+            mapping["services"][0]["source_verified"] = False
+            plan = build_plan(vulnerability_report(), mapping, policy)
+            plan["entries"][0]["action"] = "declarative"
+
+            with self.assertRaises(SourceEditError) as context:
+                prepare_source_change(policy.targets[0], plan["entries"][0])
+
+        self.assertEqual(context.exception.code, "declarative-evidence-required")
 
     def test_simple_yaml_image_is_pinned_to_candidate_digest(self) -> None:
         """Support an exact scalar image while rejecting generic YAML rewriting."""

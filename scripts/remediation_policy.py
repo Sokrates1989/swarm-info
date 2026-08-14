@@ -384,7 +384,12 @@ def build_plan(
         if not target.auto_eligible and not force_attempt:
             reasons.append("auto-not-authorized")
         mapping_status = mapping.get("status", "unknown")
-        action = "declarative" if mapping_status == "mapped" else "runtime-override"
+        source_verified = mapping.get("source_verified", True) is True
+        action = (
+            "declarative"
+            if mapping_status == "mapped" and source_verified
+            else "runtime-override"
+        )
         if action == "declarative" and target.source is None:
             reasons.append("source-adapter-missing")
         entry = {

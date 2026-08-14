@@ -98,6 +98,11 @@ def _mapping_guidance(
             )
             print(f"  {shlex.join(['cd', '--', directory])}", file=output)
             print(message(catalog, "remediation.detailSource", stack_file=stack_file), file=output)
+            if record.get("source_verified") is False:
+                print(
+                    message(catalog, "remediation.detailSourceUnverified"),
+                    file=output,
+                )
             continue
         reason = _localized_code(
             catalog,

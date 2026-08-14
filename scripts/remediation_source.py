@@ -238,6 +238,7 @@ def prepare_source_change(
         target.source is None
         or not isinstance(mapping, Mapping)
         or mapping.get("status") != "mapped"
+        or mapping.get("source_verified", True) is not True
         or not isinstance(current_image, str)
     ):
         raise SourceEditError("declarative-evidence-required")

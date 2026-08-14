@@ -160,18 +160,37 @@ swarm-info --map-service-deployments \
 
 `--deploy-root` is repeatable and defaults to `/swarm`. A path-separated
 `SWARM_INFO_DEPLOY_ROOTS` environment value can provide a different default.
-swarm-info extracts only `STACK_NAME` itself from a sibling `.env` file. Docker
-Compose receives that file to render the candidate; rendered environment data
-is neither printed nor stored. A mapping is accepted only when the live stack
-namespace, full Swarm service name, and rendered image all match. Competing
-directories become `ambiguous`; stale images, missing Compose support, and
-insufficient evidence remain `unknown` instead of being guessed.
+Legacy locations are never added implicitly. For example, inspect an old
+Gluster deployment only when you intend to include it:
 
-The JSON report records every service and all candidate files involved in an
-unresolved result. Review all mapped paths on the manager before allowing the
-guided remediation workflow to use them. You can pass an accepted report with
-`--deployment-map-file`; auto-remediation still regenerates live mapping
-evidence before planning a mutation.
+```bash
+swarm-info --map-service-deployments \
+  --deploy-root /swarm \
+  --deploy-root /gluster_storage/swarm
+```
+
+Docker Compose receives each candidate's sibling `.env`; rendered environment
+data is discarded except for service names and image references. `STACK_NAME`
+is preferred. When it is absent, swarm-info accepts the stack identity only if
+exact live service names and images identify one unique Swarm stack. If a
+malformed `.env` prevents rendering but an explicit `STACK_NAME` exists,
+Compose defaults may identify the path while the source remains unverified.
+
+A unique stack/service match with a stale declared image is reported as mapped
+path ownership with `source_verified=false`, not as a safe source match. Guided
+mode can show that directory, but automatic declarative editing is disabled and
+the guarded runtime-override path is used instead. Competing files or
+directories remain `ambiguous`; missing Compose support and insufficient
+evidence remain `unknown`. Historical YAML aliases containing markers such as
+`.backup.`, `.old.`, or `.disabled.` and backup directories are ignored.
+
+Deployment-map schema version 2 records every service, candidate files involved
+in unresolved results, declared/live image agreement, stack-name evidence,
+render source, and the `source_verified` mutation gate. Review all mapped paths
+on the manager before allowing guided remediation to use them. You can pass an
+accepted report with `--deployment-map-file`; auto-remediation still regenerates
+live mapping evidence before planning a mutation. The mapper returns exit code
+`2` while any path is unknown, ambiguous, or backed by an unverified source.
 
 ## Guided and safe auto-remediation
 

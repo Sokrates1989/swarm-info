@@ -1,10 +1,10 @@
 """Conservatively map live Swarm services to declarative stack files.
 
-The mapper extracts only ``STACK_NAME`` itself from sibling ``.env`` files and
-asks Docker Compose to render candidate YAML with that environment file.
-Rendered environment data is discarded. It records a deployment only when the
-stack name, rendered service name, and deployed image all agree. Missing or
-conflicting evidence remains explicitly unknown or ambiguous.
+The mapper asks Docker Compose to render candidate YAML and discards every
+rendered field except service names and image references. It accepts path
+ownership only from an explicit stack identity or a unique consensus of exact
+live service/image matches. Source drift and fallback rendering remain visible
+and can never authorize automatic declarative edits.
 """
 
 from __future__ import annotations
@@ -32,6 +32,17 @@ EXCLUDED_DIRECTORY_NAMES = frozenset(
     }
 )
 STACK_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
+HISTORICAL_YAML_MARKERS = (
+    ".backup.",
+    ".bak.",
+    ".copy.",
+    ".disabled.",
+    ".old.",
+    ".orig.",
+    ".previous.",
+    ".temp.",
+    ".template.",
+)
 
 
 class DeploymentRootError(ValueError):
@@ -68,7 +79,9 @@ class StackCandidate:
         deploy_root: Configured search root containing the candidate.
         directory: Directory that owns the sibling ``.env`` file.
         stack_file: Rendered YAML file.
-        stack_name: Explicit ``STACK_NAME`` read from ``.env``.
+        stack_name: Explicit or uniquely inferred live stack namespace.
+        stack_name_source: ``dotenv`` or ``live-service-consensus``.
+        render_source: ``sibling-env`` or the fail-closed ``defaults-only``.
         services: Rendered Compose service keys mapped to image references.
     """
 
@@ -76,6 +89,8 @@ class StackCandidate:
     directory: Path
     stack_file: Path
     stack_name: str
+    stack_name_source: str
+    render_source: str
     services: Mapping[str, str]
 
 
@@ -92,6 +107,11 @@ class ServiceDeployment:
     directory: str | None = None
     stack_file: str | None = None
     compose_service: str | None = None
+    declared_image: str | None = None
+    source_image_matches_live: bool | None = None
+    source_verified: bool = False
+    stack_name_source: str | None = None
+    render_source: str | None = None
     candidate_files: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -107,6 +127,11 @@ class ServiceDeployment:
             "directory": self.directory,
             "stack_file": self.stack_file,
             "compose_service": self.compose_service,
+            "declared_image": self.declared_image,
+            "source_image_matches_live": self.source_image_matches_live,
+            "source_verified": self.source_verified,
+            "stack_name_source": self.stack_name_source,
+            "render_source": self.render_source,
             "candidate_files": list(self.candidate_files),
         }
 
@@ -168,7 +193,7 @@ def read_stack_name(environment_file: Path) -> str | None:
 
 
 def candidate_yaml_files(root: Path) -> list[Path]:
-    """Find non-generated YAML files without following directory symlinks."""
+    """Find active YAML files without following symlinks or backup aliases."""
 
     candidates: list[Path] = []
     for current_directory, directory_names, filenames in os.walk(
@@ -187,7 +212,7 @@ def candidate_yaml_files(root: Path) -> list[Path]:
             if not lowered.endswith((".yml", ".yaml")):
                 continue
             if lowered.startswith(".") or any(
-                marker in lowered for marker in (".template.", ".temp.")
+                marker in lowered for marker in HISTORICAL_YAML_MARKERS
             ):
                 continue
             candidate = current / filename
@@ -197,20 +222,13 @@ def candidate_yaml_files(root: Path) -> list[Path]:
     return candidates
 
 
-def render_stack_candidate(
+def rendered_services(
     client: DockerClientLike,
-    root: Path,
     stack_file: Path,
-    live_stack_names: set[str],
-) -> StackCandidate | None:
+    environment_file: Path,
+) -> dict[str, str] | None:
     """Render one candidate and retain only image-bearing Compose services."""
 
-    environment_file = stack_file.parent / ".env"
-    if environment_file.is_symlink():
-        return None
-    stack_name = read_stack_name(environment_file)
-    if stack_name is None or stack_name not in live_stack_names:
-        return None
     result = client.run(
         [
             "compose",
@@ -235,15 +253,73 @@ def render_stack_candidate(
     services: dict[str, str] = {}
     for service_name, service in raw_services.items():
         image = service.get("image") if isinstance(service, Mapping) else None
-        if isinstance(service_name, str) and service_name and isinstance(image, str) and image:
+        if (
+            isinstance(service_name, str)
+            and service_name
+            and isinstance(image, str)
+            and image
+        ):
             services[service_name] = image
-    if not services:
+    return services or None
+
+
+def inferred_stack_name(
+    services: Mapping[str, str],
+    live_services: Sequence[ServiceRecord],
+) -> str | None:
+    """Infer one stack only from exact live service names and image matches."""
+
+    matching_stacks = {
+        live.stack
+        for live in live_services
+        for compose_service, declared_image in services.items()
+        if isinstance(live.stack, str)
+        and live.name == f"{live.stack}_{compose_service}"
+        and image_references_match(declared_image, live.image)
+    }
+    return next(iter(matching_stacks)) if len(matching_stacks) == 1 else None
+
+
+def render_stack_candidate(
+    client: DockerClientLike,
+    root: Path,
+    stack_file: Path,
+    live_services: Sequence[ServiceRecord],
+) -> StackCandidate | None:
+    """Render and identify one candidate without trusting weak path heuristics."""
+
+    environment_file = stack_file.parent / ".env"
+    if environment_file.is_symlink():
+        return None
+    explicit_stack_name = read_stack_name(environment_file)
+    live_stack_names = {
+        service.stack for service in live_services if isinstance(service.stack, str)
+    }
+    if (
+        explicit_stack_name is not None
+        and explicit_stack_name not in live_stack_names
+    ):
+        return None
+
+    services = rendered_services(client, stack_file, environment_file)
+    render_source = "sibling-env"
+    if services is None and explicit_stack_name is not None:
+        services = rendered_services(client, stack_file, Path(os.devnull))
+        render_source = "defaults-only"
+    if services is None:
+        return None
+    stack_name = explicit_stack_name or inferred_stack_name(services, live_services)
+    if stack_name is None:
         return None
     return StackCandidate(
         deploy_root=root,
         directory=stack_file.parent,
         stack_file=stack_file,
         stack_name=stack_name,
+        stack_name_source=(
+            "dotenv" if explicit_stack_name is not None else "live-service-consensus"
+        ),
+        render_source=render_source,
         services=services,
     )
 
@@ -298,7 +374,7 @@ def mapped_service(
     service: ServiceRecord,
     candidates: Sequence[StackCandidate],
 ) -> ServiceDeployment:
-    """Resolve one service only when stack, name, and image evidence agree."""
+    """Resolve one unique owning file while retaining source-drift evidence."""
 
     if not service.stack:
         return ServiceDeployment(
@@ -329,25 +405,14 @@ def mapped_service(
             ),
         )
     image_matches = [
-        (candidate, compose_service)
+        (candidate, compose_service, declared_image)
         for candidate, compose_service, declared_image in name_matches
         if image_references_match(declared_image, service.image)
     ]
-    if not image_matches:
-        return ServiceDeployment(
-            service.name,
-            service.stack,
-            service.image,
-            "unknown",
-            "image-mismatch",
-            candidate_files=tuple(
-                sorted({str(candidate.stack_file) for candidate, _, _ in name_matches})
-            ),
-        )
-
-    directories = {candidate.directory for candidate, _ in image_matches}
+    preferred_matches = image_matches or name_matches
+    directories = {candidate.directory for candidate, _, _ in preferred_matches}
     candidate_files = tuple(
-        sorted({str(candidate.stack_file) for candidate, _ in image_matches})
+        sorted({str(candidate.stack_file) for candidate, _, _ in preferred_matches})
     )
     if len(directories) != 1:
         return ServiceDeployment(
@@ -358,7 +423,7 @@ def mapped_service(
             "multiple-deployment-directories",
             candidate_files=candidate_files,
         )
-    if len(image_matches) != 1:
+    if len(preferred_matches) != 1:
         return ServiceDeployment(
             service.name,
             service.stack,
@@ -367,17 +432,32 @@ def mapped_service(
             "multiple-stack-files",
             candidate_files=candidate_files,
         )
-    candidate, compose_service = image_matches[0]
+    candidate, compose_service, declared_image = preferred_matches[0]
+    image_matches_live = bool(image_matches)
+    source_verified = (
+        image_matches_live and candidate.render_source == "sibling-env"
+    )
+    if source_verified:
+        reason = "matched-stack-service-image"
+    elif image_matches_live:
+        reason = "matched-stack-service-fallback-render"
+    else:
+        reason = "matched-stack-service-source-drift"
     return ServiceDeployment(
         service.name,
         service.stack,
         service.image,
         "mapped",
-        "matched-stack-service-image",
+        reason,
         deploy_root=str(candidate.deploy_root),
         directory=str(candidate.directory),
         stack_file=str(candidate.stack_file),
         compose_service=compose_service,
+        declared_image=declared_image,
+        source_image_matches_live=image_matches_live,
+        source_verified=source_verified,
+        stack_name_source=candidate.stack_name_source,
+        render_source=candidate.render_source,
         candidate_files=candidate_files,
     )
 
@@ -412,12 +492,9 @@ def build_deployment_map(
 
     candidates: list[StackCandidate] = []
     if renderer_available:
-        live_stack_names = {
-            service.stack for service in services if isinstance(service.stack, str)
-        }
         for root, stack_file in yaml_files:
             rendered = render_stack_candidate(
-                client, root, stack_file, live_stack_names
+                client, root, stack_file, services
             )
             if rendered is not None:
                 candidates.append(rendered)
@@ -441,8 +518,12 @@ def build_deployment_map(
         status: sum(mapping.status == status for mapping in mappings)
         for status in ("mapped", "unknown", "ambiguous")
     }
+    source_unverified = sum(
+        mapping.status == "mapped" and not mapping.source_verified
+        for mapping in mappings
+    )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": utc_timestamp(),
         "deploy_roots": [str(root) for root in roots],
         "renderer": {
@@ -452,6 +533,7 @@ def build_deployment_map(
         "summary": {
             "service_count": len(mappings),
             **counts,
+            "source_unverified": source_unverified,
             "yaml_files_considered": len(yaml_files),
             "rendered_stack_files": len(candidates),
         },

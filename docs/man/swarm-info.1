@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.2.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.3.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -26,9 +26,12 @@ guided remediation menu. Add
 to scan immediately or refresh the page.
 .TP
 .B \-\-map-service-deployments
-Render candidate YAML through Docker Compose and map every live service only
-when its stack namespace, exact service name, and deployed image agree. The
-command is read-only and reports weak evidence as unknown or ambiguous.
+Render candidate YAML through Docker Compose and map each live service to one
+unique owning stack file. Missing stack names require exact live service/image
+consensus. Source-image drift and defaults-only fallback rendering are marked
+unverified and cannot authorize automatic source editing. The command is
+read-only, reports conflicting evidence as ambiguous, and exits with status 2
+while any path or source remains unverified.
 .TP
 .B \-\-remediate-vulnerabilities
 Open the interactive remediation workflow. It offers targeted service and

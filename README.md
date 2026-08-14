@@ -247,6 +247,39 @@ by defined containers; it does not patch QTS, change containers, inspect unused
 images, audit Docker runtime hardening (privileged mode, mounts, ports), or run
 Swarm deployment mapping/remediation on a standalone host.
 
+## Safe unused-image cleanup
+
+Review cleanup candidates on QNAP, standalone Docker, or a Swarm manager:
+
+```bash
+# Read-only review; no image is removed
+swarm-info -i
+
+# Review, then request default-No confirmation before removal
+swarm-info -i --apply
+
+# Explicit non-interactive automation
+swarm-info -i --apply --yes \
+  --output-file /share/Public/swarm-info/image_cleanup.json
+```
+
+Cleanup always covers only the current Docker node. It protects images used by
+running or stopped local containers. On a manager it additionally protects
+every locally available image declared by a Swarm service, including
+scaled-to-zero services. Deletion is refused on Swarm workers because they
+cannot inventory all service declarations. Run the command separately on each
+node when node-local cleanup is intended.
+
+The `i` shortcut in either interactive menu opens the same review and then
+offers the default-No removal confirmation. Direct `swarm-info -i` remains a
+read-only command.
+
+The candidate size is an upper bound based on virtual image sizes; shared layers
+mean actual recovered storage is normally smaller. Before an approved cleanup,
+swarm-info repeats the complete safety inventory and removes only image IDs that
+were both reviewed and remain unused. It never uses `--force`, never pulls from
+a registry, and never schedules cleanup automatically.
+
 When a fresh vulnerable report is shown in an interactive terminal,
 `swarm-info -v` continues directly into the remediation menu. It offers:
 

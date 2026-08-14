@@ -6,12 +6,12 @@
 # Description:
 #     Main command dispatcher for Docker Swarm status, inventory, diagnostics,
 #     guarded self-updates, JSON health collection, and manual image
-#     vulnerability scanning, and portable local-container security checks.
+#     vulnerability scanning, portable security checks, and safe image cleanup.
 #
 # Dependencies:
 #     - Bash 4+ for Swarm operations; Bash 3+ for --security-check
 #     - Docker CLI
-#     - Python 3.10+ and Docker Scout for image security checks
+#     - Python 3.10+ for cleanup; Docker Scout additionally for security checks
 # =============================================================================
 
 # Get the directory of the script, handling symlinks properly.
@@ -28,6 +28,7 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
 # Global functions.
 source "$SCRIPT_DIR/functions.sh"
 source "$SCRIPT_DIR/vulnerability_cli.sh"
+source "$SCRIPT_DIR/image_cleanup_cli.sh"
 source "$SCRIPT_DIR/operator_cli.sh"
 
 # Define the number of pages when showing all information.
@@ -422,6 +423,10 @@ display_help() {
     echo -e "  --help            Display this help message"
     echo -e "  --json            Save and display info in json format"
     echo -e "  --history-days    Vulnerability report retention days (default: 14)"
+    echo -e "  -i                Alias for --image-cleanup"
+    echo -e "  --image-cleanup   Review unused local images without deleting by default"
+    echo -e "  --apply           With --image-cleanup, request confirmed removal"
+    echo -e "  --yes             With --image-cleanup --apply, confirm non-interactively"
     echo -e "  --force-auto-remedy-attempt"
     echo -e "                    $OP_HELP_FORCE_REMEDY"
     echo -e "  --install-vulnerability-cron"
@@ -438,7 +443,7 @@ display_help() {
     echo -e "  --network         Display network info"
     echo -e "  --node-services   Display service node information (What service is running on which node)"
     echo -e "  -o                Alias for --output-file"
-    echo -e "  --output-file     Health, vulnerability, or deployment-map JSON destination"
+    echo -e "  --output-file     Health, scan, map, or image-cleanup JSON destination"
     echo -e "  --platform        Swarm default: linux/amd64; security-check default: auto"
     echo -e "  --scan-vulnerabilities"
     echo -e "                    Force a locked scan of every Swarm service image"
@@ -479,6 +484,8 @@ display_help() {
     echo "$OP_HELP_EXAMPLES"
     echo "  swarm-info --security-check"
     echo "  swarm-info --security-check --container-mode --os=qnap"
+    echo "  swarm-info -i"
+    echo "  swarm-info -i --apply"
     echo "  swarm-info --map-service-deployments --deploy-root /swarm"
     echo "  swarm-info -v"
     echo "  swarm-info --remediate-vulnerabilities --deploy-root /swarm"
@@ -522,6 +529,8 @@ REMEDIATION_POLICY_FILE="NONE"
 REMEDIATION_PLAN_FILE="NONE"
 FORCE_AUTO_REMEDY_ATTEMPT="false"
 ALLOW_RUNTIME_OVERRIDE="false"
+IMAGE_CLEANUP_APPLY="false"
+IMAGE_CLEANUP_ASSUME_YES="false"
 
 # Check for command-line options.
 while [ $# -gt 0 ]; do
@@ -616,6 +625,18 @@ while [ $# -gt 0 ]; do
             fi
             shift
             VULNERABILITY_HISTORY_DAYS="$1"
+            shift
+            ;;
+        -i|--image-cleanup)
+            selected_action="image-cleanup"
+            shift
+            ;;
+        --apply)
+            IMAGE_CLEANUP_APPLY="true"
+            shift
+            ;;
+        --yes)
+            IMAGE_CLEANUP_ASSUME_YES="true"
             shift
             ;;
         --force-auto-remedy-attempt)
@@ -819,6 +840,16 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+if [ "$IMAGE_CLEANUP_ASSUME_YES" = "true" ] && [ "$IMAGE_CLEANUP_APPLY" != "true" ]; then
+    echo "[ERROR] --yes requires --apply." >&2
+    exit 64
+fi
+if { [ "$IMAGE_CLEANUP_APPLY" = "true" ] || [ "$IMAGE_CLEANUP_ASSUME_YES" = "true" ]; } \
+    && [ "$selected_action" != "image-cleanup" ]; then
+    echo "[ERROR] --apply and --yes are valid only with --image-cleanup." >&2
+    exit 64
+fi
+
 # Preserve the chosen freshness policy through the script-based tour chain.
 export VULNERABILITY_MAX_AGE_HOURS
 
@@ -839,6 +870,9 @@ case "$selected_action" in
         ;;
     "install-vulnerability-cron")
         configure_vulnerability_cron install
+        ;;
+    "image-cleanup")
+        run_image_cleanup
         ;;
     "fast")
         display_all_swarm_info_fast

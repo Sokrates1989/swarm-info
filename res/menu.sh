@@ -25,6 +25,7 @@ show_menu_options() {
     echo
     echo "d) $OP_SERVICE_HEALTH ( -d )"
     echo "v) $OP_VULNERABILITIES ( -v )"
+    echo "i) Review / clean unused local images ( -i )"
     echo
     echo "s) Check this tool's state ( --state )"
     echo "h) Help"
@@ -80,6 +81,11 @@ show_menu() {
                 ;;
             v)
                 show_vulnerability_info
+                echo
+                break
+                ;;
+            i)
+                show_image_cleanup
                 echo
                 break
                 ;;
@@ -151,6 +157,7 @@ show_individual_info_options() {
     echo "0) Check this tool's state        (swarm-info --state (--menu) )"
     echo "d) $OP_SERVICE_HEALTH        (swarm-info -d (--menu) )"
     echo "v) $OP_VULNERABILITY_REMEDIATION     (swarm-info -v (--menu) )"
+    echo "i) Review / clean unused local images (swarm-info -i )"
     echo
     echo "b) Back to main menu"
     echo "q) Quit"
@@ -233,6 +240,11 @@ show_individual_info_menu() {
                 echo
                 break
                 ;;
+            i)
+                show_image_cleanup
+                echo
+                break
+                ;;
             b)
                 show_menu
                 echo
@@ -268,6 +280,11 @@ show_service_health() {
 # Function to show vulnerability evidence and remediation.
 show_vulnerability_info() {
     bash "$MAIN_DIR/get_info.sh" -v --menu
+}
+
+# Function to review unused images on the current Docker node.
+show_image_cleanup() {
+    bash "$MAIN_DIR/get_info.sh" -i --apply
 }
 
 # Function to show stacks info.

@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.5.2" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.6.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -75,6 +75,22 @@ Show local Docker information.
 .BR \-c ", " \-\-commands
 Show the curated Docker and Swarm command reference.
 .TP
+.BR \-i ", " \-\-image-cleanup
+Review images unused on the current Docker node. Running and stopped container
+images are protected. A manager also protects locally available images declared
+by any Swarm service. Swarm workers are read-only because they lack complete
+service visibility.
+.TP
+.B \-\-apply
+With
+.BR \-\-image-cleanup ,
+request removal after a default-No confirmation and a fresh safety inventory.
+.TP
+.B \-\-yes
+With
+.BR "\-\-image-cleanup \-\-apply" ,
+confirm removal non-interactively. Exact image IDs are removed without force.
+.TP
 .B \-\-state
 Check whether the installed swarm-info checkout is current and modified.
 .SH REPORT AND SCAN OPTIONS
@@ -83,7 +99,8 @@ Check whether the installed swarm-info checkout is current and modified.
 Collect and atomically publish the Swarm health JSON report.
 .TP
 .BI \-o " path" ", " \-\-output-file " path"
-Select the health, vulnerability, or deployment-map report destination.
+Select the health, vulnerability, deployment-map, or image-cleanup report
+destination.
 .TP
 .BI \-\-deploy-root " path"
 Set an absolute directory searched recursively by deployment mapping. Repeat
@@ -228,7 +245,8 @@ The requested operator report requires attention, or deployment mapping found
 unknown or ambiguous services.
 .TP
 .B 3
-Vulnerability evidence is missing, incomplete, stale, or unavailable.
+Vulnerability evidence is missing, incomplete, stale, or unavailable; or image
+cleanup could not establish or complete its requested safe operation.
 .SH FILES
 .TP
 .I /info_json/swarm_info.json
@@ -288,6 +306,18 @@ Scan exact images used by local QNAP containers:
 .nf
 swarm-info --security-check --container-mode --os=qnap \
   --output-file /share/Public/swarm-info/security_scan.json
+.fi
+.PP
+Review unused images on the current Docker node without deleting:
+.PP
+.nf
+swarm-info -i
+.fi
+.PP
+Review again and request default-No confirmation before removal:
+.PP
+.nf
+swarm-info -i --apply
 .fi
 .PP
 Open remediation directly with an accepted search root and policy:

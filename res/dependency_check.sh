@@ -75,7 +75,12 @@ show_git_install_help() {
 
     privilege_prefix="$(dependency_privilege_prefix)"
     echo "       Debian/Ubuntu: ${privilege_prefix}apt-get install -y git"
-    echo "       RHEL/Fedora:   ${privilege_prefix}dnf install -y git"
+    echo "       Fedora/RHEL:   ${privilege_prefix}dnf install -y git"
+    echo "       Legacy RHEL:   ${privilege_prefix}yum install -y git"
+    echo "       openSUSE:      ${privilege_prefix}zypper install git"
+    echo "       Arch/Manjaro:  ${privilege_prefix}pacman -S --needed git"
+    echo "       Alpine:        ${privilege_prefix}apk add git"
+    echo "       QNAP: install/enable the QGit QPKG."
 }
 
 # -----------------------------------------------------------------------------
@@ -89,7 +94,11 @@ show_bc_install_help() {
 
     privilege_prefix="$(dependency_privilege_prefix)"
     echo "       Debian/Ubuntu: ${privilege_prefix}apt-get install -y bc"
-    echo "       RHEL/Fedora:   ${privilege_prefix}dnf install -y bc"
+    echo "       Fedora/RHEL:   ${privilege_prefix}dnf install -y bc"
+    echo "       Legacy RHEL:   ${privilege_prefix}yum install -y bc"
+    echo "       openSUSE:      ${privilege_prefix}zypper install bc"
+    echo "       Arch/Manjaro:  ${privilege_prefix}pacman -S --needed bc"
+    echo "       Alpine:        ${privilege_prefix}apk add bc"
 }
 
 # -----------------------------------------------------------------------------
@@ -103,7 +112,11 @@ show_python_install_help() {
 
     privilege_prefix="$(dependency_privilege_prefix)"
     echo "       Debian/Ubuntu: ${privilege_prefix}apt-get install -y python3"
-    echo "       RHEL/Fedora:   ${privilege_prefix}dnf install -y python3"
+    echo "       Fedora/RHEL:   ${privilege_prefix}dnf install -y python3"
+    echo "       Legacy RHEL:   ${privilege_prefix}yum install -y python3"
+    echo "       openSUSE:      ${privilege_prefix}zypper install python3"
+    echo "       Arch/Manjaro:  ${privilege_prefix}pacman -S --needed python"
+    echo "       Alpine:        ${privilege_prefix}apk add python3"
     echo "       QNAP: install/enable the Python3 QPKG. swarm-info also checks its Install_Path."
     echo "       QNAP verified layout: <Install_Path>/opt/python3/bin/python3"
     echo "       Required version: Python 3.10 or newer."
@@ -119,6 +132,7 @@ show_python_install_help() {
 #     Nothing.
 # -----------------------------------------------------------------------------
 show_docker_scout_install_help() {
+    local qnap_tmp_kb=""
     local scout_installer_url="https://raw.githubusercontent.com/docker/scout-cli/main/install.sh"
 
     echo "       Install Docker Scout for the current user:"
@@ -126,6 +140,19 @@ show_docker_scout_install_help() {
     echo "       curl -fsSL ${scout_installer_url} -o install-scout.sh"
     echo "       sed -n '1,240p' install-scout.sh"
     echo "       sh install-scout.sh"
+    if command -v getcfg >/dev/null 2>&1 &&
+        command -v df >/dev/null 2>&1 && command -v awk >/dev/null 2>&1; then
+        qnap_tmp_kb="$(df -Pk /tmp 2>/dev/null | awk 'END {print $4}')"
+        case "$qnap_tmp_kb" in
+            ''|*[!0-9]*) ;;
+            *)
+                if [ "$qnap_tmp_kb" -lt 262144 ]; then
+                    echo "       QNAP /tmp has less than 256 MiB available."
+                    echo "       Use HOME-backed TMPDIR for Scout extraction."
+                fi
+                ;;
+        esac
+    fi
     echo '       QNAP: mkdir -p "$HOME/.tmp-scout"'
     echo '       QNAP: TMPDIR="$HOME/.tmp-scout" sh install-scout.sh'
     echo "       docker scout version"
@@ -176,7 +203,7 @@ show_docker_compose_install_help() {
     privilege_prefix="$(dependency_privilege_prefix)"
     echo "       Install the Docker Compose v2 CLI plugin:"
     echo "       Debian/Ubuntu: ${privilege_prefix}apt-get install -y docker-compose-plugin"
-    echo "       RHEL/Fedora:   ${privilege_prefix}dnf install -y docker-compose-plugin"
+    echo "       Fedora/RHEL:   ${privilege_prefix}dnf install -y docker-compose-plugin"
     echo "       Verify: docker compose version"
     echo "       Guide: https://docs.docker.com/compose/install/linux/"
 }

@@ -76,23 +76,54 @@ root's Docker configuration; a non-root cron or shell will not see that copy.
 # 🧰 First Setup
 
 Install `swarm-info` under `~/tools/swarm-info`, create a global command
-`swarm-info`, and make it permanently available. The installer verifies core
-readiness and explains any missing Python or Docker Scout dependency. It does
-not install Docker, Python, Scout, or registry credentials automatically.
+`swarm-info`, and make it permanently available. The capability-driven
+installer supports Debian/Ubuntu, Fedora/RHEL, openSUSE, Arch/Manjaro, Alpine,
+generic Linux, and QNAP. It detects the package manager or QPKG layout, checks
+the Docker runtime before cloning, and verifies the installed command and the
+repository-owned dependency contract afterwards.
+
+On another Linux distribution, setup remains usable when the required commands
+are already present. If they are missing, it stops with a generic package list
+instead of guessing an unsafe package-manager command.
+
+Missing Git, Python, Bash, or `bc` packages can be installed from the host's
+already-configured distribution repositories after one explicit confirmation.
+Docker, Docker Scout, registry credentials, and QNAP QPKGs are never installed
+automatically.
 
 ### 🚀 Simply run the following block in terminal:
 ```bash
-ORIGINAL_DIR=$(pwd)
-mkdir -p /tmp/swarm-info-setup && cd /tmp/swarm-info-setup
-curl -sO https://raw.githubusercontent.com/Sokrates1989/swarm-info/main/setup/linux-cli.sh
-bash linux-cli.sh
-cd "$ORIGINAL_DIR"
-rm -rf /tmp/swarm-info-setup
+curl -fsSLo /tmp/swarm-info-install.sh \
+  https://raw.githubusercontent.com/Sokrates1989/swarm-info/main/setup/linux-cli.sh
+
+# Recommended before the first execution: inspect the complete downloaded script.
+sed -n '1,9999p' /tmp/swarm-info-install.sh
+
+# Optional read-only inspection. Exit 2 means only optional scan tooling is missing.
+bash /tmp/swarm-info-install.sh --check-only
+
+# Interactive installation; missing repository packages are offered once.
+bash /tmp/swarm-info-install.sh
 
 # Apply PATH update in current shell (if not already applied)
-export PATH="$HOME/.local/bin:$PATH"
+. "$HOME/.profile"
 hash -r
 ```
+
+For unattended provisioning, choose package mutation explicitly:
+
+```bash
+# Install supported missing repository packages without prompting.
+bash /tmp/swarm-info-install.sh --install-missing --non-interactive
+
+# Never change distribution packages; stop with exact recovery guidance.
+bash /tmp/swarm-info-install.sh --non-interactive
+```
+
+An existing Git checkout is preserved and never replaced. Use `swarm-info -u`
+for its guarded fast-forward update. If the configured install target exists
+but is not a Git checkout, setup stops instead of cloning into or overwriting
+that directory.
 
 The installer detects manager capability. It validates the full Swarm runtime
 on a manager and the portable security runtime on a standalone Docker/QNAP

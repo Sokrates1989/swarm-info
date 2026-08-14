@@ -207,7 +207,7 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn('check_mode="security"', source)
         self.assertIn('bash "$dependency_script" "--$check_mode"', source)
         self.assertIn("swarm-info is installed", source)
-        self.assertIn("chmod +x \"${INSTALL_DIRECTORY}/res/dependency_check.sh\"", source)
+        self.assertIn('chmod 0755 "${INSTALL_DIRECTORY}/res/dependency_check.sh"', source)
 
     def test_cli_exposes_explicit_and_initial_preflight(self) -> None:
         """Keep dependency checks accessible and automatic for interactive use.
@@ -265,6 +265,13 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn('"$GIT_COMMAND" clone', installer_source)
         self.assertIn('check_mode="security"', installer_source)
         self.assertIn('touch "${HOME}/.profile"', installer_source)
+        self.assertIn("--check-only", installer_source)
+        self.assertIn("--install-missing", installer_source)
+        self.assertIn("pacman", installer_source)
+        self.assertIn("apk", installer_source)
+        self.assertIn("zypper install", dependency_source)
+        self.assertIn("pacman -S --needed", dependency_source)
+        self.assertIn("apk add", dependency_source)
 
 
 class SelfUpdateTests(unittest.TestCase):

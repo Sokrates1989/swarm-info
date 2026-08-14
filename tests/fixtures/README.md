@@ -8,7 +8,7 @@ vulnerability scanner, dependency preflight, and self-update unit tests.
 - `fake_docker.py` emulates the small Docker, Docker Scout, and Compose-version
   command surface used by the security workflows. Its behavior is selected
   with `FAKE_DOCKER_SCENARIO`, including exact local success,
-  registry-fallback, and missing-plugin coverage.
+  registry-fallback, missing-plugin, and unavailable-daemon coverage.
 - `fake_git.py` emulates clean, dirty, behind, divergent, and failing Git
   states used by the guarded `swarm-info -u` self-update tests.
 - `scout-clean.sarif.json` represents a successful Scout SARIF 2.1.0 scan with

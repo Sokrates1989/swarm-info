@@ -288,6 +288,9 @@ def main(arguments: list[str] | None = None) -> int:
     services = scenario_services(scenario)
     containers = scenario_containers(scenario)
     log_invocation(command)
+    if scenario == "daemon-unavailable" and command[:1] == ["info"]:
+        print("cannot connect to Docker daemon", file=sys.stderr)
+        return 1
     if command == ["info"]:
         return 0
     if command[:2] == ["info", "--format"]:

@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.5.1" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.5.2" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -124,7 +124,9 @@ coverage; any other Docker host receives exact local-container image coverage.
 The local mode is read-only, includes stopped containers by default, uses
 Docker Scout
 .B local://
-only, and never substitutes a registry image.
+only, and never substitutes a registry image. Interactive scans show inventory
+totals, per-image counters and results, elapsed time, and a 30-second heartbeat
+while Docker Scout remains active.
 .TP
 .BI \-\-runtime-mode " mode"
 Set security inventory to

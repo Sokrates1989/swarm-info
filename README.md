@@ -210,6 +210,9 @@ Auto mode reads Docker capability rather than guessing from a distribution:
   use `--container-scope running` for a narrower check.
 - Local-container mode uses Docker Scout `local://` only. It never substitutes
   a registry tag, so the report cannot silently describe a different image.
+- Interactive scans print inventory totals, a current/total image counter,
+  per-image results and elapsed time. While one Docker Scout process remains
+  active, a heartbeat is printed every 30 seconds so a slow scan is visible.
 - QNAP is detected from `/etc/config/uLinux.conf` or `ID=qts` in
   `/etc/os-release`. `--os=qnap` is an auditable hint, not a way to bypass
   Docker capability checks.

@@ -28,10 +28,13 @@ from scripts.vulnerability_models import (
     write_json_atomic,
 )
 from scripts.vulnerability_scan import (
+    DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
     DockerClient,
     InventoryError,
-    platform_argument,
+    ProgressCallback,
     collect_services,
+    platform_argument,
+    run_with_progress_heartbeat,
     scan_collected_services,
 )
 from scripts.vulnerability_scout import sanitize_command_error
@@ -391,8 +394,21 @@ def run_security_check(
     container_scope: str = "all",
     qnap_release_paths: Sequence[Path] = QNAP_RELEASE_PATHS,
     os_release_path: Path = OS_RELEASE_PATH,
+    progress: ProgressCallback | None = None,
+    heartbeat_interval_seconds: float = DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
 ) -> tuple[dict[str, Any], int]:
     """Detect capabilities, inventory applicable workloads, and scan images.
+
+    Args:
+        client: Docker command client.
+        runtime_mode: Requested inventory mode or capability auto-detection.
+        requested_platform: Docker image platform or ``auto``.
+        host_os_mode: Host OS detection mode.
+        container_scope: Local-container inventory scope.
+        qnap_release_paths: Candidate QNAP release files.
+        os_release_path: Generic operating-system release file.
+        progress: Optional operator-facing progress callback.
+        heartbeat_interval_seconds: Seconds between long-running updates.
 
     Returns:
         Versioned report and exit code: 0 clean, 2 findings, or 3 incomplete.
@@ -404,21 +420,46 @@ def run_security_check(
     warnings: list[str] = []
     resolved_platform = requested_platform if requested_platform != "auto" else "unknown"
     try:
+        if progress:
+            progress("[INFO] Detecting Docker runtime and image platform...")
         runtime = detect_docker_runtime(client, runtime_mode)
         resolved_platform = resolve_platform(client, requested_platform)
         if runtime.inventory_mode == "swarm":
-            resources = collect_services(client)
+            if progress:
+                progress("[INFO] Collecting Swarm service image inventory...")
+            resources = run_with_progress_heartbeat(
+                lambda: collect_services(client),
+                progress,
+                "[INFO] Swarm service inventory is still running",
+                heartbeat_interval_seconds,
+            )
             report, exit_code = scan_collected_services(
-                client, resources, resolved_platform, started_at
+                client,
+                resources,
+                resolved_platform,
+                started_at,
+                progress=progress,
+                heartbeat_interval_seconds=heartbeat_interval_seconds,
             )
         else:
-            resources = collect_containers(client, container_scope)
+            if progress:
+                progress(
+                    f"[INFO] Collecting {container_scope} local-container image inventory..."
+                )
+            resources = run_with_progress_heartbeat(
+                lambda: collect_containers(client, container_scope),
+                progress,
+                "[INFO] Local-container inventory is still running",
+                heartbeat_interval_seconds,
+            )
             report, exit_code = scan_collected_services(
                 client,
                 resources,
                 resolved_platform,
                 started_at,
                 local_only=True,
+                progress=progress,
+                heartbeat_interval_seconds=heartbeat_interval_seconds,
             )
             if runtime_mode == "auto":
                 warnings.append(
@@ -503,6 +544,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         requested_platform=options.platform,
         host_os_mode=options.host_os,
         container_scope=options.container_scope,
+        progress=lambda message: print(message, flush=True),
     )
     try:
         write_json_atomic(options.output_file, report)

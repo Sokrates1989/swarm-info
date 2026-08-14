@@ -201,7 +201,10 @@ class ContainerSecurityCheckTests(unittest.TestCase):
                     "scripts.security_check.DockerClient",
                     return_value=harness.client(),
                 ):
-                    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    standard_output = io.StringIO()
+                    with redirect_stdout(standard_output), redirect_stderr(
+                        io.StringIO()
+                    ):
                         exit_code = main(
                             [
                                 "--container-mode",
@@ -217,6 +220,10 @@ class ContainerSecurityCheckTests(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertEqual(report["environment"]["host_os"]["family"], "qnap")
         self.assertEqual(report["environment"]["docker"]["inventory_mode"], "containers")
+        output_text = standard_output.getvalue()
+        self.assertIn("Collecting all local-container image inventory", output_text)
+        self.assertIn("[INFO] [1/2] Scanning", output_text)
+        self.assertIn("[OK] [1/2] Completed clean", output_text)
 
     def test_public_shell_command_is_wired_to_portable_preflight(self) -> None:
         """Lock the documented compatibility action into the Bash dispatcher."""

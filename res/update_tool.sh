@@ -76,6 +76,19 @@ repository_git() {
 }
 
 # -----------------------------------------------------------------------------
+# Show operators where the installed Git checkout lives.
+#
+# Output:
+#     The absolute checkout path and copy-ready commands for inspecting it.
+# -----------------------------------------------------------------------------
+show_checkout_location() {
+    echo "[INFO] swarm-info checkout: $REPOSITORY_ROOT"
+    echo "[INFO] Inspect local changes with:"
+    printf '       cd "%s"\n' "$REPOSITORY_ROOT"
+    echo "       git status"
+}
+
+# -----------------------------------------------------------------------------
 # Verify that the updater is running from a clean Git checkout.
 #
 # Output:
@@ -204,6 +217,7 @@ update_swarm_info() {
     local remote=""
     local upstream=""
 
+    show_checkout_location
     if ! GIT_COMMAND="$(resolve_update_git)"; then
         echo "[ERROR] Git is required for swarm-info self-update." >&2
         return 1

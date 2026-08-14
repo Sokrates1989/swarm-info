@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -106,6 +107,7 @@ class LinuxInstallerTests(unittest.TestCase):
                 "elif [ \"$1\" = clone ]; then\n"
                 "  mkdir -p \"$3\"\n"
                 "  cp -R \"$FAKE_INSTALLER_SOURCE/.\" \"$3\"\n"
+                "  chmod 0644 \"$3/res/dependency_check.sh\"\n"
                 "elif [ \"$1\" = -C ] && [ \"$3\" = remote ]; then\n"
                 "  echo 'https://github.com/Sokrates1989/swarm-info.git'\n"
                 "else\n"
@@ -134,12 +136,18 @@ class LinuxInstallerTests(unittest.TestCase):
             )
 
             installed_command = fake_home / ".local" / "bin" / "swarm-info"
+            installed_dependency_check = (
+                fake_home / "tools" / "swarm-info" / "res" / "dependency_check.sh"
+            )
             installed_manual = (
                 fake_home / ".local" / "share" / "man" / "man1" / "swarm-info.1"
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertTrue(installed_command.is_symlink())
             self.assertTrue(installed_manual.is_file())
+            self.assertEqual(
+                stat.S_IMODE(installed_dependency_check.stat().st_mode), 0o644
+            )
             self.assertIn(
                 'export PATH="$HOME/.local/bin:$PATH"',
                 (fake_home / ".profile").read_text(encoding="utf-8"),

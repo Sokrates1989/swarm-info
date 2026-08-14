@@ -405,7 +405,9 @@ The updater fetches the current branch's configured upstream and accepts only
 a clean, strictly fast-forward update. It refuses to overwrite uncommitted
 files, untracked files, local commits, or a divergent branch. Resolve those
 states manually and rerun `swarm-info -u`; the updater never stashes, resets,
-or force-checks out user work.
+or force-checks out user work. Every update attempt prints the absolute
+checkout directory and copy-ready `cd` / `git status` guidance, including when
+the update is refused.
 
 ---
 

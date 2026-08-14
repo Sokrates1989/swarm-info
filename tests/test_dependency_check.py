@@ -207,7 +207,9 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn('check_mode="security"', source)
         self.assertIn('bash "$dependency_script" "--$check_mode"', source)
         self.assertIn("swarm-info is installed", source)
-        self.assertIn('chmod 0755 "${INSTALL_DIRECTORY}/res/dependency_check.sh"', source)
+        self.assertNotIn(
+            'chmod 0755 "${INSTALL_DIRECTORY}/res/dependency_check.sh"', source
+        )
 
     def test_cli_exposes_explicit_and_initial_preflight(self) -> None:
         """Keep dependency checks accessible and automatic for interactive use.
@@ -354,6 +356,9 @@ class SelfUpdateTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("local changes", result.stderr)
+        self.assertIn(f"swarm-info checkout: {REPOSITORY_ROOT}", result.stdout)
+        self.assertIn(f'cd "{REPOSITORY_ROOT}"', result.stdout)
+        self.assertIn("git status", result.stdout)
         self.assertFalse(any(command[:1] == ["fetch"] for command in commands))
         self.assertFalse(any(command[:1] == ["merge"] for command in commands))
 

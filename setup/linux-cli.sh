@@ -625,15 +625,14 @@ append_export_line() {
 # Publish the command symlink and persist its directory in common profiles.
 #
 # Side effects:
-#     Changes executable bits, creates a symlink, edits existing user profiles,
-#     and updates PATH for the installer process.
+#     Ensures the public entry point is executable, creates a symlink, edits
+#     existing user profiles, and updates PATH for the installer process.
 #
 # Returns:
 #     0 when all filesystem operations succeed; otherwise a command status.
 # -----------------------------------------------------------------------------
 configure_command() {
     chmod 0755 "${INSTALL_DIRECTORY}/get_info.sh"
-    chmod 0755 "${INSTALL_DIRECTORY}/res/dependency_check.sh"
     mkdir -p "$LOCAL_BIN_DIRECTORY"
     ln -sf "${INSTALL_DIRECTORY}/get_info.sh" "${LOCAL_BIN_DIRECTORY}/swarm-info"
     echo "[OK] Command created at ${LOCAL_BIN_DIRECTORY}/swarm-info"

@@ -19,6 +19,7 @@ from pathlib import Path
 import sys
 from typing import Any, Mapping, Sequence
 
+from scripts.image_cleanup_removal import remove_candidates
 from scripts.vulnerability_models import utc_timestamp, write_json_atomic
 from scripts.vulnerability_scan import CommandResult, DockerClient
 from scripts.vulnerability_scout import sanitize_command_error
@@ -29,8 +30,16 @@ class LocalImage:
     """One exact image artifact currently stored by the local Docker daemon."""
 
     image_id: str
-    references: tuple[str, ...]
+    repo_tags: tuple[str, ...]
+    repo_digests: tuple[str, ...]
     size: int
+    parent_id: str | None = None
+
+    @property
+    def references(self) -> tuple[str, ...]:
+        """Return every human-readable repository reference."""
+
+        return tuple(sorted({*self.repo_tags, *self.repo_digests}))
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the image for an operator report."""
@@ -38,6 +47,9 @@ class LocalImage:
         return {
             "image_id": self.image_id,
             "references": list(self.references),
+            "repo_tags": list(self.repo_tags),
+            "repo_digests": list(self.repo_digests),
+            "parent_image_id": self.parent_id,
             "virtual_size_bytes": self.size,
         }
 
@@ -111,15 +123,35 @@ def parse_local_image(raw_json: str, requested_id: str) -> LocalImage:
         raise ImageCleanupError(f"Image {requested_id} has no exact image ID.")
     if not isinstance(size, int) or isinstance(size, bool) or size < 0:
         raise ImageCleanupError(f"Image {requested_id} has no valid size.")
-    references = sorted(
-        {
-            reference
-            for field in ("RepoTags", "RepoDigests")
-            for reference in (payload.get(field) or [])
-            if isinstance(reference, str) and "<none>" not in reference
-        }
+    parent_id = payload.get("Parent") or None
+    if parent_id is not None and (
+        not isinstance(parent_id, str) or not parent_id.startswith("sha256:")
+    ):
+        raise ImageCleanupError(f"Image {requested_id} has an invalid parent ID.")
+
+    def repository_references(field: str) -> tuple[str, ...]:
+        values = payload.get(field) or []
+        if not isinstance(values, list):
+            raise ImageCleanupError(
+                f"Image {requested_id} has invalid {field} metadata."
+            )
+        return tuple(
+            sorted(
+                {
+                    reference
+                    for reference in values
+                    if isinstance(reference, str) and "<none>" not in reference
+                }
+            )
+        )
+
+    return LocalImage(
+        image_id=image_id,
+        repo_tags=repository_references("RepoTags"),
+        repo_digests=repository_references("RepoDigests"),
+        size=size,
+        parent_id=parent_id,
     )
-    return LocalImage(image_id, tuple(references), size)
 
 
 def collect_local_images(client: DockerClient) -> tuple[LocalImage, ...]:
@@ -235,6 +267,61 @@ def resolve_local_service_images(
     return frozenset(protected)
 
 
+def protect_required_ancestors(
+    images: Sequence[LocalImage], protected_image_ids: set[str]
+) -> frozenset[str]:
+    """Protect every inventoried parent required by a protected child image."""
+
+    images_by_id = {image.image_id: image for image in images}
+    protected = set(protected_image_ids)
+    pending = list(protected)
+    while pending:
+        image = images_by_id.get(pending.pop())
+        if image is None or image.parent_id is None:
+            continue
+        if image.parent_id not in protected:
+            protected.add(image.parent_id)
+            pending.append(image.parent_id)
+    return frozenset(protected)
+
+
+def removal_depth(image: LocalImage, images_by_id: Mapping[str, LocalImage]) -> int:
+    """Count known ancestors so children can be removed before their parents."""
+
+    depth = 0
+    visited = {image.image_id}
+    parent_id = image.parent_id
+    while parent_id and parent_id in images_by_id:
+        if parent_id in visited:
+            raise ImageCleanupError(
+                f"Image ancestry contains a cycle at {parent_id}."
+            )
+        visited.add(parent_id)
+        depth += 1
+        parent_id = images_by_id[parent_id].parent_id
+    return depth
+
+
+def order_candidates_for_removal(
+    images: Sequence[LocalImage], protected_image_ids: frozenset[str]
+) -> tuple[LocalImage, ...]:
+    """Return unused images in deterministic child-before-parent order."""
+
+    images_by_id = {image.image_id: image for image in images}
+    candidates = [
+        image for image in images if image.image_id not in protected_image_ids
+    ]
+    return tuple(
+        sorted(
+            candidates,
+            key=lambda image: (
+                -removal_depth(image, images_by_id),
+                image.image_id,
+            ),
+        )
+    )
+
+
 def discover_cleanup_inventory(client: DockerClient) -> CleanupInventory:
     """Build one fail-closed local image cleanup inventory."""
 
@@ -251,11 +338,12 @@ def discover_cleanup_inventory(client: DockerClient) -> CleanupInventory:
             "This node is a Swarm worker and cannot inventory all service image "
             "declarations. Run cleanup from a manager or inspect this node manually.",
         )
-    candidates = tuple(image for image in images if image.image_id not in protected)
+    protected_with_ancestors = protect_required_ancestors(images, protected)
+    candidates = order_candidates_for_removal(images, protected_with_ancestors)
     return CleanupInventory(
         runtime=runtime,
         images=images,
-        protected_image_ids=frozenset(protected),
+        protected_image_ids=protected_with_ancestors,
         candidates=candidates,
         service_references=service_references,
         apply_allowed=manager_visibility_available,
@@ -278,13 +366,14 @@ def format_bytes(value: int) -> str:
 def build_cleanup_report(
     inventory: CleanupInventory,
     removed: Sequence[str] = (),
+    already_absent: Sequence[str] = (),
     removal_errors: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Serialize cleanup evidence and optional apply results."""
 
     errors = dict(removal_errors or {})
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": utc_timestamp(),
         "coverage": "current-docker-node-only",
         "runtime": inventory.runtime,
@@ -298,12 +387,14 @@ def build_cleanup_report(
                 image.size for image in inventory.candidates
             ),
             "removed_images": len(removed),
+            "already_absent_images": len(already_absent),
             "failed_removals": len(errors),
         },
         "service_references": list(inventory.service_references),
         "candidates": [image.to_dict() for image in inventory.candidates],
         "action": {
             "removed_image_ids": list(removed),
+            "already_absent_image_ids": list(already_absent),
             "removal_errors": errors,
         },
     }
@@ -363,27 +454,10 @@ def remove_approved_candidates(
     client: DockerClient,
     inventory: CleanupInventory,
     approved_image_ids: frozenset[str],
-) -> tuple[list[str], dict[str, str]]:
-    """Remove still-unused approved images without force and retain failures."""
+) -> tuple[list[str], list[str], dict[str, str]]:
+    """Delegate approved removal to the isolated mutation adapter."""
 
-    removed: list[str] = []
-    failures: dict[str, str] = {}
-    for image in inventory.candidates:
-        if image.image_id not in approved_image_ids:
-            continue
-        print(f"[INFO] Removing {image.image_id[:19]}...")
-        result = client.run(["image", "rm", image.image_id])
-        if result.return_code == 0:
-            removed.append(image.image_id)
-            print(f"[OK] Removed {image.image_id[:19]}.")
-        else:
-            failures[image.image_id] = command_error(result)
-            print(
-                f"[WARN] Could not remove {image.image_id[:19]}: "
-                f"{failures[image.image_id]}",
-                file=sys.stderr,
-            )
-    return removed, failures
+    return remove_candidates(client, inventory.candidates, approved_image_ids)
 
 
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
@@ -473,13 +547,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
     skipped = len(approved_ids) - len(still_approved)
     if skipped:
         print(f"[INFO] Safety recheck protected or removed {skipped} candidate(s).")
-    removed, failures = remove_approved_candidates(
+    removed, already_absent, failures = remove_approved_candidates(
         client, refreshed, frozenset(still_approved)
     )
-    report = build_cleanup_report(refreshed, removed, failures)
+    report = build_cleanup_report(
+        refreshed,
+        removed=removed,
+        already_absent=already_absent,
+        removal_errors=failures,
+    )
     if options.output_file and not publish_report(options.output_file, report):
         return 3
-    print(f"Cleanup complete: {len(removed)} removed, {len(failures)} failed.")
+    print(
+        f"Cleanup complete: {len(removed)} removed, "
+        f"{len(already_absent)} already absent, {len(failures)} failed."
+    )
     return 3 if failures else 0
 
 

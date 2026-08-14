@@ -277,8 +277,15 @@ read-only command.
 The candidate size is an upper bound based on virtual image sizes; shared layers
 mean actual recovered storage is normally smaller. Before an approved cleanup,
 swarm-info repeats the complete safety inventory and removes only image IDs that
-were both reviewed and remain unused. It never uses `--force`, never pulls from
-a registry, and never schedules cleanup automatically.
+were both reviewed and remain unused. Parent images required by protected
+workloads are protected as well. Unused branches are removed child-first;
+dependency conflicts are retried only after a child was actually removed, and
+parents removed implicitly by Docker are recorded separately instead of being
+reported as failures. When Docker refuses an unused image with multiple tags,
+every tag must still resolve to the approved exact image ID before the tags are
+removed. Tag drift stops that image without mutation. The workflow never uses
+`--force`, never pulls from a registry, and never schedules cleanup
+automatically.
 
 When a fresh vulnerable report is shown in an interactive terminal,
 `swarm-info -v` continues directly into the remediation menu. It offers:

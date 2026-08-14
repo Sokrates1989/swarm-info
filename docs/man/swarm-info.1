@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.6.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.6.1" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -85,11 +85,16 @@ service visibility.
 With
 .BR \-\-image-cleanup ,
 request removal after a default-No confirmation and a fresh safety inventory.
+Parent chains needed by protected images remain protected. Approved unused
+branches are removed child-first, dependency conflicts are retried after
+progress, and multi-tag images require an exact tag-to-image recheck before
+untagging. Docker's force option is never used.
 .TP
 .B \-\-yes
 With
 .BR "\-\-image-cleanup \-\-apply" ,
-confirm removal non-interactively. Exact image IDs are removed without force.
+confirm removal non-interactively. Only reviewed exact artifacts and their
+revalidated tags are removed, without force.
 .TP
 .B \-\-state
 Check whether the installed swarm-info checkout is current and modified.

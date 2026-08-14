@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.6.1" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.6.2" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -293,6 +293,17 @@ value takes precedence.
 Set to a value beginning with
 .B de
 for German operator output; otherwise English is used.
+.TP
+.B TMPDIR
+Existing values are preserved. On QNAP, security checks otherwise use the
+private data-volume-backed directory
+.I ~/.cache/swarm-info/docker-scout/tmp
+instead of the capacity-limited system temporary directory.
+.TP
+.B DOCKER_SCOUT_CACHE_DIR
+Existing values are preserved. On QNAP, security checks otherwise use
+.I ~/.cache/swarm-info/docker-scout/cache
+for Docker Scout cache data.
 .SH EXAMPLES
 Verify service-to-stack mappings without changing the Swarm:
 .PP

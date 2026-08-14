@@ -1,6 +1,7 @@
 {
   "common.invalidReport": "Der Bericht unter {path} fehlt oder ist ungültig.",
   "common.none": "keine",
+  "security.scoutWorkStorageError": "Der Docker-Scout-Arbeitsbereich unter {path} konnte nicht vorbereitet werden: {detail}",
   "deployment.description": "Ordnet laufende Swarm-Dienste mit hoher Sicherheit lokalen Stack-Dateien zu, ohne Docker oder Deployment-Dateien zu ändern.",
   "deployment.rootHelp": "Absolutes Deployment-Stammverzeichnis für die rekursive Suche; für mehrere Verzeichnisse wiederholen (Standard: /swarm).",
   "deployment.outputHelp": "Optionaler Pfad für den atomaren JSON-Zuordnungsbericht.",

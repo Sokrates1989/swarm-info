@@ -226,10 +226,15 @@ Auto mode reads Docker capability rather than guessing from a distribution:
 - Docker Scout may be used through `docker scout` or directly from
   `~/.docker/cli-plugins/docker-scout`. This supports vendor Docker builds that
   do not expose an otherwise valid user plugin.
+- On QNAP, security checks automatically place Docker Scout extraction and
+  cache data under the private, data-volume-backed directory
+  `~/.cache/swarm-info/docker-scout`. Existing `TMPDIR` and
+  `DOCKER_SCOUT_CACHE_DIR` values remain authoritative. The selected paths are
+  recorded under `environment.docker_scout_work` in the JSON report.
 
-QNAP's `/tmp` is commonly small. If Docker Scout extraction fails with a short
-write, rerun Docker's reviewed installer with temporary files on the data
-volume:
+QNAP's `/tmp` is commonly small. Docker Scout installation itself still needs
+an explicit data-volume temporary directory because `swarm-info` is not yet
+running while the plugin is installed:
 
 ```bash
 mkdir -p "$HOME/.tmp-scout"

@@ -4,6 +4,8 @@ The command selects a Swarm-wide service inventory only when the local Docker
 daemon grants manager control. Otherwise it scans the exact image IDs attached
 to local containers. Local-container evidence never falls back to a registry,
 because a mutable remote tag may no longer identify the installed artifact.
+QNAP CLI execution prepares private, home-backed Docker Scout temporary and
+cache directories unless the operator already selected both locations.
 
 Dependencies:
     - Python 3.10 or newer.
@@ -16,11 +18,13 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 from pathlib import Path
 import platform as host_platform
 import sys
 from typing import Any, Mapping, Sequence
 
+from scripts.operator_report import load_messages, message, selected_locale
 from scripts.vulnerability_models import (
     ServiceRecord,
     build_report,
@@ -59,6 +63,7 @@ ARCHITECTURE_ALIASES = {
     "armv7l": "arm/v7",
     "armv7": "arm/v7",
 }
+QNAP_SCOUT_WORK_SUBDIRECTORY = Path(".cache/swarm-info/docker-scout")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -90,6 +95,81 @@ class DockerRuntimeProfile:
         """Serialize the capability decision for auditability."""
 
         return dataclasses.asdict(self)
+
+
+def prepare_qnap_scout_client(
+    client: DockerClient,
+    host_os: HostOsProfile,
+    environment: Mapping[str, str],
+) -> tuple[DockerClient, dict[str, str] | None]:
+    """Move QNAP Scout extraction and cache storage off the small `/tmp`.
+
+    Args:
+        client: Docker command client to clone when QNAP configuration applies.
+        host_os: Detected host profile.
+        environment: Process environment used to resolve existing overrides.
+
+    Returns:
+        Configured client and auditable work-directory metadata. Non-QNAP hosts
+        return the original client and no metadata.
+
+    Raises:
+        InventoryError: If the private default directories cannot be prepared.
+
+    Note:
+        Existing ``TMPDIR`` and ``DOCKER_SCOUT_CACHE_DIR`` values always win.
+        Only automatically selected directories are created by this function.
+    """
+
+    if host_os.family != "qnap":
+        return client, None
+
+    home_directory = Path(environment.get("HOME") or str(Path.home()))
+    work_root = home_directory / QNAP_SCOUT_WORK_SUBDIRECTORY
+    overrides: dict[str, str] = {}
+    automatic_directories: list[Path] = []
+
+    temporary_directory = environment.get("TMPDIR")
+    if not temporary_directory:
+        automatic_temp = work_root / "tmp"
+        temporary_directory = str(automatic_temp)
+        overrides["TMPDIR"] = temporary_directory
+        automatic_directories.append(automatic_temp)
+
+    cache_directory = environment.get("DOCKER_SCOUT_CACHE_DIR")
+    if not cache_directory:
+        automatic_cache = work_root / "cache"
+        cache_directory = str(automatic_cache)
+        overrides["DOCKER_SCOUT_CACHE_DIR"] = cache_directory
+        automatic_directories.append(automatic_cache)
+
+    try:
+        for directory in automatic_directories:
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    except OSError as error:
+        catalog = load_messages(selected_locale(environment))
+        raise InventoryError(
+            message(
+                catalog,
+                "security.scoutWorkStorageError",
+                path=work_root,
+                detail=error,
+            )
+        ) from error
+
+    configured_client = client.with_environment_overrides(
+        {
+            "TMPDIR": temporary_directory,
+            "DOCKER_SCOUT_CACHE_DIR": cache_directory,
+        }
+    )
+    return configured_client, {
+        "temporary_directory": temporary_directory,
+        "cache_directory": cache_directory,
+        "selection": (
+            "operator-environment" if not overrides else "qnap-home-default"
+        ),
+    }
 
 
 def parse_release_values(raw_text: str) -> dict[str, str]:
@@ -364,6 +444,7 @@ def decorate_report(
     runtime: DockerRuntimeProfile | None,
     container_scope: str,
     warnings: Sequence[str],
+    scout_work: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Add backward-compatible environment and resource-scope metadata."""
 
@@ -373,6 +454,7 @@ def decorate_report(
         "host_os": host_os.to_dict(),
         "docker": runtime.to_dict() if runtime else {"inventory_mode": "unknown"},
         "container_scope": container_scope if inventory_mode == "containers" else None,
+        "docker_scout_work": dict(scout_work) if scout_work else None,
     }
     report["scope"]["resource_type"] = resource_type
     report["scope"]["resource_count"] = report["scope"]["service_count"]
@@ -396,6 +478,7 @@ def run_security_check(
     os_release_path: Path = OS_RELEASE_PATH,
     progress: ProgressCallback | None = None,
     heartbeat_interval_seconds: float = DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
+    process_environment: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Detect capabilities, inventory applicable workloads, and scan images.
 
@@ -409,6 +492,9 @@ def run_security_check(
         os_release_path: Generic operating-system release file.
         progress: Optional operator-facing progress callback.
         heartbeat_interval_seconds: Seconds between long-running updates.
+        process_environment: Optional environment enabling QNAP Scout storage
+            preparation. The CLI passes its process environment; embedded tests
+            and callers can omit it to avoid filesystem side effects.
 
     Returns:
         Versioned report and exit code: 0 clean, 2 findings, or 3 incomplete.
@@ -417,9 +503,14 @@ def run_security_check(
     started_at = utc_timestamp()
     host_os = detect_host_os(host_os_mode, qnap_release_paths, os_release_path)
     runtime: DockerRuntimeProfile | None = None
+    scout_work: dict[str, str] | None = None
     warnings: list[str] = []
     resolved_platform = requested_platform if requested_platform != "auto" else "unknown"
     try:
+        if process_environment is not None:
+            client, scout_work = prepare_qnap_scout_client(
+                client, host_os, process_environment
+            )
         if progress:
             progress("[INFO] Detecting Docker runtime and image platform...")
         runtime = detect_docker_runtime(client, runtime_mode)
@@ -472,7 +563,14 @@ def run_security_check(
         )
         exit_code = 3
     return (
-        decorate_report(report, host_os, runtime, container_scope, warnings),
+        decorate_report(
+            report,
+            host_os,
+            runtime,
+            container_scope,
+            warnings,
+            scout_work,
+        ),
         exit_code,
     )
 
@@ -545,6 +643,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         host_os_mode=options.host_os,
         container_scope=options.container_scope,
         progress=lambda message: print(message, flush=True),
+        process_environment=os.environ,
     )
     try:
         write_json_atomic(options.output_file, report)

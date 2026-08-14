@@ -1,6 +1,7 @@
 {
   "common.invalidReport": "The report at {path} is missing or invalid.",
   "common.none": "none",
+  "security.scoutWorkStorageError": "Docker Scout work storage could not be prepared under {path}: {detail}",
   "deployment.description": "Map live Swarm services to high-confidence local stack files without changing Docker or deployment files.",
   "deployment.rootHelp": "Absolute deployment root to search recursively; repeat for multiple roots (default: /swarm).",
   "deployment.outputHelp": "Optional path for the atomic JSON mapping report.",

@@ -5,16 +5,20 @@ from __future__ import annotations
 from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from scripts.security_check import (
+    HostOsProfile,
     detect_host_os,
     main,
+    prepare_qnap_scout_client,
     run_security_check,
 )
+from scripts.vulnerability_scan import DockerClient, InventoryError
 from tests.test_vulnerability_scan import FakeDockerHarness
 
 
@@ -68,6 +72,75 @@ class HostCompatibilityTests(unittest.TestCase):
 
         self.assertEqual(profile.family, "qnap")
         self.assertEqual(profile.name, "QTS 5.2.10")
+
+    def test_qnap_scout_uses_private_home_storage_by_default(self) -> None:
+        """Keep Scout extraction away from QNAP's capacity-limited `/tmp`."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            environment = {"HOME": temporary_directory, "PATH": ""}
+            client = DockerClient(("fake-docker",), {"FAKE_DOCKER": "1"})
+            configured, metadata = prepare_qnap_scout_client(
+                client,
+                HostOsProfile("qnap", "QNAP", None, None, "test"),
+                environment,
+            )
+
+            expected_root = (
+                Path(temporary_directory) / ".cache" / "swarm-info" / "docker-scout"
+            )
+            self.assertEqual(configured.environment["TMPDIR"], str(expected_root / "tmp"))
+            self.assertEqual(
+                configured.environment["DOCKER_SCOUT_CACHE_DIR"],
+                str(expected_root / "cache"),
+            )
+            self.assertTrue((expected_root / "tmp").is_dir())
+            self.assertTrue((expected_root / "cache").is_dir())
+            self.assertEqual(metadata["selection"], "qnap-home-default")
+
+    def test_qnap_scout_preserves_operator_storage_overrides(self) -> None:
+        """Never replace explicitly selected Scout temporary and cache paths."""
+
+        client = DockerClient(("fake-docker",), {"FAKE_DOCKER": "1"})
+        configured, metadata = prepare_qnap_scout_client(
+            client,
+            HostOsProfile("qnap", "QNAP", None, None, "test"),
+            {
+                "HOME": "/unused",
+                "TMPDIR": "/share/custom/tmp",
+                "DOCKER_SCOUT_CACHE_DIR": "/share/custom/cache",
+            },
+        )
+
+        self.assertIsNot(configured, client)
+        self.assertEqual(configured.environment["TMPDIR"], "/share/custom/tmp")
+        self.assertEqual(
+            configured.environment["DOCKER_SCOUT_CACHE_DIR"],
+            "/share/custom/cache",
+        )
+        self.assertEqual(metadata["temporary_directory"], "/share/custom/tmp")
+        self.assertEqual(metadata["cache_directory"], "/share/custom/cache")
+        self.assertEqual(metadata["selection"], "operator-environment")
+
+    def test_qnap_scout_storage_failure_is_localized(self) -> None:
+        """Give German operators an actionable work-directory failure."""
+
+        client = DockerClient(("fake-docker",), {"FAKE_DOCKER": "1"})
+        with patch(
+            "scripts.security_check.Path.mkdir",
+            side_effect=OSError("permission denied"),
+        ):
+            with self.assertRaisesRegex(
+                InventoryError,
+                "Docker-Scout-Arbeitsbereich",
+            ):
+                prepare_qnap_scout_client(
+                    client,
+                    HostOsProfile("qnap", "QNAP", None, None, "test"),
+                    {
+                        "HOME": "/share/homes/operator",
+                        "SWARM_INFO_LOCALE": "de",
+                    },
+                )
 
 
 class ContainerSecurityCheckTests(unittest.TestCase):
@@ -200,6 +273,13 @@ class ContainerSecurityCheckTests(unittest.TestCase):
                 with patch(
                     "scripts.security_check.DockerClient",
                     return_value=harness.client(),
+                ), patch.dict(
+                    os.environ,
+                    {
+                        "HOME": temporary_directory,
+                        "TMPDIR": "",
+                        "DOCKER_SCOUT_CACHE_DIR": "",
+                    },
                 ):
                     standard_output = io.StringIO()
                     with redirect_stdout(standard_output), redirect_stderr(

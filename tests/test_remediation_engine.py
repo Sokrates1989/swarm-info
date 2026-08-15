@@ -15,7 +15,9 @@ from scripts.remediation_cli import _run_auto, run
 from scripts.remediation_engine import (
     RemediationExecutionError,
     deploy_declarative_change,
+    execute_latest_refresh,
     execute_runtime_override,
+    service_image_update_command,
     runtime_update_command,
     validate_candidate,
 )
@@ -287,6 +289,29 @@ class RemediationEngineTests(unittest.TestCase):
         self.assertEqual(context.exception.code, "runtime-verification-failed")
         self.assertIn("KeyboardInterrupt", context.exception.detail)
         self.assertEqual(client.image, OLD_IMAGE)
+
+    def test_latest_refresh_uses_exact_candidate_without_configuration_drift(self) -> None:
+        """Keep verified latest source intent while updating only one live service."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            target, _ = self._target_and_entry(Path(temporary))
+            client = AutoRuntimeClient()
+            result = execute_latest_refresh(
+                client,
+                "demo_worker",
+                target.candidate,
+                OLD_IMAGE,
+                30,
+                sleeper=lambda _: None,
+            )
+
+        self.assertEqual(result.status, "deployed")
+        self.assertFalse(result.config_drift)
+        self.assertEqual(client.image, NEW_IMAGE)
+        self.assertEqual(
+            service_image_update_command("demo_worker", target.candidate)[-1],
+            "demo_worker",
+        )
 
 
 class RemediationCliTests(unittest.TestCase):

@@ -14,7 +14,7 @@ OP_HELP_SERVICE_HEALTH="Zusammenfassung ausgefallener und beeinträchtigter Dien
 OP_HELP_VULNERABILITIES="Letzten Bericht und Befehle zur Behebung anzeigen"
 OP_HELP_VERSION="swarm-info-Version anzeigen"
 OP_HELP_REMEDIATE="Geführte und abgesicherte Behebung von Schwachstellen öffnen"
-OP_HELP_REMEDIATION_POLICY="Installationsspezifische JSON-Richtlinie für exakte Kandidaten und Quelländerungen"
+OP_HELP_REMEDIATION_POLICY="Optionale Installations-Overrides; sichere Läufe erstellen fehlende Richtlinien in Deployment-configs/ oder ~/.config/swarm-info"
 OP_HELP_DEPLOYMENT_MAP_FILE="Zuvor geprüfte Deployment-Zuordnung als JSON für die Behebung"
 OP_HELP_REMEDIATION_PLAN="Ziel für atomaren Trockenlaufplan und Ausführungsnachweis"
 OP_HELP_FORCE_REMEDY="Richtlinieneinträge mit auto_eligible=false versuchen; alle anderen Sicherungen bleiben aktiv"

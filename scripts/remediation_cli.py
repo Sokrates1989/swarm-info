@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import json
 import os
 from pathlib import Path
 import shlex
@@ -21,14 +20,17 @@ from scripts.operator_report import (
     selected_locale,
     vulnerability_state,
 )
+from scripts.remediation_auto_support import prepare_review, run_safe_latest_actions
 from scripts.remediation_guidance import run_targeted
 from scripts.remediation_engine import (
     ActionResult,
     RemediationExecutionError,
     deploy_declarative_change,
+    execute_latest_refresh,
     execute_runtime_override,
     render_stack,
     runtime_update_command,
+    service_image_update_command,
     validate_candidate,
 )
 from scripts.remediation_policy import (
@@ -38,6 +40,11 @@ from scripts.remediation_policy import (
     build_plan,
     load_policy,
     vulnerable_items,
+)
+from scripts.remediation_review import (
+    ensure_policy,
+    policy_output_path,
+    record_review_outcome,
 )
 from scripts.remediation_source import (
     SourceEditError,
@@ -65,12 +72,8 @@ SUPPORTED_MODES = ("menu", "service", "image", "guided", "auto")
 def default_policy_path(environment: Mapping[str, str] | None = None) -> Path | None:
     """Find an explicit or current-installation remediation policy."""
 
-    values = os.environ if environment is None else environment
-    configured = values.get("SWARM_INFO_REMEDIATION_POLICY", "").strip()
-    if configured:
-        return Path(configured)
-    local = Path.cwd() / "configs" / "remediation-policy.json"
-    return local if local.is_file() else None
+    candidate = policy_output_path(None, environment=environment)
+    return candidate if candidate.is_file() else None
 
 
 def default_plan_path() -> Path:
@@ -181,6 +184,10 @@ def _render_plan(plan: Mapping[str, Any], catalog: Mapping[str, str], output: Te
             blocked=summary["blocked"],
             declarative=summary["declarative"],
             runtime=summary["runtime_overrides"],
+            latest=(
+                summary.get("latest_refreshes", 0)
+                + summary.get("default_safe_actions", 0)
+            ),
         ),
         file=output,
     )
@@ -208,6 +215,20 @@ def _render_plan(plan: Mapping[str, Any], catalog: Mapping[str, str], output: Te
             ),
             file=output,
         )
+    for entry in plan.get("default_safe_actions", []):
+        print(
+            message(
+                catalog,
+                "remediation.planEntry",
+                service=entry["service"],
+                action=_localized_code(
+                    catalog, "remediation.action", entry["action"]
+                ),
+                candidate=entry["candidate_image"],
+                status=message(catalog, "remediation.planSafeReady"),
+            ),
+            file=output,
+        )
 
 
 def _record_result(
@@ -231,6 +252,7 @@ def _run_auto(
     catalog: Mapping[str, str],
     input_function: Callable[[str], str],
     output: TextIO,
+    policy_created: bool = False,
 ) -> int:
     """Plan, validate, review, and optionally execute explicitly safe entries."""
 
@@ -242,6 +264,17 @@ def _run_auto(
             options.deploy_roots or default_deploy_roots(),
         )
     plan = build_plan(report, deployment_map, policy, options.force_auto_remedy_attempt)
+    assessment = prepare_review(
+        report,
+        deployment_map,
+        policy,
+        plan,
+        options,
+        client,
+        catalog,
+        output,
+        policy_created,
+    )
     renderer = deployment_map.get("renderer")
     if plan["summary"]["declarative"] and (
         not isinstance(renderer, Mapping) or renderer.get("available") is not True
@@ -251,7 +284,10 @@ def _run_auto(
     write_json_atomic(plan_output, plan)
     _render_plan(plan, catalog, output)
     print(message(catalog, "remediation.planSaved", path=plan_output), file=output)
-    if plan["summary"]["eligible"] == 0:
+    if (
+        plan["summary"]["eligible"] == 0
+        and plan["summary"]["default_safe_actions"] == 0
+    ):
         return 2
     if not os.access(options.report_file.parent, os.W_OK):
         raise RemediationExecutionError(
@@ -264,14 +300,35 @@ def _run_auto(
     print(message(catalog, "remediation.context", context=context_name), file=output)
     targets = _policy_targets(policy)
     platform = safe_text((report.get("policy") or {}).get("platform", "linux/amd64"))
-    deployed_count = 0
+    deployed_count = run_safe_latest_actions(
+        assessment,
+        plan,
+        plan_output,
+        policy.path,
+        platform,
+        client,
+        catalog,
+        context_name,
+        input_function,
+        output,
+    )
     for entry in plan["entries"]:
         if not entry["eligible"]:
             continue
         target = targets[entry["policy_id"]]
         print("", file=output)
         print(message(catalog, "remediation.validating", service=target.service), file=output)
-        validation = validate_candidate(client, target, entry, platform)
+        try:
+            validation = validate_candidate(client, target, entry, platform)
+        except RemediationExecutionError as error:
+            record_review_outcome(
+                policy.path,
+                target.service,
+                "failed",
+                error.code,
+                error.detail,
+            )
+            raise
         print(
             message(
                 catalog,
@@ -303,21 +360,88 @@ def _run_auto(
             ):
                 print(message(catalog, "remediation.skipped"), file=output)
                 continue
-            result = execute_runtime_override(
-                client,
-                target,
-                entry,
-                post_validation=lambda: validate_candidate(
-                    client, target, entry, platform
-                ),
-            )
+            try:
+                result = execute_runtime_override(
+                    client,
+                    target,
+                    entry,
+                    post_validation=lambda: validate_candidate(
+                        client, target, entry, platform
+                    ),
+                )
+            except RemediationExecutionError as error:
+                record_review_outcome(
+                    policy.path,
+                    target.service,
+                    "failed",
+                    error.code,
+                    error.detail,
+                )
+                raise
             _record_result(plan, result, plan_output)
+            record_review_outcome(policy.path, target.service, "deployed")
             deployed_count += 1
             print(message(catalog, "remediation.deployed", service=target.service), file=output)
             continue
-        change = prepare_source_change(target, entry)
-        mapping = entry["mapping"]
-        old_rendered = render_stack(client, Path(mapping["stack_file"]))
+        if entry["action"] == "latest-refresh":
+            command = shlex.join(
+                ["docker", *service_image_update_command(target.service, target.candidate)]
+            )
+            print(message(catalog, "remediation.policyLatestRefresh"), file=output)
+            print(f"  {command}", file=output)
+            print(
+                f"  {shlex.join(['docker', 'service', 'update', '--rollback', target.service])}",
+                file=output,
+            )
+            if not _ask(
+                message(
+                    catalog,
+                    "remediation.policyLatestConfirm",
+                    service=target.service,
+                    context=context_name,
+                ),
+                input_function,
+            ):
+                print(message(catalog, "remediation.skipped"), file=output)
+                continue
+            try:
+                result = execute_latest_refresh(
+                    client,
+                    target.service,
+                    target.candidate,
+                    str(entry["current_image"]),
+                    target.timeout_seconds,
+                    post_validation=lambda: validate_candidate(
+                        client, target, entry, platform
+                    ),
+                )
+            except RemediationExecutionError as error:
+                record_review_outcome(
+                    policy.path,
+                    target.service,
+                    "failed",
+                    error.code,
+                    error.detail,
+                )
+                raise
+            _record_result(plan, result, plan_output)
+            record_review_outcome(policy.path, target.service, "deployed")
+            deployed_count += 1
+            print(message(catalog, "remediation.deployed", service=target.service), file=output)
+            continue
+        try:
+            change = prepare_source_change(target, entry)
+            mapping = entry["mapping"]
+            old_rendered = render_stack(client, Path(mapping["stack_file"]))
+        except (RemediationExecutionError, SourceEditError) as error:
+            record_review_outcome(
+                policy.path,
+                target.service,
+                "failed",
+                error.code,
+                error.detail,
+            )
+            raise
         print(message(catalog, "remediation.reviewDiff"), file=output)
         print(change.diff, file=output, end="" if change.diff.endswith("\n") else "\n")
         if not _ask(
@@ -357,17 +481,28 @@ def _run_auto(
                 file=output,
             )
             continue
-        result = deploy_declarative_change(
-            client,
-            target,
-            entry,
-            change,
-            old_rendered,
-            post_validation=lambda: validate_candidate(
-                client, target, entry, platform
-            ),
-        )
+        try:
+            result = deploy_declarative_change(
+                client,
+                target,
+                entry,
+                change,
+                old_rendered,
+                post_validation=lambda: validate_candidate(
+                    client, target, entry, platform
+                ),
+            )
+        except RemediationExecutionError as error:
+            record_review_outcome(
+                policy.path,
+                target.service,
+                "failed",
+                error.code,
+                error.detail,
+            )
+            raise
         _record_result(plan, result, plan_output)
+        record_review_outcome(policy.path, target.service, "deployed")
         deployed_count += 1
         print(message(catalog, "remediation.deployed", service=target.service), file=output)
     if deployed_count:
@@ -451,8 +586,14 @@ def run(
     if mode == "cancel":
         return 0
     policy_path = options.remediation_policy or default_policy_path()
-    policy = load_policy(policy_path) if policy_path is not None else None
+    policy = (
+        load_policy(policy_path)
+        if policy_path is not None and policy_path.is_file()
+        else None
+    )
     if mode in {"service", "image", "guided"}:
+        if options.remediation_policy is not None and policy is None:
+            policy = load_policy(options.remediation_policy)
         platform = safe_text(
             (report.get("policy") or {}).get("platform", "linux/amd64")
         )
@@ -468,9 +609,12 @@ def run(
             policy=policy,
         )
         return 0
+    policy_created = False
     if policy is None:
         print(message(catalog, "remediation.policyMissing"), file=output)
-        return 3
+        policy_path = policy_output_path(options.remediation_policy)
+        policy_created = ensure_policy(policy_path)
+        policy = load_policy(policy_path)
     return _run_auto(
         report,
         deployment_map,
@@ -480,6 +624,7 @@ def run(
         catalog,
         input_function,
         output,
+        policy_created,
     )
 
 

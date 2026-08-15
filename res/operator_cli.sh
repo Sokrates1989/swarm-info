@@ -182,8 +182,9 @@ display_service_deployment_map() {
 #     installation policy, plan output, and the two independent override gates.
 #
 # Returns:
-#     0 completed/cancelled, 2 no policy entry is currently eligible, or 3 when
-#     evidence or a safety precondition blocks the workflow.
+#     0 completed/cancelled, 2 no built-in or policy action is currently
+#     executable, or 3 when evidence or a safety precondition blocks the
+#     workflow.
 # -----------------------------------------------------------------------------
 run_vulnerability_remediation_menu() {
     local deploy_root=""
@@ -214,6 +215,11 @@ run_vulnerability_remediation_menu() {
         remediation_arguments+=(--deployment-map-file "$selected_map_file")
     fi
     if [ "$selected_policy_file" = "NONE" ] && [ -r "$invocation_directory/configs/remediation-policy.json" ]; then
+        selected_policy_file="$invocation_directory/configs/remediation-policy.json"
+    fi
+    if [ "$selected_policy_file" = "NONE" ] \
+        && [ -d "$invocation_directory/.git" ] \
+        && [ -d "$invocation_directory/configs" ]; then
         selected_policy_file="$invocation_directory/configs/remediation-policy.json"
     fi
     if [ "$selected_policy_file" != "NONE" ]; then

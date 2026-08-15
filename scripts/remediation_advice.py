@@ -17,6 +17,7 @@ from scripts.remediation_policy import (
     RemediationPolicy,
     RemediationPolicyError,
     image_repository,
+    is_mutable_latest,
     parse_candidate_image,
 )
 from scripts.vulnerability_models import digest_from_reference
@@ -85,14 +86,6 @@ def _reference_tag(reference: str) -> str:
     if final_colon > final_slash:
         return name[final_colon + 1 :]
     return "latest"
-
-
-def is_mutable_latest(reference: object) -> bool:
-    """Return whether a declarative source follows the mutable latest tag."""
-
-    if not isinstance(reference, str) or not reference.strip() or "@" in reference:
-        return False
-    return _reference_tag(reference).lower() == "latest"
 
 
 def _version_from_config(config: Mapping[str, Any], tag: str) -> tuple[str | None, str]:
@@ -361,20 +354,24 @@ def analyze_image(
     item: Mapping[str, Any],
     platform: str,
     policy: RemediationPolicy | None = None,
+    include_scout_recommendations: bool = True,
 ) -> ImageAdvice:
-    """Gather current-version, Scout, registry, policy, and validation evidence."""
+    """Gather version and candidate evidence, with optional base-image advice."""
 
     image = str(item.get("image", ""))
     current_tag = _reference_tag(image)
     current_digest = digest_from_reference(image)
     current_metadata = inspect_image_metadata(client, image, platform=platform)
-    recommendation = client.run(
-        ["scout", "recommendations", "--platform", platform, image]
-    )
-    scout = parse_scout_base_advice(
-        recommendation.return_code,
-        "\n".join((recommendation.stderr, recommendation.stdout)),
-    )
+    if include_scout_recommendations:
+        recommendation = client.run(
+            ["scout", "recommendations", "--platform", platform, image]
+        )
+        scout = parse_scout_base_advice(
+            recommendation.return_code,
+            "\n".join((recommendation.stderr, recommendation.stdout)),
+        )
+    else:
+        scout = ScoutBaseAdvice("skipped")
     candidate, policy_count, source = _policy_candidate(policy, item)
     proposal_state = source if source == "policy-conflict" else "manual-review"
     candidate_metadata = ImageMetadata()

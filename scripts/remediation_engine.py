@@ -439,29 +439,42 @@ def deploy_declarative_change(
 def runtime_update_command(target: PolicyTarget) -> list[str]:
     """Return the exact guarded Docker runtime-override arguments."""
 
+    return service_image_update_command(target.service, target.candidate)
+
+
+def service_image_update_command(
+    service: str, candidate: CandidateImage
+) -> list[str]:
+    """Return one registry-authenticated update pinned to validated image content."""
+
     return [
         "service",
         "update",
         "--with-registry-auth",
         "--image",
-        target.candidate.reference,
-        target.service,
+        candidate.reference,
+        service,
     ]
 
 
-def execute_runtime_override(
+def _execute_service_image_update(
     client: DockerClient,
-    target: PolicyTarget,
-    plan_entry: Mapping[str, Any],
-    sleeper: Callable[[float], None] = time.sleep,
-    post_validation: Callable[[], object] | None = None,
+    service: str,
+    candidate: CandidateImage,
+    current_image: str,
+    timeout_seconds: int,
+    *,
+    config_drift: bool,
+    detail: str,
+    sleeper: Callable[[float], None],
+    post_validation: Callable[[], object] | None,
 ) -> ActionResult:
-    """Apply an explicit runtime override and rollback the service on failure."""
+    """Execute one exact image update with shared convergence and rollback guards."""
 
-    snapshot = capture_service(client, target.service)
-    if not image_references_match(str(plan_entry.get("current_image", "")), snapshot.image):
+    snapshot = capture_service(client, service)
+    if not image_references_match(current_image, snapshot.image):
         raise RemediationExecutionError("live-image-changed", snapshot.image)
-    result = client.run(runtime_update_command(target))
+    result = client.run(service_image_update_command(service, candidate))
     if result.return_code != 0:
         raise RemediationExecutionError(
             "runtime-update-failed",
@@ -471,18 +484,18 @@ def execute_runtime_override(
         wait_for_candidate(
             client,
             snapshot,
-            target.candidate,
-            target.timeout_seconds,
+            candidate,
+            timeout_seconds,
             sleeper=sleeper,
         )
         if post_validation is not None:
             post_validation()
     except BaseException as error:
-        rollback = client.run(["service", "update", "--rollback", target.service])
+        rollback = client.run(["service", "update", "--rollback", service])
         if rollback.return_code == 0:
             try:
                 restore_service_snapshot(
-                    client, snapshot, target.timeout_seconds, sleeper=sleeper
+                    client, snapshot, timeout_seconds, sleeper=sleeper
                 )
                 suffix = "rollback confirmed"
             except RemediationExecutionError:
@@ -499,8 +512,54 @@ def execute_runtime_override(
         ) from error
     return ActionResult(
         "deployed",
+        service,
+        candidate.reference,
+        config_drift=config_drift,
+        detail=detail,
+    )
+
+
+def execute_latest_refresh(
+    client: DockerClient,
+    service: str,
+    candidate: CandidateImage,
+    current_image: str,
+    timeout_seconds: int,
+    sleeper: Callable[[float], None] = time.sleep,
+    post_validation: Callable[[], object] | None = None,
+) -> ActionResult:
+    """Refresh a verified latest-following service without changing its source intent."""
+
+    return _execute_service_image_update(
+        client,
+        service,
+        candidate,
+        current_image,
+        timeout_seconds,
+        config_drift=False,
+        detail="validated latest refresh; declarative source still follows latest",
+        sleeper=sleeper,
+        post_validation=post_validation,
+    )
+
+
+def execute_runtime_override(
+    client: DockerClient,
+    target: PolicyTarget,
+    plan_entry: Mapping[str, Any],
+    sleeper: Callable[[float], None] = time.sleep,
+    post_validation: Callable[[], object] | None = None,
+) -> ActionResult:
+    """Apply an explicit runtime override and rollback the service on failure."""
+
+    return _execute_service_image_update(
+        client,
         target.service,
-        target.candidate.reference,
+        target.candidate,
+        str(plan_entry.get("current_image", "")),
+        target.timeout_seconds,
         config_drift=True,
         detail="runtime override; update declarative source promptly",
+        sleeper=sleeper,
+        post_validation=post_validation,
     )

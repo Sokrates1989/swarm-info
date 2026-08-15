@@ -253,6 +253,31 @@ class RemediationPolicyTests(unittest.TestCase):
         self.assertEqual(plan["entries"][0]["action"], "runtime-override")
         self.assertTrue(plan["entries"][0]["eligible"])
 
+    def test_reviewed_latest_candidate_needs_no_source_edit_adapter(self) -> None:
+        """Treat an already latest-following source as a reversible refresh action."""
+
+        latest_candidate = f"registry.example/team/app:latest@{NEW_DIGEST}"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stack_file = root / "swarm-stack.yml"
+            stack_file.write_text("services: {}\n", encoding="utf-8")
+            mapping = deployment_map(root, stack_file)
+            mapping["services"][0]["declared_image"] = (
+                "registry.example/team/app:latest"
+            )
+            mapping["services"][0]["source_verified"] = True
+            policy = load_policy(
+                write_policy(
+                    root,
+                    policy_payload(candidate=latest_candidate, source=None),
+                )
+            )
+            plan = build_plan(vulnerability_report(), mapping, policy)
+
+        self.assertEqual(plan["entries"][0]["action"], "latest-refresh")
+        self.assertTrue(plan["entries"][0]["eligible"])
+        self.assertEqual(plan["summary"]["latest_refreshes"], 1)
+
     def test_mutable_current_image_blocks_exact_rollback_plan(self) -> None:
         """Refuse automatic mutation when the previous artifact cannot be restored."""
 

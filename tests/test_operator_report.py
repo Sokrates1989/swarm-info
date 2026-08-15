@@ -103,7 +103,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.7.0")
+        self.assertEqual(version, "1.8.0")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:
@@ -142,6 +142,21 @@ class CliOperatorContractTests(unittest.TestCase):
         self.assertIn('"map-service-deployments")', entrypoint)
         self.assertIn("-m scripts.deployment_mapper", bridge)
         self.assertNotIn("docker service update", bridge)
+
+    def test_remediation_wrapper_can_create_policy_in_invoking_deployment_repo(self) -> None:
+        """Keep policy ownership with the deployment checkout despite internal cd."""
+
+        bridge = (REPOSITORY_ROOT / "res" / "operator_cli.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('local invocation_directory="$PWD"', bridge)
+        self.assertIn('[ -d "$invocation_directory/.git" ]', bridge)
+        self.assertIn('[ -d "$invocation_directory/configs" ]', bridge)
+        self.assertIn(
+            'selected_policy_file="$invocation_directory/configs/remediation-policy.json"',
+            bridge,
+        )
 
     def test_help_and_manual_cover_new_public_commands(self) -> None:
         """Prevent drift between help routing and the installed manual."""

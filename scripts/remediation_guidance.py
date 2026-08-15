@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence, TextIO
 
 from scripts.operator_report import message, safe_text
-from scripts.remediation_advice import ImageAdvice, is_mutable_latest
+from scripts.remediation_advice import ImageAdvice
 from scripts.remediation_advice_view import analyze_and_render_image
-from scripts.remediation_policy import RemediationPolicy
+from scripts.remediation_policy import RemediationPolicy, is_mutable_latest
 from scripts.terminal_style import TerminalStyle
 from scripts.vulnerability_scan import DockerClient
 

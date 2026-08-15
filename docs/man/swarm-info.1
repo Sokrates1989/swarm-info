@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.7.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.8.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -38,9 +38,15 @@ while any path or source remains unverified.
 .TP
 .B \-\-remediate-vulnerabilities
 Open the interactive remediation workflow. It offers targeted service and
-image guidance, priority-ordered guidance, and policy-gated auto-remediation.
-No mutation is available without a terminal, a fresh complete scan, current
-manager access, and separate confirmations.
+image guidance, priority-ordered guidance, conservative built-in
+auto-remediation, and installation-policy overrides. A missing policy no
+longer aborts: swarm-info creates an inert generated review queue. Built-in
+execution is limited to a validated same-major digest change for a verified
+source already following latest, with separate default-No backup/compatibility
+and update confirmations. All other items remain blocked until reviewed policy
+targets authorize them. No mutation is available without a terminal, fresh
+complete scan, current manager access, exact rollback evidence, and separate
+confirmations.
 .PP
 Targeted guidance first asks the operator to open a second terminal. It runs
 read-only Scout and image-metadata checks with a progress heartbeat. Standard
@@ -132,8 +138,11 @@ Load a previously reviewed deployment-map JSON for guidance. Auto-remediation
 regenerates live mapping evidence before it plans any mutation.
 .TP
 .BI \-\-remediation-policy " path"
-Load an installation-owned JSON policy containing exact services, immutable
-candidate images, backup classifications, and optional source adapters.
+Select an installation-owned JSON policy containing exact services, immutable
+candidate images, backup classifications, and optional source adapters. In
+automatic mode, a missing selected file is created with no active targets and
+an inert generated review queue. Without this option or its environment
+equivalent, swarm-info uses a deployment-local or user-scoped default.
 .TP
 .BI \-\-remediation-plan-file " path"
 Select the atomically written dry-run plan and sanitized execution record.
@@ -286,8 +295,14 @@ Default atomic remediation dry-run and sanitized execution record when the
 directory is writable.
 .TP
 .I config/remediation-policy.example.json
-Empty safe policy template; copy it into the installation's deployment
-repository and configure explicit targets there.
+Empty schema-2 policy template. A pre-existing file is optional because a safe
+run can create an installation-owned policy and generated review queue.
+.TP
+.I ~/.config/swarm-info/remediation-policy.json
+Default user-scoped policy and generated review queue outside a Git deployment
+repository with an existing
+.I configs/
+directory. XDG_CONFIG_HOME changes the configuration base.
 .TP
 .I ~/.local/share/man/man1/swarm-info.1
 User-installed manual page.
@@ -301,7 +316,12 @@ is absent. Default: /swarm.
 .B SWARM_INFO_REMEDIATION_POLICY
 Default installation-owned remediation policy path. An explicit
 .B \-\-remediation-policy
-value takes precedence.
+value takes precedence. A missing selected path is created only when automatic
+remediation is entered.
+.TP
+.B XDG_CONFIG_HOME
+Configuration base used for a generated user-scoped remediation policy.
+Default: ~/.config.
 .TP
 .B SWARM_INFO_LOCALE
 Set to a value beginning with
@@ -350,7 +370,13 @@ Review again and request default-No confirmation before removal:
 swarm-info -i --apply
 .fi
 .PP
-Open remediation directly with an accepted search root and policy:
+Run conservative remediation without preparing a policy first:
+.PP
+.nf
+swarm-info --remediate-vulnerabilities --deploy-root /swarm
+.fi
+.PP
+Keep generated review evidence and explicit overrides in a deployment repo:
 .PP
 .nf
 swarm-info --remediate-vulnerabilities --deploy-root /swarm \

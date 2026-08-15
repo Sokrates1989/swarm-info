@@ -401,25 +401,55 @@ resolution enabled; a source that pins the old digest must be updated.
 The targeted and guided modes never change Docker or files. ANSI emphasis is
 used only on an interactive terminal; set `NO_COLOR=1` to disable it.
 
-Auto-remediation requires an installation-owned policy. Keep this file in the
-Git repository that owns the deployment configuration:
+Auto-remediation works without a pre-existing policy. On the first safe run it
+creates an installation-owned policy with an inert `generated_review` queue:
+
+- inside a Git deployment repository that already has `configs/`, it uses
+  `configs/remediation-policy.json`;
+- otherwise it uses
+  `${XDG_CONFIG_HOME:-$HOME/.config}/swarm-info/remediation-policy.json`;
+- `--remediation-policy <PATH>` or `SWARM_INFO_REMEDIATION_POLICY` selects an
+  explicit path and creates it when needed.
+
+Open remediation, then select `4) Fast secure auto-remediation`:
+
+```bash
+swarm-info --remediate-vulnerabilities \
+  --deploy-root /swarm \
+  --remediation-plan-file /info_json/vulnerability_remediation_plan.json
+```
+
+The no-policy executor is deliberately narrow. It can update only one service
+at a time when its verified declarative source already follows unpinned
+`latest`, the deployed image has an exact rollback digest, the registry digest
+has moved, the candidate reduces critical/high findings without introducing a
+new finding, and publisher metadata proves the same visible major version. It
+prints the exact update and rollback commands, then asks default-No questions
+for backup/compatibility readiness and for execution. It never edits source
+files or refreshes other images in the stack.
+
+Everything else is blocked safely and recorded in `generated_review`, including
+candidate discovery/validation results, mapping evidence, reason codes, and
+failed or declined attempts. That section includes localized `_guidance` and
+disabled `suggested_target` templates, but it cannot authorize any mutation.
+To grant an installation-specific override, copy a reviewed template into the
+top-level `targets` array, complete its candidate, backup, and source evidence,
+then explicitly enable it. Each later assessment refreshes only the generated
+section, retains its latest sanitized attempt outcome, and preserves
+operator-owned targets.
+
+To keep the policy in the deployment repository explicitly:
 
 ```bash
 cd /swarm/administration/swarm-info-watchdog
-swarm_info_dir="$(dirname "$(readlink -f "$(command -v swarm-info)")")"
 install -d -m 0750 configs
-install -m 0640 \
-  "$swarm_info_dir/config/remediation-policy.example.json" \
-  configs/remediation-policy.json
-
-# Edit and review explicit targets using the companion documentation.
-${EDITOR:-nano} configs/remediation-policy.json
-git diff -- configs/remediation-policy.json
-
 swarm-info --remediate-vulnerabilities \
   --deploy-root /swarm \
   --remediation-policy "$PWD/configs/remediation-policy.json" \
   --remediation-plan-file /info_json/vulnerability_remediation_plan.json
+
+${EDITOR:-nano} configs/remediation-policy.json
+git diff -- configs/remediation-policy.json
 ```
 
 See
@@ -432,11 +462,12 @@ services in one stack share that source, one representative service is enough;
 use separate targets for consumers owned by different stacks or keys. The final
 all-image scan verifies the complete consumer set.
 
-The auto-remediation sequence is intentionally strict:
+The policy-backed auto-remediation sequence remains intentionally strict:
 
 1. Require fresh, complete scan evidence and live manager access.
 2. Regenerate conservative service-to-stack mappings.
-3. Merge scan, mapping, and policy into an atomic plan with a stable plan ID.
+3. Merge scan, mapping, built-in safe actions, and policy into an atomic plan
+   with a stable plan ID; refresh the inert installation review queue.
 4. Require both an immutable current image for exact rollback and a tagged
    candidate pinned to a full SHA-256 digest in the same image repository, plus
    an explicit `backup.status=not_required` justification.

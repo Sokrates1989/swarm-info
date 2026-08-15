@@ -19,8 +19,9 @@ from scripts.deployment_mapping import normalized_image_reference
 from scripts.vulnerability_models import digest_from_reference, utc_timestamp
 
 
-POLICY_SCHEMA_VERSION = 1
-PLAN_SCHEMA_VERSION = 1
+POLICY_SCHEMA_VERSION = 2
+SUPPORTED_POLICY_SCHEMA_VERSIONS = (1, POLICY_SCHEMA_VERSION)
+PLAN_SCHEMA_VERSION = 2
 SHA256_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 SAFE_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 SERVICE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}")
@@ -125,6 +126,18 @@ def image_repository(reference: str) -> str:
 
     normalized, _ = normalized_image_reference(reference)
     return normalized.rsplit(":", 1)[0]
+
+
+def is_mutable_latest(reference: object) -> bool:
+    """Return whether a source image deliberately follows an unpinned latest tag."""
+
+    if not isinstance(reference, str) or not reference.strip() or "@" in reference:
+        return False
+    name = reference.strip()
+    final_slash = name.rfind("/")
+    final_colon = name.rfind(":")
+    tag = name[final_colon + 1 :] if final_colon > final_slash else "latest"
+    return tag.lower() == "latest"
 
 
 def _parse_source(raw: object) -> SourceEdit | None:
@@ -253,9 +266,16 @@ def load_policy(path: Path) -> RemediationPolicy:
         raise RemediationPolicyError("policyUnreadable", str(path)) from error
     if not isinstance(payload, Mapping):
         raise RemediationPolicyError("policyObject")
-    _reject_unknown(payload, {"schema_version", "targets"}, "policyUnknownField")
-    if payload.get("schema_version") != POLICY_SCHEMA_VERSION:
+    schema_version = payload.get("schema_version")
+    if schema_version not in SUPPORTED_POLICY_SCHEMA_VERSIONS:
         raise RemediationPolicyError("policySchema")
+    allowed_fields = {"schema_version", "targets"}
+    if schema_version == POLICY_SCHEMA_VERSION:
+        allowed_fields.add("generated_review")
+    _reject_unknown(payload, allowed_fields, "policyUnknownField")
+    generated_review = payload.get("generated_review")
+    if generated_review is not None and not isinstance(generated_review, Mapping):
+        raise RemediationPolicyError("policyReview")
     raw_targets = payload.get("targets")
     if not isinstance(raw_targets, Sequence) or isinstance(raw_targets, (str, bytes)):
         raise RemediationPolicyError("policyTargets")
@@ -385,11 +405,17 @@ def build_plan(
             reasons.append("auto-not-authorized")
         mapping_status = mapping.get("status", "unknown")
         source_verified = mapping.get("source_verified", True) is True
-        action = (
-            "declarative"
-            if mapping_status == "mapped" and source_verified
-            else "runtime-override"
-        )
+        if (
+            mapping_status == "mapped"
+            and source_verified
+            and target.candidate.tag.lower() == "latest"
+            and is_mutable_latest(mapping.get("declared_image"))
+        ):
+            action = "latest-refresh"
+        elif mapping_status == "mapped" and source_verified:
+            action = "declarative"
+        else:
+            action = "runtime-override"
         if action == "declarative" and target.source is None:
             reasons.append("source-adapter-missing")
         entry = {
@@ -447,6 +473,10 @@ def build_plan(
             ),
             "runtime_overrides": sum(
                 entry["eligible"] and entry["action"] == "runtime-override"
+                for entry in entries
+            ),
+            "latest_refreshes": sum(
+                entry["eligible"] and entry["action"] == "latest-refresh"
                 for entry in entries
             ),
         },

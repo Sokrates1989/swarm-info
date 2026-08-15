@@ -339,6 +339,15 @@ class RemediationAdviceTests(unittest.TestCase):
         self.assertIn(NEW_IMAGE, rendered)
         self.assertIn("source already follows latest", rendered)
         self.assertIn("--resolve-image always", rendered)
+        self.assertIn(
+            "swarm-info --scan-vulnerabilities --service demo_browser",
+            rendered,
+        )
+        self.assertIn(
+            "swarm-info --scan-vulnerabilities --output-file "
+            "/info_json/vulnerability_scan.json",
+            rendered,
+        )
         self.assertNotIn("git diff", rendered)
 
 

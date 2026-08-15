@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.8.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.9.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -161,7 +161,37 @@ fallback for an unresolved deployment source. This creates configuration drift
 and remains disabled by default.
 .TP
 .B \-\-scan-vulnerabilities
-Force a locked scan of every unique current Swarm service image.
+Force a locked scan of every unique current Swarm service image. Add exactly
+one of
+.BR \-\-service ,
+.BR \-\-image ,
+or
+.B \-\-stack
+for a fresh focused verification of current live state.
+.TP
+.BI \-\-service " name"
+With
+.BR \-\-scan-vulnerabilities ,
+scan only the image currently specified by one exact live service name or ID.
+.TP
+.BI \-\-image " reference"
+With
+.BR \-\-scan-vulnerabilities ,
+scan one image used by current Swarm services. A tag may match its live
+digest-pinned reference. If that tag maps to multiple live digests, supply one
+exact image@digest instead.
+.TP
+.BI \-\-stack " name"
+With
+.BR \-\-scan-vulnerabilities ,
+scan every current service in one exact Docker stack namespace, deduplicating
+shared images.
+.PP
+Focused verification is manual-only, bypasses the full-report cache, and does
+not replace or rotate the watchdog's all-service evidence. Without an explicit
+output path it writes a separate
+.I vulnerability_scan_focused.json
+report.
 .TP
 .B \-\-security-check
 Auto-detect manager capability. A manager receives Swarm-wide service-image
@@ -283,6 +313,10 @@ Preferred production health report.
 .I /info_json/vulnerability_scan.json
 Preferred production vulnerability report.
 .TP
+.I /info_json/vulnerability_scan_focused.json
+Preferred focused service, image, or stack verification report. It never
+replaces the all-service watchdog report by default.
+.TP
 .I swarm_info/security_scan.json
 Default standalone/QNAP compatibility security report. It is separate from
 watchdog evidence.
@@ -349,6 +383,19 @@ Show the current vulnerability evidence:
 .PP
 .nf
 swarm-info -v
+.fi
+.PP
+Verify one service after redeploying its remediated image:
+.PP
+.nf
+swarm-info --scan-vulnerabilities --service my-stack_api
+.fi
+.PP
+Verify one exact live image or all images in one stack:
+.PP
+.nf
+swarm-info --scan-vulnerabilities --image nginx:1.27
+swarm-info --scan-vulnerabilities --stack my-stack
 .fi
 .PP
 Scan exact images used by local QNAP containers:

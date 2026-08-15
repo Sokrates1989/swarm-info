@@ -674,6 +674,41 @@ Exit code `2` is an expected vulnerability result, not an execution failure.
 When one image fails, the command continues scanning the remaining images,
 publishes their findings, marks the report `incomplete`, and exits `3`.
 
+### Verify one remediated service, image, or stack
+
+After rebuilding or redeploying an image, verify only the affected live scope
+instead of waiting for another all-service scan:
+
+```bash
+# One exact current Swarm service (recommended immediately after remediation).
+swarm-info --scan-vulnerabilities --service my-stack_api
+
+# One image currently used by at least one Swarm service.
+swarm-info --scan-vulnerabilities --image nginx:1.27
+
+# Every service in one exact Docker stack namespace; shared images scan once.
+swarm-info --scan-vulnerabilities --stack my-stack
+```
+
+Selectors always resolve against current manager-visible service
+specifications, so a stale service or unused image cannot be reported as a
+successful deployment verification. An image tag also matches a live
+digest-pinned reference such as `nginx:1.27@sha256:...`; if the same tag maps to
+multiple live digests, rerun with one exact `image@digest` value.
+
+Focused scans are fresh, manual-only checks. They do not overwrite, cache, or
+rotate `/info_json/vulnerability_scan.json`, which remains the watchdog's
+all-service evidence. By default the public command writes
+`/info_json/vulnerability_scan_focused.json` when `/info_json` is writable,
+otherwise it writes `swarm_info/vulnerability_scan_focused.json` in the
+installed checkout. Use `--output-file` to choose another separate path.
+
+The focused exit codes use the normal contract: `0` means clean, `2` means the
+selected scope still has fixable critical/high findings, and `3` means the
+verification was incomplete or the selector no longer matches live state.
+Guided remediation now prints the single-service verification command before
+the optional full Swarm confirmation scan.
+
 ## Inspect and reconcile the result
 
 ```bash

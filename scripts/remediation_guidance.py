@@ -307,6 +307,18 @@ def render_detail(
         ),
         file=output,
     )
+    print(message(catalog, "remediation.detailFocusedVerify"), file=output)
+    focused_command = [
+        "swarm-info",
+        "--scan-vulnerabilities",
+        "--service",
+        str(item["service"]),
+    ]
+    print(
+        style.command(f"  {shlex.join(focused_command)}"),
+        file=output,
+    )
+    print(message(catalog, "remediation.detailFullVerify"), file=output)
     print(
         style.command(
             "  swarm-info --scan-vulnerabilities --output-file /info_json/vulnerability_scan.json"

@@ -446,7 +446,10 @@ display_help() {
     echo -e "  --output-file     Health, scan, map, or image-cleanup JSON destination"
     echo -e "  --platform        Swarm default: linux/amd64; security-check default: auto"
     echo -e "  --scan-vulnerabilities"
-    echo -e "                    Force a locked scan of every Swarm service image"
+    echo -e "                    Force a locked scan of all images, or one selected live scope"
+    echo -e "  --service NAME    $OP_HELP_FOCUSED_SERVICE"
+    echo -e "  --image IMAGE     $OP_HELP_FOCUSED_IMAGE"
+    echo -e "  --stack STACK     $OP_HELP_FOCUSED_STACK"
     echo -e "  --security-check  Auto-detect Swarm manager or local-container image scanning"
     echo -e "  --runtime-mode    Security inventory: auto, swarm, or containers (default: auto)"
     echo -e "  --container-mode  Alias for --runtime-mode containers"
@@ -487,6 +490,9 @@ display_help() {
     echo "  swarm-info -i"
     echo "  swarm-info -i --apply"
     echo "  swarm-info --map-service-deployments --deploy-root /swarm"
+    echo "  swarm-info --scan-vulnerabilities --service my-stack_api"
+    echo "  swarm-info --scan-vulnerabilities --image nginx:1.27"
+    echo "  swarm-info --scan-vulnerabilities --stack my-stack"
     echo "  swarm-info -v"
     echo "  swarm-info --remediate-vulnerabilities --deploy-root /swarm"
 
@@ -512,6 +518,8 @@ is_show_menu_option_selected="false"
 use_file_output="false"
 file_output_type="json"
 VULNERABILITY_PLATFORM="linux/amd64"
+VULNERABILITY_SCOPE_KIND="all"
+VULNERABILITY_SCOPE_VALUE=""
 SECURITY_PLATFORM="auto"
 SECURITY_RUNTIME_MODE="auto"
 SECURITY_HOST_OS="auto"
@@ -531,6 +539,19 @@ FORCE_AUTO_REMEDY_ATTEMPT="false"
 ALLOW_RUNTIME_OVERRIDE="false"
 IMAGE_CLEANUP_APPLY="false"
 IMAGE_CLEANUP_ASSUME_YES="false"
+
+# Select exactly one live Swarm scope for a focused vulnerability scan.
+set_vulnerability_scope() {
+    local kind="$1"
+    local value="$2"
+
+    if [ "$VULNERABILITY_SCOPE_KIND" != "all" ]; then
+        echo "$OP_FOCUS_CONFLICT" >&2
+        return 64
+    fi
+    VULNERABILITY_SCOPE_KIND="$kind"
+    VULNERABILITY_SCOPE_VALUE="$value"
+}
 
 # Check for command-line options.
 while [ $# -gt 0 ]; do
@@ -759,6 +780,33 @@ while [ $# -gt 0 ]; do
             selected_action="scan-vulnerabilities"
             shift
             ;;
+        --service)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            set_vulnerability_scope "service" "$1" || exit 64
+            shift
+            ;;
+        --image)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            set_vulnerability_scope "image" "$1" || exit 64
+            shift
+            ;;
+        --stack)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            set_vulnerability_scope "stack" "$1" || exit 64
+            shift
+            ;;
         --scheduled-vulnerability-scan)
             selected_action="scheduled-vulnerability-scan"
             shift
@@ -847,6 +895,11 @@ fi
 if { [ "$IMAGE_CLEANUP_APPLY" = "true" ] || [ "$IMAGE_CLEANUP_ASSUME_YES" = "true" ]; } \
     && [ "$selected_action" != "image-cleanup" ]; then
     echo "[ERROR] --apply and --yes are valid only with --image-cleanup." >&2
+    exit 64
+fi
+if [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
+    && [ "$selected_action" != "scan-vulnerabilities" ]; then
+    echo "$OP_FOCUS_REQUIRES_SCAN" >&2
     exit 64
 fi
 

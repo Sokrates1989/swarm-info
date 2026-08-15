@@ -371,9 +371,35 @@ requires one of the following:
 - False-positive/not-exploitable finding: document a reviewed VEX exception;
   do not silently suppress it.
 
-The targeted and guided modes explain these steps and show the verified
-deployment directory, owning stack file, Scout commands, deployment command,
-service verification, and final full scan. They never change Docker or files.
+The targeted and guided modes start by asking you to open a second terminal so
+the instructions remain visible. They then run read-only image metadata and
+Docker Scout checks, while printing a progress heartbeat, and show:
+
+- the current application release when a standard OCI/legacy version label or
+  explicit version tag proves it;
+- Scout's current base image and same-tag refresh as **rebuild guidance**, never
+  as a guessed replacement application tag;
+- an immutable replacement from the installation remediation policy, or a new
+  digest currently published under `latest`, only after the same candidate
+  comparison used by auto-remediation proves fewer critical/high findings and
+  no new critical/high CVE IDs;
+- whether visible version evidence indicates the same major release, a major
+  upgrade, or insufficient metadata to decide;
+- the verified deployment directory, owning source file, exact candidate,
+  deployment/rollback-aware command, service verification, and final full
+  scan.
+
+A digest identifies exact image content but does not inherently encode the
+publisher's historical application version. For example,
+`latest@sha256:...` can be identified as Browserless 5.x only when the image
+contains suitable version metadata (or another reviewed source proves it).
+swarm-info reports `unknown` rather than guessing. When `latest` has moved and
+the newly resolved immutable digest passes validation, a source that already
+tracks mutable `latest` only needs a reviewed redeployment with image
+resolution enabled; a source that pins the old digest must be updated.
+
+The targeted and guided modes never change Docker or files. ANSI emphasis is
+used only on an interactive terminal; set `NO_COLOR=1` to disable it.
 
 Auto-remediation requires an installation-owned policy. Keep this file in the
 Git repository that owns the deployment configuration:

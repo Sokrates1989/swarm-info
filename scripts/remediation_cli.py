@@ -450,14 +450,27 @@ def run(
         mode = {"1": "service", "2": "image", "3": "guided", "4": "auto"}.get(selected, "cancel")
     if mode == "cancel":
         return 0
-    if mode in {"service", "image", "guided"}:
-        run_targeted(mode, items, mappings, catalog, input_function, output)
-        return 0
     policy_path = options.remediation_policy or default_policy_path()
-    if policy_path is None:
+    policy = load_policy(policy_path) if policy_path is not None else None
+    if mode in {"service", "image", "guided"}:
+        platform = safe_text(
+            (report.get("policy") or {}).get("platform", "linux/amd64")
+        )
+        run_targeted(
+            mode,
+            items,
+            mappings,
+            catalog,
+            input_function,
+            output,
+            client=client,
+            platform=platform,
+            policy=policy,
+        )
+        return 0
+    if policy is None:
         print(message(catalog, "remediation.policyMissing"), file=output)
         return 3
-    policy = load_policy(policy_path)
     return _run_auto(
         report,
         deployment_map,

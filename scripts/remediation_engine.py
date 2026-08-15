@@ -94,20 +94,42 @@ def validate_candidate(
     platform: str,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> CandidateValidation:
-    """Scan an explicit candidate and require improvement without new findings."""
+    """Validate the explicit candidate from one auto-remediation policy target."""
+
+    return validate_candidate_reference(
+        client,
+        target.candidate,
+        target.service,
+        plan_entry,
+        platform,
+        sleeper=sleeper,
+    )
+
+
+def validate_candidate_reference(
+    client: DockerClient,
+    candidate: CandidateImage,
+    service_name: str,
+    current_evidence: Mapping[str, Any],
+    platform: str,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> CandidateValidation:
+    """Scan any immutable proposal using the same fail-closed auto-remedy rules."""
 
     current_ids = {
-        item for item in plan_entry.get("finding_ids", []) if isinstance(item, str)
+        item
+        for item in current_evidence.get("finding_ids", [])
+        if isinstance(item, str)
     }
-    current_critical = plan_entry.get("critical", 0)
-    current_high = plan_entry.get("high", 0)
+    current_critical = current_evidence.get("critical", 0)
+    current_high = current_evidence.get("high", 0)
     if not isinstance(current_critical, int) or not isinstance(current_high, int):
         raise RemediationExecutionError("current-counts-invalid")
     if current_critical + current_high > 0 and not current_ids:
         raise RemediationExecutionError("current-finding-ids-missing")
     result = scan_image(
         client,
-        _target_for_candidate(target.candidate, target.service),
+        _target_for_candidate(candidate, service_name),
         platform,
         sleeper=sleeper,
     )

@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.6.2" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.7.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -41,6 +41,20 @@ Open the interactive remediation workflow. It offers targeted service and
 image guidance, priority-ordered guidance, and policy-gated auto-remediation.
 No mutation is available without a terminal, a fresh complete scan, current
 manager access, and separate confirmations.
+.PP
+Targeted guidance first asks the operator to open a second terminal. It runs
+read-only Scout and image-metadata checks with a progress heartbeat. Standard
+image labels or explicit tags identify the current application release when
+available. A digest alone is not treated as historical version metadata.
+Scout base-image refreshes are shown only as rebuild guidance. An immutable
+policy candidate, or a newly resolved digest behind
+.BR latest ,
+is placed in update commands only after the same no-new-findings and
+risk-improvement validation used by automatic remediation. Visible version
+metadata also distinguishes a same-major proposal from a possible breaking
+major upgrade. Set
+.B NO_COLOR=1
+to disable interactive ANSI emphasis.
 .SH INVENTORY OPTIONS
 .TP
 .BR \-b ", " \-\-basic

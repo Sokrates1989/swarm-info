@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.9.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.10.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -124,7 +124,7 @@ Check whether the installed swarm-info checkout is current and modified.
 Collect and atomically publish the Swarm health JSON report.
 .TP
 .BI \-o " path" ", " \-\-output-file " path"
-Select the health, vulnerability, deployment-map, or image-cleanup report
+Select the health, vulnerability, image-update, deployment-map, or image-cleanup report
 destination.
 .TP
 .BI \-\-deploy-root " path"
@@ -169,10 +169,33 @@ or
 .B \-\-stack
 for a fresh focused verification of current live state.
 .TP
+.B \-\-compare-image-update
+Scan one current and one proposed image, then report whether that concrete
+candidate removes all, some, or none of the current fixable critical/high
+findings. Each side is bound to an exact local image ID when installed, or an
+immutable registry digest otherwise. Cross-repository candidates are accepted
+for read-only evidence but never authorize deployment or prove compatibility.
+.TP
+.BI \-\-current-image " image"
+With
+.BR \-\-compare-image-update ,
+select an arbitrary current local or registry image. Use this mode for
+standalone Docker/QNAP and locally built images. It is mutually exclusive with
+.BR \-\-service .
+.TP
+.BI \-\-candidate-image " image"
+Required with
+.BR \-\-compare-image-update .
+Select the concrete proposed local or registry image. Mutable tags are resolved
+before scanning; the report records the exact artifact.
+.TP
 .BI \-\-service " name"
 With
 .BR \-\-scan-vulnerabilities ,
 scan only the image currently specified by one exact live service name or ID.
+With
+.BR \-\-compare-image-update ,
+use that live image as the current side of the comparison.
 .TP
 .BI \-\-image " reference"
 With
@@ -317,6 +340,10 @@ Preferred production vulnerability report.
 Preferred focused service, image, or stack verification report. It never
 replaces the all-service watchdog report by default.
 .TP
+.I /info_json/image_update_comparison.json
+Preferred atomic current-versus-candidate image comparison. It is independent
+from the all-service watchdog report and never authorizes deployment.
+.TP
 .I swarm_info/security_scan.json
 Default standalone/QNAP compatibility security report. It is separate from
 watchdog evidence.
@@ -396,6 +423,21 @@ Verify one exact live image or all images in one stack:
 .nf
 swarm-info --scan-vulnerabilities --image nginx:1.27
 swarm-info --scan-vulnerabilities --stack my-stack
+.fi
+.PP
+Prove the security effect of a proposed replacement for one live service:
+.PP
+.nf
+swarm-info --compare-image-update --service my-stack_api \
+  --candidate-image registry.example/my-app:2.0
+.fi
+.PP
+Compare an image you built locally without pushing it first:
+.PP
+.nf
+docker build -t my-app:security-candidate .
+swarm-info --compare-image-update --current-image my-app:current \
+  --candidate-image my-app:security-candidate
 .fi
 .PP
 Scan exact images used by local QNAP containers:

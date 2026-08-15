@@ -148,6 +148,18 @@ def _render_validated_candidate(
         ),
         file=output,
     )
+    if advice.validation is not None:
+        print(
+            style.success(
+                message(
+                    catalog,
+                    "remediation.proposalReduction",
+                    removed=advice.validation.comparison.removed_total,
+                    remaining=advice.validation.comparison.candidate_total,
+                )
+            ),
+            file=output,
+        )
     if advice.candidate_version:
         compatibility = _localized_code(
             catalog,

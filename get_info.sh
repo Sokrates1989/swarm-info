@@ -443,10 +443,16 @@ display_help() {
     echo -e "  --network         Display network info"
     echo -e "  --node-services   Display service node information (What service is running on which node)"
     echo -e "  -o                Alias for --output-file"
-    echo -e "  --output-file     Health, scan, map, or image-cleanup JSON destination"
+    echo -e "  --output-file     Health, scan, image-comparison, map, or cleanup JSON destination"
     echo -e "  --platform        Swarm default: linux/amd64; security-check default: auto"
     echo -e "  --scan-vulnerabilities"
     echo -e "                    Force a locked scan of all images, or one selected live scope"
+    echo -e "  --compare-image-update"
+    echo -e "                    $OP_HELP_COMPARE_IMAGE"
+    echo -e "  --current-image IMAGE"
+    echo -e "                    $OP_HELP_CURRENT_IMAGE"
+    echo -e "  --candidate-image IMAGE"
+    echo -e "                    $OP_HELP_CANDIDATE_IMAGE"
     echo -e "  --service NAME    $OP_HELP_FOCUSED_SERVICE"
     echo -e "  --image IMAGE     $OP_HELP_FOCUSED_IMAGE"
     echo -e "  --stack STACK     $OP_HELP_FOCUSED_STACK"
@@ -493,6 +499,8 @@ display_help() {
     echo "  swarm-info --scan-vulnerabilities --service my-stack_api"
     echo "  swarm-info --scan-vulnerabilities --image nginx:1.27"
     echo "  swarm-info --scan-vulnerabilities --stack my-stack"
+    echo "  swarm-info --compare-image-update --service my-stack_api --candidate-image my/app:2.0"
+    echo "  swarm-info --compare-image-update --current-image my/app:1.0 --candidate-image my/app:2.0"
     echo "  swarm-info -v"
     echo "  swarm-info --remediate-vulnerabilities --deploy-root /swarm"
 
@@ -539,6 +547,8 @@ FORCE_AUTO_REMEDY_ATTEMPT="false"
 ALLOW_RUNTIME_OVERRIDE="false"
 IMAGE_CLEANUP_APPLY="false"
 IMAGE_CLEANUP_ASSUME_YES="false"
+IMAGE_UPDATE_CURRENT_IMAGE=""
+IMAGE_UPDATE_CANDIDATE_IMAGE=""
 
 # Select exactly one live Swarm scope for a focused vulnerability scan.
 set_vulnerability_scope() {
@@ -780,6 +790,28 @@ while [ $# -gt 0 ]; do
             selected_action="scan-vulnerabilities"
             shift
             ;;
+        --compare-image-update)
+            selected_action="compare-image-update"
+            shift
+            ;;
+        --current-image)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            IMAGE_UPDATE_CURRENT_IMAGE="$1"
+            shift
+            ;;
+        --candidate-image)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            IMAGE_UPDATE_CANDIDATE_IMAGE="$1"
+            shift
+            ;;
         --service)
             if [ "$#" -lt 2 ]; then
                 echo -e "Missing value for $1" >&2
@@ -897,7 +929,24 @@ if { [ "$IMAGE_CLEANUP_APPLY" = "true" ] || [ "$IMAGE_CLEANUP_ASSUME_YES" = "tru
     echo "[ERROR] --apply and --yes are valid only with --image-cleanup." >&2
     exit 64
 fi
-if [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
+if [ "$selected_action" = "compare-image-update" ]; then
+    if [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
+        && [ "$VULNERABILITY_SCOPE_KIND" != "service" ]; then
+        echo "$OP_COMPARE_SCOPE" >&2
+        exit 64
+    fi
+    if [ -z "$IMAGE_UPDATE_CANDIDATE_IMAGE" ] \
+        || { [ "$VULNERABILITY_SCOPE_KIND" = "service" ] \
+            && [ -n "$IMAGE_UPDATE_CURRENT_IMAGE" ]; } \
+        || { [ "$VULNERABILITY_SCOPE_KIND" = "all" ] \
+            && [ -z "$IMAGE_UPDATE_CURRENT_IMAGE" ]; }; then
+        echo "$OP_COMPARE_SELECTOR" >&2
+        exit 64
+    fi
+elif [ -n "$IMAGE_UPDATE_CURRENT_IMAGE" ] || [ -n "$IMAGE_UPDATE_CANDIDATE_IMAGE" ]; then
+    echo "$OP_COMPARE_OPTION_SCOPE" >&2
+    exit 64
+elif [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
     && [ "$selected_action" != "scan-vulnerabilities" ]; then
     echo "$OP_FOCUS_REQUIRES_SCAN" >&2
     exit 64
@@ -974,6 +1023,9 @@ case "$selected_action" in
         ;;
     "scan-vulnerabilities")
         run_service_image_vulnerability_job manual
+        ;;
+    "compare-image-update")
+        run_image_update_comparison
         ;;
     "security-check")
         run_compatibility_security_check

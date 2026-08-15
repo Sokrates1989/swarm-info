@@ -76,6 +76,7 @@ class SafeLatestAction:
                 "high": self.validation.high,
                 "finding_ids": list(self.validation.finding_ids),
                 "new_finding_ids": list(self.validation.new_finding_ids),
+                "comparison": self.validation.comparison.to_dict(),
             },
             "verification": {"timeout_seconds": self.timeout_seconds},
             "required_confirmations": [

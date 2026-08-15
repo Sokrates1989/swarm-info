@@ -40,6 +40,7 @@ class ImageMetadata:
     digest: str | None = None
     version: str | None = None
     version_source: str = "unknown"
+    local_image_id: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -126,7 +127,14 @@ def _parse_image_inspect(raw: str, tag: str) -> ImageMetadata | None:
             if isinstance(reference, str) and digest_from_reference(reference):
                 digest = digest_from_reference(reference)
                 break
-    return ImageMetadata(digest, version, source)
+    image_id = item.get("Id") or item.get("id")
+    local_image_id = (
+        image_id.strip()
+        if isinstance(image_id, str)
+        and re.fullmatch(r"sha256:[a-fA-F0-9]{64}", image_id.strip())
+        else None
+    )
+    return ImageMetadata(digest, version, source, local_image_id)
 
 
 def _platform_descriptor(
@@ -339,7 +347,7 @@ def _major(version: str | None) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _compatibility(current: str | None, candidate: str | None) -> str:
+def version_compatibility(current: str | None, candidate: str | None) -> str:
     """Classify only the visible major-version relationship."""
 
     current_major = _major(current)
@@ -449,7 +457,7 @@ def analyze_image(
             candidate,
             candidate_version,
             source,
-            _compatibility(current_metadata.version, candidate_version),
+            version_compatibility(current_metadata.version, candidate_version),
             validation_error=error.code,
             policy_service_count=policy_count,
         )
@@ -463,7 +471,7 @@ def analyze_image(
         candidate,
         candidate_version,
         source,
-        _compatibility(current_metadata.version, candidate_version),
+        version_compatibility(current_metadata.version, candidate_version),
         validation,
         policy_service_count=policy_count,
     )

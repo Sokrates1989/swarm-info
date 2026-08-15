@@ -401,6 +401,56 @@ resolution enabled; a source that pins the old digest must be updated.
 The targeted and guided modes never change Docker or files. ANSI emphasis is
 used only on an interactive terminal; set `NO_COLOR=1` to disable it.
 
+### Prove what a proposed image update fixes
+
+`fixable` by itself does **not** mean that a newer application image already
+contains the fix. It means Docker Scout knows a patched version of the affected
+package. Prove an actual replacement by scanning the current and candidate
+artifacts side by side:
+
+```bash
+# Compare the image currently deployed by one Swarm service.
+swarm-info --compare-image-update \
+  --service ananda_browserless \
+  --candidate-image ghcr.io/browserless/chromium:v2.55.1 \
+  --output-file /info_json/image_update_comparison.json
+
+# Compare arbitrary local or registry images, including an image you built.
+docker build -t my-app:security-candidate .
+swarm-info --compare-image-update \
+  --current-image my-app:current \
+  --candidate-image my-app:security-candidate
+```
+
+The command resolves each side to an exact local image ID first, or to an
+immutable registry digest when it is not installed locally. It then reports:
+
+- `verified-clean`: the candidate removes every current fixable critical/high
+  finding (`0` exit status);
+- `verified-improvement`: the candidate removes findings but still contains
+  some (`2` exit status);
+- `mixed-improvement`: the net count drops, but the candidate introduces new
+  finding IDs and therefore remains ineligible for automatic remediation
+  (`2` exit status);
+- `not-improved` or `regression`: the candidate does not reduce risk safely
+  (`2` exit status);
+- unavailable identity or scan evidence (`3` exit status).
+
+The JSON includes current/candidate counts, removed and remaining finding IDs,
+and newly introduced IDs. A cross-repository candidate is allowed for this
+read-only comparison, which covers migrations such as an abandoned image to a
+maintained successor. It is never automatically deployed: a repository or
+major-version change still requires migration notes, configuration, backup,
+and workload tests. Arbitrary replacement repositories cannot be discovered
+reliably from a CVE, so swarm-info requires an explicit candidate instead of
+guessing one.
+
+Docker Scout also scans your own images. Update the Dockerfile base image and
+OS/language dependencies, build a new local tag, compare it, and repeat until
+the candidate is clean or the remaining findings have an explicitly reviewed
+resolution. Pushing is unnecessary for a local comparison; deployment should
+still use an immutable published artifact.
+
 Auto-remediation works without a pre-existing policy. On the first safe run it
 creates an installation-owned policy with an inert `generated_review` queue:
 

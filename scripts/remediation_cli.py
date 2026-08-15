@@ -335,6 +335,8 @@ def _run_auto(
                 "remediation.candidateAccepted",
                 critical=validation.critical,
                 high=validation.high,
+                removed=validation.comparison.removed_total,
+                remaining=validation.comparison.candidate_total,
             ),
             file=output,
         )

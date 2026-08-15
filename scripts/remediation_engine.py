@@ -10,13 +10,16 @@ import time
 from typing import Any, Callable, Mapping, Sequence
 
 from scripts.deployment_mapping import image_references_match
+from scripts.image_update_evidence import (
+    ImageUpdateEvidence,
+    compare_candidate_evidence,
+)
 from scripts.remediation_policy import CandidateImage, PolicyTarget
 from scripts.remediation_source import SourceChange, write_source_change
 from scripts.vulnerability_models import (
     ImageTarget,
     ServiceRecord,
     registry_from_reference,
-    severity_counts,
 )
 from scripts.vulnerability_scan import DockerClient
 from scripts.vulnerability_scout import sanitize_command_error, scan_image
@@ -42,6 +45,7 @@ class CandidateValidation:
     high: int
     finding_ids: tuple[str, ...]
     new_finding_ids: tuple[str, ...]
+    comparison: ImageUpdateEvidence
 
 
 @dataclasses.dataclass(frozen=True)
@@ -135,24 +139,26 @@ def validate_candidate_reference(
     )
     if result.status == "error":
         raise RemediationExecutionError("candidate-scan-failed", result.error or "")
-    counts = severity_counts(result.findings)
-    candidate_ids = {finding.identifier for finding in result.findings}
-    new_ids = sorted(candidate_ids - current_ids)
-    improved = (
-        counts["critical"] <= current_critical
-        and counts["high"] <= current_high
-        and counts["critical"] + counts["high"] < current_critical + current_high
+    comparison = compare_candidate_evidence(
+        current_critical,
+        current_high,
+        current_ids,
+        result.findings,
     )
-    if new_ids:
-        raise RemediationExecutionError("candidate-new-findings", ", ".join(new_ids[:10]))
-    if not improved:
+    if comparison.new_finding_ids:
+        raise RemediationExecutionError(
+            "candidate-new-findings",
+            ", ".join(comparison.new_finding_ids[:10]),
+        )
+    if not comparison.is_verified_improvement:
         raise RemediationExecutionError("candidate-not-improved")
     return CandidateValidation(
         result.status,
-        counts["critical"],
-        counts["high"],
-        tuple(sorted(candidate_ids)),
-        tuple(new_ids),
+        comparison.candidate_critical,
+        comparison.candidate_high,
+        comparison.candidate_finding_ids,
+        comparison.new_finding_ids,
+        comparison,
     )
 
 

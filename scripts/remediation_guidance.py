@@ -289,6 +289,28 @@ def render_detail(
     print(message(catalog, "remediation.detailFirstParty"), file=output)
     print(message(catalog, "remediation.detailThirdParty"), file=output)
     print(message(catalog, "remediation.detailVex"), file=output)
+    print(message(catalog, "remediation.detailCompareCandidate"), file=output)
+    comparison_candidate = (
+        advice.candidate.reference
+        if advice.candidate is not None
+        else "CANDIDATE_IMAGE"
+    )
+    print(
+        style.command(
+            "  "
+            + shlex.join(
+                [
+                    "swarm-info",
+                    "--compare-image-update",
+                    "--service",
+                    str(item["service"]),
+                    "--candidate-image",
+                    comparison_candidate,
+                ]
+            )
+        ),
+        file=output,
+    )
     if not _mapping_guidance(
         item,
         mapping,

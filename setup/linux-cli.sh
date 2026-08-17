@@ -817,6 +817,13 @@ main() {
     echo "[OK] $OP_INSTALL_COMPLETE $installed_version"
     echo "     Launch the applicable Swarm or local-container workflow with: swarm-info"
     echo "     Recheck dependencies with: swarm-info --check-dependencies"
+    if [ "$HOST_FAMILY" = "qnap" ]; then
+        echo
+        echo "Optional reboot-persistent QNAP running-container schedule:"
+        printf '     sudo %s/swarm-info --install-security-cron \\\n' \
+            "$LOCAL_BIN_DIRECTORY"
+        echo "       --os qnap --cron-runtime-user $(id -un)"
+    fi
     echo
     echo "If the command is not visible in the parent shell yet, run:"
     echo '     . "$HOME/.profile"; hash -r'

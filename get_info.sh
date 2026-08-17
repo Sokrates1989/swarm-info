@@ -410,7 +410,7 @@ display_help() {
     echo -e "  --commands        Display helpful commands"
     echo -e "  --check-dependencies"
     echo -e "                    Auto-check full Swarm or portable security readiness"
-    echo -e "  --cache-age-hours Vulnerability rescan interval (default: 20)"
+    echo -e "  --cache-age-hours $OP_HELP_CACHE_AGE"
     echo -e "  --cron-hour       Daily vulnerability cron hour (default: 3)"
     echo -e "  --cron-log-file   Optional vulnerability cron log destination"
     echo -e "  --cron-minute     Daily vulnerability cron minute (default: 17)"
@@ -432,6 +432,8 @@ display_help() {
     echo -e "                    $OP_HELP_FORCE_REMEDY"
     echo -e "  --install-vulnerability-cron"
     echo -e "                    Install/update the current user's managed daily scan"
+    echo -e "  --install-security-cron"
+    echo -e "                    $OP_HELP_INSTALL_SECURITY_CRON"
     echo -e "  --local           Display local docker information (docker on this node)"
     echo -e "  --lock-file       Optional vulnerability job lock-file destination"
     echo -e "  --labels          Display Node label info (What labels are set to each node)"
@@ -439,7 +441,7 @@ display_help() {
     echo -e "  --map-service-deployments"
     echo -e "                    $OP_HELP_DEPLOYMENT_MAP"
     echo -e "  --menu            Show menu (after displaying info, if used in combination with any single information option)"
-    echo -e "  --max-age-hours   Vulnerability freshness limit (default: 30)"
+    echo -e "  --max-age-hours   $OP_HELP_MAX_AGE"
     echo -e "  --net             Display network info"
     echo -e "  --network         Display network info"
     echo -e "  --node-services   Display service node information (What service is running on which node)"
@@ -472,12 +474,20 @@ display_help() {
     echo -e "  --security-check  Auto-detect Swarm manager or local-container image scanning"
     echo -e "  --runtime-mode    Security inventory: auto, swarm, or containers (default: auto)"
     echo -e "  --container-mode  Alias for --runtime-mode containers"
-    echo -e "  --container-scope Local containers: all or running (default: all)"
+    echo -e "  --container-scope $OP_HELP_CONTAINER_SCOPE"
     echo -e "  --container NAME  $OP_HELP_FOCUSED_CONTAINER"
     echo -e "  --image-id ID     $OP_HELP_FOCUSED_IMAGE_ID"
     echo -e "  --os              Host hint: auto, qnap, or linux (default: auto)"
     echo -e "  --scheduled-vulnerability-scan"
     echo -e "                    Run a locked scan unless matching evidence is fresh"
+    echo -e "  --scheduled-security-check"
+    echo -e "                    $OP_HELP_SCHEDULED_SECURITY"
+    echo -e "  --scout-timeout-minutes"
+    echo -e "                    $OP_HELP_SCOUT_TIMEOUT"
+    echo -e "  --scan-budget-minutes"
+    echo -e "                    $OP_HELP_SCAN_BUDGET"
+    echo -e "  --cron-runtime-user"
+    echo -e "                    $OP_HELP_CRON_RUNTIME_USER"
     echo -e "  --secrets         Display infos for secrets"
     echo -e "  --services        Display services information"
     echo -e "  --service-health  $OP_HELP_SERVICE_HEALTH"
@@ -486,10 +496,13 @@ display_help() {
     echo -e "  --state           Check this tool's state"
     echo -e "  --remove-vulnerability-cron"
     echo -e "                    Remove only the managed daily scan from crontab"
+    echo -e "  --remove-security-cron"
+    echo -e "                    $OP_HELP_REMOVE_SECURITY_CRON"
     echo -e "  -u                Alias for --update"
     echo -e "  --update          Safely fast-forward swarm-info to its Git upstream"
     echo -e "  --vulnerability-status"
     echo -e "                    Check report completeness and freshness without Docker"
+    echo -e "  --security-status $OP_HELP_SECURITY_STATUS"
     echo -e "  -v                Alias for --vulnerabilities"
     echo -e "  --vulnerabilities $OP_HELP_VULNERABILITIES"
     echo -e "  --remediate-vulnerabilities"
@@ -551,10 +564,16 @@ SECURITY_PLATFORM="auto"
 SECURITY_RUNTIME_MODE="auto"
 SECURITY_HOST_OS="auto"
 SECURITY_CONTAINER_SCOPE="all"
+SECURITY_CONTAINER_SCOPE_EXPLICIT="false"
 SECURITY_FOCUS_KIND="all"
 SECURITY_FOCUS_VALUE=""
 VULNERABILITY_CACHE_AGE_HOURS="20"
 VULNERABILITY_MAX_AGE_HOURS="30"
+SECURITY_CACHE_AGE_HOURS="72"
+SECURITY_MAX_AGE_HOURS="96"
+SECURITY_SCOUT_TIMEOUT_MINUTES="45"
+SECURITY_SCAN_BUDGET_MINUTES="240"
+SECURITY_CRON_RUNTIME_USER="NONE"
 VULNERABILITY_HISTORY_DAYS="14"
 VULNERABILITY_LOCK_FILE="NONE"
 VULNERABILITY_CRON_HOUR="3"
@@ -627,6 +646,7 @@ while [ $# -gt 0 ]; do
             fi
             shift
             VULNERABILITY_CACHE_AGE_HOURS="$1"
+            SECURITY_CACHE_AGE_HOURS="$1"
             shift
             ;;
         --cron-hour)
@@ -716,6 +736,10 @@ while [ $# -gt 0 ]; do
             selected_action="install-vulnerability-cron"
             shift
             ;;
+        --install-security-cron)
+            selected_action="install-security-cron"
+            shift
+            ;;
         --local)
             selected_action="local"
             shift
@@ -748,6 +772,7 @@ while [ $# -gt 0 ]; do
             fi
             shift
             VULNERABILITY_MAX_AGE_HOURS="$1"
+            SECURITY_MAX_AGE_HOURS="$1"
             shift
             ;;
         --net|--network)
@@ -814,10 +839,12 @@ while [ $# -gt 0 ]; do
             fi
             shift
             SECURITY_CONTAINER_SCOPE="$1"
+            SECURITY_CONTAINER_SCOPE_EXPLICIT="true"
             shift
             ;;
         --container-scope=*)
             SECURITY_CONTAINER_SCOPE="${1#--container-scope=}"
+            SECURITY_CONTAINER_SCOPE_EXPLICIT="true"
             shift
             ;;
         --os)
@@ -943,8 +970,43 @@ while [ $# -gt 0 ]; do
             selected_action="scheduled-vulnerability-scan"
             shift
             ;;
+        --scheduled-security-check)
+            selected_action="scheduled-security-check"
+            shift
+            ;;
+        --scout-timeout-minutes)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            SECURITY_SCOUT_TIMEOUT_MINUTES="$1"
+            shift
+            ;;
+        --scan-budget-minutes)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            SECURITY_SCAN_BUDGET_MINUTES="$1"
+            shift
+            ;;
+        --cron-runtime-user)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            SECURITY_CRON_RUNTIME_USER="$1"
+            shift
+            ;;
         --remove-vulnerability-cron)
             selected_action="remove-vulnerability-cron"
+            shift
+            ;;
+        --remove-security-cron)
+            selected_action="remove-security-cron"
             shift
             ;;
         --remediate-vulnerabilities)
@@ -1001,6 +1063,10 @@ while [ $# -gt 0 ]; do
             selected_action="vulnerability-status"
             shift
             ;;
+        --security-status)
+            selected_action="security-status"
+            shift
+            ;;
         -v|--vulnerabilities)
             selected_action="vulnerabilities"
             shift
@@ -1027,6 +1093,11 @@ fi
 if { [ "$IMAGE_CLEANUP_APPLY" = "true" ] || [ "$IMAGE_CLEANUP_ASSUME_YES" = "true" ]; } \
     && [ "$selected_action" != "image-cleanup" ]; then
     echo "[ERROR] --apply and --yes are valid only with --image-cleanup." >&2
+    exit 64
+fi
+if [ "$SECURITY_CRON_RUNTIME_USER" != "NONE" ] \
+    && [ "$selected_action" != "install-security-cron" ]; then
+    echo "$OP_SECURITY_CRON_USER_SCOPE" >&2
     exit 64
 fi
 if [ "$selected_action" = "compare-image-update" ]; then
@@ -1077,6 +1148,12 @@ if [ "$SECURITY_FOCUS_KIND" != "all" ]; then
     SECURITY_RUNTIME_MODE="containers"
 fi
 
+if [ "$SECURITY_CONTAINER_SCOPE_EXPLICIT" != "true" ] \
+    && { [ "$selected_action" = "install-security-cron" ] \
+        || [ "$selected_action" = "scheduled-security-check" ]; }; then
+    SECURITY_CONTAINER_SCOPE="running"
+fi
+
 # Preserve the chosen freshness policy through the script-based tour chain.
 export VULNERABILITY_MAX_AGE_HOURS
 
@@ -1097,6 +1174,9 @@ case "$selected_action" in
         ;;
     "install-vulnerability-cron")
         configure_vulnerability_cron install
+        ;;
+    "install-security-cron")
+        configure_container_security_cron install
         ;;
     "image-cleanup")
         run_image_cleanup
@@ -1164,11 +1244,20 @@ case "$selected_action" in
     "scheduled-vulnerability-scan")
         run_service_image_vulnerability_job scheduled
         ;;
+    "scheduled-security-check")
+        run_scheduled_container_security_job
+        ;;
     "remove-vulnerability-cron")
         configure_vulnerability_cron remove
         ;;
+    "remove-security-cron")
+        configure_container_security_cron remove
+        ;;
     "vulnerability-status")
         inspect_vulnerability_report
+        ;;
+    "security-status")
+        inspect_container_security_report
         ;;
     "vulnerabilities")
         display_vulnerability_info

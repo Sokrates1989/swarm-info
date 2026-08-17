@@ -67,6 +67,8 @@ OS_RELEASE_PATH = Path("/etc/os-release")
 RUNTIME_MODES = ("auto", "swarm", "containers")
 HOST_OS_MODES = ("auto", "qnap", "linux")
 CONTAINER_SCOPES = ("all", "running")
+DEFAULT_SCOUT_TIMEOUT_MINUTES = 45.0
+DEFAULT_SCAN_BUDGET_MINUTES = 240.0
 ARCHITECTURE_ALIASES = {
     "x86_64": "amd64",
     "x64": "amd64",
@@ -506,6 +508,7 @@ def run_security_check(
     process_environment: Mapping[str, str] | None = None,
     focus_kind: str | None = None,
     focus_selector: str | None = None,
+    scan_budget_seconds: float | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Detect capabilities, inventory applicable workloads, and scan images.
 
@@ -524,6 +527,7 @@ def run_security_check(
             and callers can omit it to avoid filesystem side effects.
         focus_kind: Optional exact local selector type: container or image-id.
         focus_selector: Selector value paired with ``focus_kind``.
+        scan_budget_seconds: Optional overall image-scanning time budget.
 
     Returns:
         Versioned report and exit code: 0 clean, 2 findings, or 3 incomplete.
@@ -569,6 +573,7 @@ def run_security_check(
                 started_at,
                 progress=progress,
                 heartbeat_interval_seconds=heartbeat_interval_seconds,
+                scan_budget_seconds=scan_budget_seconds,
             )
         else:
             if progress:
@@ -615,6 +620,7 @@ def run_security_check(
                 local_only=True,
                 progress=progress,
                 heartbeat_interval_seconds=heartbeat_interval_seconds,
+                scan_budget_seconds=scan_budget_seconds,
             )
             annotate_inventory_failures(report, inventory_failures)
             if inventory_failures:
@@ -653,6 +659,18 @@ def security_platform_argument(value: str) -> str:
     """Accept ``auto`` or validate an explicit Docker platform."""
 
     return value if value == "auto" else platform_argument(value)
+
+
+def positive_minutes(value: str) -> float:
+    """Parse one positive finite minute value for execution limits."""
+
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("value must be a number") from error
+    if parsed <= 0 or parsed == float("inf") or parsed != parsed:
+        raise argparse.ArgumentTypeError("value must be a positive finite number")
+    return parsed
 
 
 def parse_arguments(
@@ -714,6 +732,18 @@ def parse_arguments(
         type=Path,
         help=message(catalog, "security.outputOption"),
     )
+    parser.add_argument(
+        "--scout-timeout-minutes",
+        type=positive_minutes,
+        default=DEFAULT_SCOUT_TIMEOUT_MINUTES,
+        help=message(catalog, "securityJob.help.scoutTimeout"),
+    )
+    parser.add_argument(
+        "--scan-budget-minutes",
+        type=positive_minutes,
+        default=DEFAULT_SCAN_BUDGET_MINUTES,
+        help=message(catalog, "securityJob.help.scanBudget"),
+    )
     return parser.parse_args(arguments)
 
 
@@ -741,7 +771,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             flush=True,
         )
     report, exit_code = run_security_check(
-        DockerClient(),
+        DockerClient(scout_timeout_seconds=options.scout_timeout_minutes * 60),
         runtime_mode=options.runtime_mode,
         requested_platform=options.platform,
         host_os_mode=options.host_os,
@@ -750,6 +780,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         process_environment=os.environ,
         focus_kind=focus_kind,
         focus_selector=focus_selector,
+        scan_budget_seconds=options.scan_budget_minutes * 60,
     )
     try:
         write_json_atomic(output_file, report)

@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.13.2" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.14.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -275,6 +275,10 @@ totals, per-image counters and results, elapsed time, and a 30-second heartbeat
 while Docker Scout remains active. A full local scan isolates unreadable
 container metadata, retains readable image results, records inventory errors,
 and returns incomplete status instead of reporting the host clean.
+.PP
+Compatibility checks bound Docker Scout to 45 minutes per image and four hours
+of aggregate image work by default. A timeout or exhausted budget is recorded
+as incomplete evidence. Completed image entries include their scan duration.
 .TP
 .BI \-\-runtime-mode " mode"
 Set security inventory to
@@ -324,24 +328,42 @@ Docker capability checks.
 .B \-\-scheduled-vulnerability-scan
 Run the locked scan unless matching evidence is fresh.
 .TP
+.B \-\-scheduled-security-check
+Run or reuse the locked local-container security check. The scheduled default
+scope is running containers.
+.TP
 .B \-\-vulnerability-status
 Check report completeness and freshness without Docker Scout.
+.TP
+.B \-\-security-status
+Check local-container report completeness and freshness without Docker Scout.
 .TP
 .B \-\-install-vulnerability-cron
 Install or update the current user's managed daily scan.
 .TP
+.B \-\-install-security-cron
+Install or update the current user's managed daily running-container check.
+The default 72-hour cache interval avoids a full Scout run every day. On QNAP,
+run this installation once with sudo and
+.B \-\-cron-runtime-user
+so swarm-info updates /etc/config/crontab persistently, reloads cron, and runs
+the actual scan as the named non-root account.
+.TP
 .B \-\-remove-vulnerability-cron
 Remove only the managed daily scan block.
+.TP
+.B \-\-remove-security-cron
+Remove only the managed container-security block.
 .TP
 .BI \-\-platform " platform"
 Set the scan platform. Swarm scan default: linux/amd64. Compatibility security
 check default: auto-detect from the Docker daemon.
 .TP
 .BI \-\-max-age-hours " hours"
-Set the evidence freshness limit. Default: 30.
+Set the evidence freshness limit. Swarm default: 30; container schedule: 96.
 .TP
 .BI \-\-cache-age-hours " hours"
-Set the scheduled rescan interval. Default: 20.
+Set the scheduled rescan interval. Swarm default: 20; container schedule: 72.
 .TP
 .BI \-\-history-days " days"
 Set vulnerability report retention. Default: 14.
@@ -357,6 +379,16 @@ Set the daily scan minute. Default: 17.
 .TP
 .BI \-\-cron-log-file " path"
 Set the optional scheduled-scan log destination.
+.TP
+.BI \-\-scout-timeout-minutes " minutes"
+Set the maximum duration of one Scout image command. Container-job default: 45.
+.TP
+.BI \-\-scan-budget-minutes " minutes"
+Set the aggregate image-scanning budget. Container-job default: 240.
+.TP
+.BI \-\-cron-runtime-user " user"
+Set the non-root account used by a persistent QNAP system cron entry. This
+account must own the Docker Scout installation and Docker credentials.
 .SH GENERAL OPTIONS
 .TP
 .BR \-m ", " \-\-menu
@@ -559,6 +591,14 @@ Scan exact images used by local QNAP containers:
 .nf
 swarm-info --security-check --container-mode --os=qnap \
   --output-file /share/Public/swarm-info/security_scan.json
+.fi
+.PP
+Install the bounded running-container schedule on QNAP:
+.PP
+.nf
+sudo "$(command -v swarm-info)" --install-security-cron --os=qnap \
+  --cron-runtime-user "$(id -un)" \
+  --output-file /share/Public/swarm-info/security_scan-running.json
 .fi
 .PP
 Recheck one recreated QNAP container without replacing the full report:

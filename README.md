@@ -239,6 +239,12 @@ Auto mode reads Docker capability rather than guessing from a distribution:
 - Interactive scans print inventory totals, a current/total image counter,
   per-image results and elapsed time. While one Docker Scout process remains
   active, a heartbeat is printed every 30 seconds so a slow scan is visible.
+  Manual compatibility checks stop one Scout image command after 45 minutes
+  and stop starting new image work after a four-hour aggregate budget by
+  default. Override these bounds with `--scout-timeout-minutes` and
+  `--scan-budget-minutes`. Timed-out or unstarted images make the report
+  explicitly incomplete; they are never treated as clean. Each completed
+  image records `duration_seconds` for later performance review.
 - QNAP is detected from `/etc/config/uLinux.conf` or `ID=qts` in
   `/etc/os-release`. `--os=qnap` is an auditable hint, not a way to bypass
   Docker capability checks.
@@ -283,6 +289,75 @@ the affected containers and Compose owner and tells the operator to pull and
 recreate that service before rescanning. It is never reported as clean.
 Older reports without Compose label fields use explicit placeholders rather
 than guessing a directory or rendering `None` as a command argument.
+
+### Scheduled QNAP/container security checks
+
+Install the managed schedule after one successful manual check. QNAP only
+persists custom jobs across reboot through `/etc/config/crontab`, so this one
+configuration step needs `sudo`; the scheduled scan itself switches back to
+your normal account and therefore reuses its Docker access, Scout installation,
+credentials, and cache:
+
+```bash
+runtime_user="$(id -un)"
+swarm_info_command="$(command -v swarm-info)"
+
+sudo "$swarm_info_command" --install-security-cron \
+  --os qnap \
+  --cron-runtime-user "$runtime_user" \
+  --output-file /share/Public/swarm-info/security_scan-running.json
+
+sudo sed -n \
+  '/BEGIN swarm-info managed container security scan/,/END swarm-info managed container security scan/p' \
+  /etc/config/crontab
+swarm-info --security-status \
+  --output-file /share/Public/swarm-info/security_scan-running.json
+```
+
+If `sudo` is unavailable, run the same absolute `swarm-info` command in a root
+shell while retaining `--cron-runtime-user <YOUR-NORMAL-USER>`. This follows
+QNAP's documented persistent-cron procedure; a normal `crontab -e`/`crontab -`
+entry can be overwritten on reboot. See
+[QNAP: How to add jobs to crontab](https://www.qnap.com/en/how-to/faq/article/how-to-add-jobs-to-crontab-to-schedule-a-job).
+
+The generated cron entry runs daily at 03:17 but inventories only currently
+running containers. When the exact container-to-image scope is unchanged, it
+reuses complete evidence for 72 hours, so daily cron activation does not mean
+a daily multi-hour Scout run. Evidence becomes stale after 96 hours. A changed
+running-container scope invalidates the cache immediately. The scheduled job
+scans serially to avoid overloading a NAS, limits one image to 45 minutes,
+limits aggregate image work to 240 minutes, uses an adjacent non-blocking lock,
+publishes atomically, and retains 14 days of report history.
+
+The scheduled scan uses the same non-root operating-system user, Docker access,
+`HOME`, Scout installation, and persistent
+`~/.cache/swarm-info/docker-scout` directory as the installation command. The
+generated command also prepends the directory containing `swarm-info` to
+cron's minimal `PATH`, which makes the QNAP Docker symlink installed beside it
+available without a login shell. Its default report on a writable QNAP Public share is
+`/share/Public/swarm-info/security_scan-running.json`; the default log is the
+same path with `.json` replaced by `.log`. Override timing or limits with
+`--cron-hour`, `--cron-minute`, `--cache-age-hours`, `--max-age-hours`,
+`--scout-timeout-minutes`, or `--scan-budget-minutes` during installation.
+
+Run the exact scheduled path immediately, for example after installation or an
+image change, with:
+
+```bash
+swarm-info --scheduled-security-check \
+  --container-scope running \
+  --os qnap \
+  --output-file /share/Public/swarm-info/security_scan-running.json
+```
+
+Remove only this managed block while preserving unrelated cron entries:
+
+```bash
+sudo "$(command -v swarm-info)" --remove-security-cron --os qnap
+```
+
+Use an occasional manual `--container-scope all` audit for stopped/dormant
+containers. It is intentionally not the frequent scheduled default.
 
 This first compatibility mode is deliberately read-only. It scans images used
 by defined containers; it does not patch QTS, change containers, inspect unused

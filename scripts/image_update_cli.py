@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 from typing import Mapping, Sequence, TextIO
 
 from scripts.image_update_discovery import (
@@ -44,6 +45,23 @@ REGISTRY_HOST_PATTERN = re.compile(
     r"^(?:localhost|[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)"
     r"(?::[0-9]{1,5})?$"
 )
+REGISTRY_AUTH_ENVIRONMENT_KEYS = (
+    "DOCKER_AUTH_CONFIG",
+    "REGISTRY_AUTH_FILE",
+)
+
+
+def _anonymous_docker_environment(
+    config_directory: Path,
+    environment: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Return a Docker environment isolated from installed registry credentials."""
+
+    values = dict(os.environ if environment is None else environment)
+    values["DOCKER_CONFIG"] = str(config_directory)
+    for key in REGISTRY_AUTH_ENVIRONMENT_KEYS:
+        values.pop(key, None)
+    return values
 
 
 def registry_host_argument(value: str) -> str:
@@ -218,25 +236,34 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if options.remediation_policy is not None and not selected_policy_path.is_file():
             raise ImageUpdateDiscoveryError("policy-unreadable", str(selected_policy_path))
         policy = load_policy(selected_policy_path) if selected_policy_path.is_file() else None
-        outcome = discover_image_updates(
-            source_report,
-            options.report_file,
-            DockerClient(),
-            RegistryTagClient(set(options.allow_registry_host)),
-            options.platform,
-            options.max_registry_tags,
-            policy,
-            progress=lambda index, total, repository: print(
-                message(
-                    catalog,
-                    "imageDiscovery.progress",
-                    index=index,
-                    total=total,
-                    repository=repository,
+        with tempfile.TemporaryDirectory(
+            prefix="swarm-info-anonymous-docker-"
+        ) as docker_config:
+            outcome = discover_image_updates(
+                source_report,
+                options.report_file,
+                DockerClient(
+                    environment=_anonymous_docker_environment(
+                        Path(docker_config)
+                    )
                 ),
-                flush=True,
-            ),
-        )
+                RegistryTagClient(set(options.allow_registry_host)),
+                options.platform,
+                options.max_registry_tags,
+                policy,
+                progress=lambda index, total, repository: print(
+                    message(
+                        catalog,
+                        "imageDiscovery.progress",
+                        index=index,
+                        total=total,
+                        repository=repository,
+                    ),
+                    flush=True,
+                ),
+                docker_metadata_config="temporary-empty",
+                registry_credentials_used=False,
+            )
         write_json_atomic(options.output_file, outcome.report)
         render_outcome(outcome, options.output_file, catalog, sys.stdout)
         return outcome.exit_code

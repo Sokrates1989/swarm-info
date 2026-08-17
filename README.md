@@ -426,8 +426,9 @@ swarm-info --discover-image-updates \
 
 Repository names can disclose internal system structure, so approval is exact,
 repeatable, and per invocation. Discovery uses bounded anonymous public
-metadata requests, never reads Docker credentials, and never runs `docker
-login`. Private registries that require credentials remain explicitly
+metadata requests, never runs `docker login`, and resolves digests with a
+temporary empty Docker configuration instead of the operator's credential
+store. Private registries that require credentials remain explicitly
 incomplete in Slice 1.
 
 For a recognizable stable `X.Y.Z` tag, the atomic report selects and resolves:

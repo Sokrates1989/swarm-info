@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.11.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.11.1" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -192,7 +192,8 @@ With
 explicitly permit bounded anonymous metadata requests to one exact canonical
 registry host. Repeat for multiple hosts. Without this option discovery is
 network-silent and reports the required hosts with exit status 3. Docker
-credentials are never read or sent.
+digest resolution uses a temporary empty Docker configuration; installed
+registry credentials are never read or sent.
 .TP
 .BI \-\-vulnerability-report-file " path"
 Select the schema-version-2 source report consumed by

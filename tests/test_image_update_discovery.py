@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from scripts.image_update_cli import _anonymous_docker_environment
 from scripts.image_update_discovery import discover_image_updates
 from scripts.image_update_registry import (
     HttpResponse,
@@ -149,6 +150,24 @@ class RegistryTagClientTests(unittest.TestCase):
         self.assertEqual(result.repository.canonical, "docker.io/library/nginx")
         self.assertEqual(transport.calls, [])
 
+    def test_docker_metadata_environment_removes_registry_credentials(self) -> None:
+        """Resolve public digests without consulting the operator's Docker auth."""
+
+        original = {
+            "PATH": "/usr/bin",
+            "DOCKER_CONFIG": "/home/operator/.docker",
+            "DOCKER_AUTH_CONFIG": '{"auths":{"registry.example":{}}}',
+            "REGISTRY_AUTH_FILE": "/home/operator/auth.json",
+        }
+
+        isolated = _anonymous_docker_environment(Path("/tmp/empty-docker"), original)
+
+        self.assertEqual(Path(isolated["DOCKER_CONFIG"]), Path("/tmp/empty-docker"))
+        self.assertEqual(isolated["PATH"], "/usr/bin")
+        self.assertNotIn("DOCKER_AUTH_CONFIG", isolated)
+        self.assertNotIn("REGISTRY_AUTH_FILE", isolated)
+        self.assertEqual(original["DOCKER_CONFIG"], "/home/operator/.docker")
+
     def test_docker_hub_tags_retain_publication_timestamp(self) -> None:
         """Use provider timestamp evidence without downloading image layers."""
 
@@ -280,6 +299,11 @@ class ImageUpdateDiscoveryTests(unittest.TestCase):
         self.assertEqual(outcome.exit_code, 3)
         self.assertEqual(outcome.report["required_registry_hosts"], ["docker.io"])
         self.assertFalse(outcome.report["complete"])
+        self.assertEqual(
+            outcome.report["policy"]["docker_metadata_config"],
+            "caller-provided",
+        )
+        self.assertIsNone(outcome.report["policy"]["registry_credentials_used"])
         self.assertEqual(docker.commands, [])
 
     def test_short_display_digest_is_not_claimed_as_immutable_identity(self) -> None:

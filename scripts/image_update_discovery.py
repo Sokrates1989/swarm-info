@@ -486,6 +486,8 @@ def _build_report(
     required_hosts: set[str],
     images: list[dict[str, Any]],
     errors: list[dict[str, str]],
+    docker_metadata_config: str,
+    registry_credentials_used: bool | None,
 ) -> dict[str, Any]:
     """Assemble the versioned, non-authorizing discovery report."""
 
@@ -512,7 +514,8 @@ def _build_report(
             "strict_stable_semver_only": True,
             "max_registry_tags": max_tags,
             "network_requires_explicit_registry_hosts": True,
-            "registry_credentials_used": False,
+            "registry_credentials_used": registry_credentials_used,
+            "docker_metadata_config": docker_metadata_config,
             "remediation_policy": str(policy.path) if policy is not None else None,
             "remediation_authorized": False,
         },
@@ -541,6 +544,8 @@ def discover_image_updates(
     policy: RemediationPolicy | None = None,
     now: dt.datetime | None = None,
     progress: ProgressCallback | None = None,
+    docker_metadata_config: str = "caller-provided",
+    registry_credentials_used: bool | None = None,
 ) -> DiscoveryOutcome:
     """Build complete read-only candidate and lifecycle evidence for every image."""
 
@@ -596,5 +601,7 @@ def discover_image_updates(
         required_hosts=required_hosts,
         images=output_images,
         errors=errors,
+        docker_metadata_config=docker_metadata_config,
+        registry_credentials_used=registry_credentials_used,
     )
     return DiscoveryOutcome(report_payload, 0 if complete else 3)

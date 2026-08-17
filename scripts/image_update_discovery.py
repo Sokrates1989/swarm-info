@@ -250,7 +250,9 @@ def _resolve_candidates(
     for selection in selections:
         reference = _metadata_reference(selection.repository, selection.tag.name)
         metadata = _cached_metadata(client, metadata_cache, reference, platform)
-        candidate_digest = _full_sha256(metadata.digest)
+        candidate_digest = _full_sha256(metadata.digest) or _full_sha256(
+            selection.tag.digest_for_platform(platform)
+        )
         if candidate_digest is None:
             errors.append({"repository": selection.repository, "status": "digest-unresolved"})
             continue

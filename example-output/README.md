@@ -16,3 +16,8 @@ errors. Update the matching contract tests whenever the producer schema changes.
 only normalized lifecycle, version, tag, digest, and policy evidence. They do
 not contain registry tokens, credentials, raw HTTP responses, vulnerability
 verdicts for candidates, or deployment authorization.
+
+`image_update_assessment.json` is produced atomically by
+`swarm-info --assess-image-updates`. It batch-scans immutable candidates and
+records global plus per-service verified update reductions without authorizing
+deployment.

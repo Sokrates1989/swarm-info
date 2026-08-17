@@ -452,10 +452,14 @@ display_help() {
     echo -e "                    $OP_HELP_COMPARE_IMAGE"
     echo -e "  --discover-image-updates"
     echo -e "                    $OP_HELP_DISCOVER_IMAGE_UPDATES"
+    echo -e "  --assess-image-updates"
+    echo -e "                    $OP_HELP_ASSESS_IMAGE_UPDATES"
     echo -e "  --allow-registry-host HOST"
     echo -e "                    $OP_HELP_ALLOW_REGISTRY_HOST"
     echo -e "  --vulnerability-report-file FILE"
     echo -e "                    $OP_HELP_VULNERABILITY_REPORT_FILE"
+    echo -e "  --candidate-report-file FILE"
+    echo -e "                    $OP_HELP_CANDIDATE_REPORT_FILE"
     echo -e "  --max-registry-tags COUNT"
     echo -e "                    $OP_HELP_MAX_REGISTRY_TAGS"
     echo -e "  --current-image IMAGE"
@@ -515,6 +519,7 @@ display_help() {
     echo "  swarm-info --compare-image-update --service my-stack_api --candidate-image my/app:2.0"
     echo "  swarm-info --compare-image-update --current-image my/app:1.0 --candidate-image my/app:2.0"
     echo "  swarm-info --discover-image-updates --allow-registry-host docker.io"
+    echo "  swarm-info --assess-image-updates --output-file /info_json/image_update_assessment.json"
     echo "  swarm-info -v"
     echo "  swarm-info --remediate-vulnerabilities --deploy-root /swarm"
 
@@ -566,6 +571,7 @@ IMAGE_CLEANUP_ASSUME_YES="false"
 IMAGE_UPDATE_CURRENT_IMAGE=""
 IMAGE_UPDATE_CANDIDATE_IMAGE=""
 IMAGE_UPDATE_REPORT_FILE="NONE"
+IMAGE_UPDATE_CANDIDATE_REPORT_FILE="NONE"
 IMAGE_UPDATE_MAX_REGISTRY_TAGS="2000"
 IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS=()
 
@@ -839,6 +845,10 @@ while [ $# -gt 0 ]; do
             selected_action="discover-image-updates"
             shift
             ;;
+        --assess-image-updates)
+            selected_action="assess-image-updates"
+            shift
+            ;;
         --allow-registry-host)
             if [ "$#" -lt 2 ]; then
                 echo -e "Missing value for $1" >&2
@@ -855,6 +865,15 @@ while [ $# -gt 0 ]; do
             fi
             shift
             IMAGE_UPDATE_REPORT_FILE="$1"
+            shift
+            ;;
+        --candidate-report-file)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            IMAGE_UPDATE_CANDIDATE_REPORT_FILE="$1"
             shift
             ;;
         --max-registry-tags)
@@ -1028,10 +1047,18 @@ elif [ -n "$IMAGE_UPDATE_CURRENT_IMAGE" ] || [ -n "$IMAGE_UPDATE_CANDIDATE_IMAGE
     echo "$OP_COMPARE_OPTION_SCOPE" >&2
     exit 64
 elif { [ "${#IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS[@]}" -gt 0 ] \
-    || [ "$IMAGE_UPDATE_REPORT_FILE" != "NONE" ] \
     || [ "$IMAGE_UPDATE_MAX_REGISTRY_TAGS" != "2000" ]; } \
     && [ "$selected_action" != "discover-image-updates" ]; then
     echo "$OP_DISCOVERY_OPTION_SCOPE" >&2
+    exit 64
+elif [ "$IMAGE_UPDATE_REPORT_FILE" != "NONE" ] \
+    && [ "$selected_action" != "discover-image-updates" ] \
+    && [ "$selected_action" != "assess-image-updates" ]; then
+    echo "$OP_IMAGE_REPORT_OPTION_SCOPE" >&2
+    exit 64
+elif [ "$IMAGE_UPDATE_CANDIDATE_REPORT_FILE" != "NONE" ] \
+    && [ "$selected_action" != "assess-image-updates" ]; then
+    echo "$OP_ASSESSMENT_OPTION_SCOPE" >&2
     exit 64
 elif [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
     && [ "$selected_action" != "scan-vulnerabilities" ]; then
@@ -1127,6 +1154,9 @@ case "$selected_action" in
         ;;
     "discover-image-updates")
         run_image_update_discovery
+        ;;
+    "assess-image-updates")
+        run_image_update_assessment
         ;;
     "security-check")
         run_compatibility_security_check

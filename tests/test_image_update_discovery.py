@@ -169,7 +169,7 @@ class RegistryTagClientTests(unittest.TestCase):
         self.assertEqual(original["DOCKER_CONFIG"], "/home/operator/.docker")
 
     def test_docker_hub_tags_retain_publication_timestamp(self) -> None:
-        """Use provider timestamp evidence without downloading image layers."""
+        """Use provider timestamp and digest evidence without downloading layers."""
 
         transport = FakeTransport(
             [
@@ -182,6 +182,13 @@ class RegistryTagClientTests(unittest.TestCase):
                                 {
                                     "name": "1.27.4",
                                     "last_updated": "2026-08-01T12:00:00Z",
+                                    "images": [
+                                        {
+                                            "os": "linux",
+                                            "architecture": "amd64",
+                                            "digest": PATCH_DIGEST,
+                                        }
+                                    ],
                                 }
                             ],
                             "next": None,
@@ -201,7 +208,53 @@ class RegistryTagClientTests(unittest.TestCase):
             result.tags[0].updated_at_source,
             "docker-hub-tag-last-updated",
         )
+        self.assertEqual(
+            result.tags[0].digest_for_platform("linux/amd64"),
+            PATCH_DIGEST,
+        )
         self.assertEqual(len(transport.calls), 1)
+
+    def test_docker_hub_auth_failure_uses_public_registry_fallback(self) -> None:
+        """Keep public official images discoverable without stored credentials."""
+
+        transport = FakeTransport(
+            [
+                HttpResponse(401, {}, b""),
+                HttpResponse(
+                    401,
+                    {
+                        "www-authenticate": (
+                            'Bearer realm="https://auth.docker.io/token",'
+                            'service="registry.docker.io",'
+                            'scope="repository:library/postgres:pull"'
+                        )
+                    },
+                    b"",
+                ),
+                HttpResponse(200, {}, b'{"token":"public-token"}'),
+                HttpResponse(
+                    200,
+                    {},
+                    b'{"name":"library/postgres","tags":["16.4.0"]}',
+                ),
+            ]
+        )
+
+        result = RegistryTagClient({"docker.io"}, transport).list_tags(
+            "postgres:16.3.0", 100
+        )
+
+        self.assertTrue(result.complete)
+        self.assertEqual([tag.name for tag in result.tags], ["16.4.0"])
+        self.assertTrue(
+            transport.calls[1][0].startswith(
+                "https://registry-1.docker.io/v2/library/postgres/tags/list"
+            )
+        )
+        self.assertEqual(
+            transport.calls[3][1]["Authorization"],
+            "Bearer public-token",
+        )
 
     def test_provider_overrun_is_incomplete_at_configured_tag_limit(self) -> None:
         """Fail closed if a provider returns more tags than the requested page."""
@@ -409,6 +462,35 @@ class ImageUpdateDiscoveryTests(unittest.TestCase):
             candidates[0]["tracks"],
             ["newest-stable", "same-major", "same-minor"],
         )
+
+    def test_provider_platform_digest_avoids_docker_resolution_failure(self) -> None:
+        """Retain a candidate when Docker Hub already supplied exact identity."""
+
+        repository = "docker.io/example/app"
+        tags = (
+            RegistryTag("1.2.3"),
+            RegistryTag(
+                "1.2.4",
+                platform_digests=(("linux/amd64", PATCH_DIGEST),),
+            ),
+        )
+        docker = MetadataClient(
+            {f"{repository}:1.2.3@{OLD_DIGEST}": OLD_DIGEST}
+        )
+
+        outcome = discover_image_updates(
+            source_report(),
+            Path("vulnerability_scan.json"),
+            docker,
+            FakeListingClient({repository: listing(repository, *tags)}),
+            "linux/amd64",
+            2000,
+        )
+
+        candidates = outcome.report["images"][0]["candidates"]
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["digest"], PATCH_DIGEST)
+        self.assertFalse(outcome.report["errors"])
 
     def test_reviewed_successor_is_informational_and_never_authorizing(self) -> None:
         """Discover a replacement repository while preserving the trust boundary."""

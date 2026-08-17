@@ -200,7 +200,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.12.0")
+        self.assertEqual(version, "1.13.0")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:
@@ -295,8 +295,10 @@ class CliOperatorContractTests(unittest.TestCase):
             "--stack",
             "--compare-image-update",
             "--discover-image-updates",
+            "--assess-image-updates",
             "--allow-registry-host",
             "--vulnerability-report-file",
+            "--candidate-report-file",
             "--max-registry-tags",
             "--current-image",
             "--candidate-image",
@@ -311,6 +313,21 @@ class CliOperatorContractTests(unittest.TestCase):
         ):
             self.assertIn(command, entrypoint)
             self.assertIn(command.replace("--", r"\-\-"), manual)
+
+    def test_batch_image_assessment_is_wired_to_the_python_boundary(self) -> None:
+        """Keep candidate and source reports connected to the batch scanner."""
+
+        entrypoint = (REPOSITORY_ROOT / "get_info.sh").read_text(encoding="utf-8")
+        bridge = (REPOSITORY_ROOT / "res" / "vulnerability_cli.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('selected_action="assess-image-updates"', entrypoint)
+        self.assertIn('"assess-image-updates")', entrypoint)
+        self.assertIn("run_image_update_assessment()", bridge)
+        self.assertIn("-m scripts.image_update_assessment_cli", bridge)
+        self.assertIn("--candidate-report-file", bridge)
+        self.assertIn("--vulnerability-report-file", bridge)
 
     def test_qnap_report_discovery_and_page_routing_are_mode_aware(self) -> None:
         """Prefer QNAP evidence and never open Swarm remediation for containers."""

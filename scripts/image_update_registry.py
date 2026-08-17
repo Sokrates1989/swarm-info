@@ -26,6 +26,7 @@ AUTH_PARAMETER_PATTERN = re.compile(
     r"([A-Za-z][A-Za-z0-9_-]*)=(?:\"([^\"]*)\"|([^,\s]+))"
 )
 NEXT_LINK_PATTERN = re.compile(r"<([^>]+)>\s*;\s*rel=\"?next\"?", re.IGNORECASE)
+FULL_SHA256_PATTERN = re.compile(r"sha256:[0-9a-fA-F]{64}")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -105,6 +106,15 @@ class RegistryTag:
     name: str
     updated_at: str | None = None
     updated_at_source: str = "unknown"
+    platform_digests: tuple[tuple[str, str], ...] = ()
+
+    def digest_for_platform(self, platform: str) -> str | None:
+        """Return the provider-supplied immutable digest for one platform."""
+
+        return next(
+            (digest for candidate, digest in self.platform_digests if candidate == platform),
+            None,
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -147,6 +157,36 @@ def _json_object(response: HttpResponse) -> Mapping[str, object]:
     if not isinstance(payload, Mapping):
         raise RegistryRequestError("invalid-response")
     return payload
+
+
+def _docker_hub_platform_digests(
+    item: Mapping[str, object],
+) -> tuple[tuple[str, str], ...]:
+    """Extract validated platform-to-digest evidence from one Docker Hub tag."""
+
+    images = item.get("images")
+    if not isinstance(images, list):
+        return ()
+    digests: dict[str, str] = {}
+    for image in images:
+        if not isinstance(image, Mapping):
+            continue
+        operating_system = image.get("os")
+        architecture = image.get("architecture")
+        variant = image.get("variant")
+        digest = image.get("digest")
+        if (
+            not isinstance(operating_system, str)
+            or not isinstance(architecture, str)
+            or not isinstance(digest, str)
+            or not FULL_SHA256_PATTERN.fullmatch(digest)
+        ):
+            continue
+        platform = f"{operating_system}/{architecture}"
+        if isinstance(variant, str) and variant:
+            platform = f"{platform}/{variant}"
+        digests.setdefault(platform, digest.lower())
+    return tuple(sorted(digests.items()))
 
 
 def _response_error(response: HttpResponse) -> RegistryRequestError:
@@ -256,11 +296,14 @@ class RegistryTagClient:
         return self.transport.get(url, headers)
 
     def _list_distribution(
-        self, repository: RegistryRepository, max_tags: int
+        self,
+        repository: RegistryRepository,
+        max_tags: int,
+        api_host: str | None = None,
     ) -> TagListing:
         """Follow standard Registry V2 tag pagination on one HTTPS origin."""
 
-        host = repository.registry
+        host = api_host or repository.registry
         page_size = min(DEFAULT_PAGE_SIZE, max_tags)
         url = (
             f"https://{host}/v2/{quote(repository.name, safe='/')}/tags/list?"
@@ -316,6 +359,12 @@ class RegistryTagClient:
                 {"Accept": "application/json", "User-Agent": "swarm-info"},
             )
             if response.status != 200:
+                if response.status in {401, 403}:
+                    return self._list_distribution(
+                        repository,
+                        max_tags,
+                        api_host="registry-1.docker.io",
+                    )
                 raise _response_error(response)
             payload = _json_object(response)
             results = payload.get("results")
@@ -339,6 +388,7 @@ class RegistryTagClient:
                             if isinstance(updated_at, str)
                             else "unknown"
                         ),
+                        _docker_hub_platform_digests(item),
                     ),
                 )
                 if len(tags) >= max_tags:

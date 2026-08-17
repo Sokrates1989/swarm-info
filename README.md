@@ -481,10 +481,45 @@ record a reviewed `image_update_discovery.successors` mapping with an HTTPS
 evidence URL. Such a mapping affects discovery only. It cannot authorize a
 source edit, backup exemption, deployment, or automatic remediation.
 
-Slice 1 deliberately labels every candidate `security_comparison: not-scanned`
-and `deployment_authorized: false`. Use `--compare-image-update` for one chosen
-candidate today; batch candidate scanning and deployable-fix deltas belong to
-the next slice.
+Candidate discovery deliberately labels every candidate
+`security_comparison: not-scanned` and `deployment_authorized: false`. Use
+`--compare-image-update` for one chosen candidate, or run the batch assessment
+below to scan every discovered immutable candidate once.
+
+### Assess all discovered candidates
+
+After candidate discovery, calculate verified global and per-service update
+reductions:
+
+```bash
+swarm-info --assess-image-updates \
+  --candidate-report-file /info_json/image_update_candidates.json \
+  --vulnerability-report-file /info_json/vulnerability_scan.json \
+  --output-file /info_json/image_update_assessment.json
+```
+
+The assessment verifies that both input reports describe the same image
+inventory, deduplicates candidates by immutable reference, and scans each exact
+candidate only once. It then compares the result with the current report and
+selects each image's best verified candidate by critical findings removed,
+then high findings removed. A candidate is a verified improvement only when it
+reduces critical/high counts without introducing a new finding ID.
+
+The atomic schema-version-1 assessment contains:
+
+- current global fixable critical/high counts;
+- `deployable_fixable`, meaning findings proven removable by exact candidate
+  scans—not authorization or compatibility proof;
+- a conservative remaining count after each image's best verified candidate;
+- per-image comparisons and a best verified candidate;
+- per-service current, removable, and candidate-remaining counts for the UI;
+- candidate scan failures and inherited candidate-discovery gaps.
+
+Exit status `2` means the assessment is complete but current findings still
+require attention. Status `3` means discovery, source evidence, or a candidate
+scan is incomplete; useful partial results remain in the output, but must never
+be interpreted as clean. This command changes no image, service, file, or
+deployment, and every result retains `deployment_authorized: false`.
 
 ### Prove what a proposed image update fixes
 

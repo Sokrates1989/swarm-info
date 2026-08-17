@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.12.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.13.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -186,6 +186,15 @@ platform-specific metadata, and aliases of the same artifact are merged. No
 candidate is vulnerability-scanned or authorized for deployment by this
 command.
 .TP
+.B \-\-assess-image-updates
+Consume the Slice 1 candidate report and its exact schema-version-2 source
+vulnerability report. Every immutable candidate is scanned once and reused
+across consuming images and services. The report records current findings,
+verified critical/high reductions, conservative remaining counts, and
+per-service opportunities. Selection prioritizes critical findings removed,
+then high findings removed. Compatibility and deployment remain unverified and
+unauthorized.
+.TP
 .BI \-\-allow-registry-host " host"
 With
 .BR \-\-discover-image-updates ,
@@ -197,8 +206,15 @@ registry credentials are never read or sent.
 .TP
 .BI \-\-vulnerability-report-file " path"
 Select the schema-version-2 source report consumed by
-.BR \-\-discover-image-updates .
+.BR \-\-discover-image-updates
+or
+.BR \-\-assess-image-updates .
 Default: the preferred production vulnerability report when present.
+.TP
+.BI \-\-candidate-report-file " path"
+Select the schema-version-1 candidate report consumed by
+.BR \-\-assess-image-updates .
+Default: the preferred production candidate report when present.
 .TP
 .BI \-\-max-registry-tags " count"
 Bound tag enumeration per repository for
@@ -372,8 +388,8 @@ unknown or ambiguous services.
 .TP
 .B 3
 Vulnerability evidence is missing, incomplete, stale, or unavailable; or image
-cleanup or image update discovery could not establish or complete its
-requested safe operation.
+cleanup, image update discovery, or image update assessment could not establish
+or complete its requested safe operation.
 .SH FILES
 .TP
 .I /info_json/swarm_info.json
@@ -394,6 +410,11 @@ from the all-service watchdog report and never authorizes deployment.
 Preferred atomic read-only image candidate and lifecycle evidence report. The
 report records exact registry approvals and immutable digests but contains no
 deployment authorization or candidate vulnerability verdict.
+.TP
+.I /info_json/image_update_assessment.json
+Preferred atomic batch candidate-scan report. It contains global and
+per-service verified update reductions while explicitly withholding
+compatibility proof and deployment authorization.
 .TP
 .I swarm_info/security_scan.json
 Default standalone/QNAP compatibility security report. It is separate from
@@ -487,6 +508,16 @@ Discover public Docker Hub and GHCR candidates after reviewing those hosts:
 swarm-info --discover-image-updates --allow-registry-host docker.io \
   --allow-registry-host ghcr.io \
   --output-file /info_json/image_update_candidates.json
+.fi
+.PP
+Scan each discovered immutable candidate once and calculate verified update
+reductions:
+.PP
+.nf
+swarm-info --assess-image-updates \
+  --candidate-report-file /info_json/image_update_candidates.json \
+  --vulnerability-report-file /info_json/vulnerability_scan.json \
+  --output-file /info_json/image_update_assessment.json
 .fi
 .PP
 Verify one service after redeploying its remediated image:

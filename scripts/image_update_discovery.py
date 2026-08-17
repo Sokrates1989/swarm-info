@@ -45,7 +45,7 @@ from scripts.vulnerability_scan import DockerClient
 
 
 SCHEMA_VERSION = 1
-DEFAULT_MAX_REGISTRY_TAGS = 2000
+DEFAULT_MAX_REGISTRY_TAGS = 10000
 FULL_SHA256_PATTERN = re.compile(r"sha256:[0-9a-fA-F]{64}")
 ProgressCallback = Callable[[int, int, str], None]
 
@@ -234,8 +234,46 @@ def _merge_current_metadata(
     )
 
 
+def _selected_candidate_identity(
+    client: DockerClient,
+    registry_client: RegistryTagClient,
+    selection: CandidateSelection,
+    platform: str,
+    metadata_cache: dict[str, ImageMetadata],
+) -> tuple[ImageMetadata, str | None, dict[str, str] | None]:
+    """Resolve one selected tag and return sanitized failure evidence."""
+
+    reference = _metadata_reference(selection.repository, selection.tag.name)
+    metadata = _cached_metadata(client, metadata_cache, reference, platform)
+    candidate_digest = _full_sha256(metadata.digest) or _full_sha256(
+        selection.tag.digest_for_platform(platform)
+    )
+    if candidate_digest is not None:
+        return metadata, candidate_digest, None
+    resolution = registry_client.resolve_platform_digest(
+        selection.repository,
+        selection.tag.name,
+        platform,
+    )
+    candidate_digest = _full_sha256(resolution.digest)
+    if candidate_digest is not None:
+        return metadata, candidate_digest, None
+    status = "digest-unresolved"
+    if resolution.status == "auth-host-approval-required":
+        status = resolution.status
+    elif resolution.status != "ok":
+        status = f"digest-{resolution.status}"
+    return metadata, None, {
+        "repository": selection.repository,
+        "tag": selection.tag.name,
+        "status": status,
+        "detail": resolution.error,
+    }
+
+
 def _resolve_candidates(
     client: DockerClient,
+    registry_client: RegistryTagClient,
     selections: Sequence[CandidateSelection],
     current_digest: str | None,
     current_version: SemanticVersion | None,
@@ -249,12 +287,15 @@ def _resolve_candidates(
     errors: list[dict[str, str]] = []
     for selection in selections:
         reference = _metadata_reference(selection.repository, selection.tag.name)
-        metadata = _cached_metadata(client, metadata_cache, reference, platform)
-        candidate_digest = _full_sha256(metadata.digest) or _full_sha256(
-            selection.tag.digest_for_platform(platform)
+        metadata, candidate_digest, error = _selected_candidate_identity(
+            client,
+            registry_client,
+            selection,
+            platform,
+            metadata_cache,
         )
-        if candidate_digest is None:
-            errors.append({"repository": selection.repository, "status": "digest-unresolved"})
+        if error is not None or candidate_digest is None:
+            errors.append(error or {"status": "digest-unresolved"})
             continue
         if current_digest and candidate_digest == current_digest.lower():
             continue
@@ -333,6 +374,8 @@ def _listing_diagnostics(
     for listing in listings.values():
         if listing.status == "registry-approval-required":
             required_hosts.add(listing.repository.registry)
+        elif listing.status == "auth-host-approval-required" and listing.error:
+            required_hosts.add(listing.error)
         elif listing.status != "ok":
             errors.append(
                 {
@@ -342,6 +385,23 @@ def _listing_diagnostics(
                 }
             )
     return required_hosts, errors
+
+
+def _resolution_diagnostics(
+    errors: Sequence[dict[str, str]],
+) -> tuple[set[str], list[dict[str, str]]]:
+    """Convert selected-tag auth-host gates into actionable approvals."""
+
+    required_hosts: set[str] = set()
+    retained: list[dict[str, str]] = []
+    for error in errors:
+        if error.get("status") == "auth-host-approval-required" and error.get(
+            "detail"
+        ):
+            required_hosts.add(error["detail"])
+        else:
+            retained.append(error)
+    return required_hosts, retained
 
 
 @dataclasses.dataclass(frozen=True)
@@ -407,6 +467,7 @@ def _discover_for_image(
     listings: Mapping[str, TagListing],
     successors: Mapping[str, SuccessorRule],
     client: DockerClient,
+    registry_client: RegistryTagClient,
     platform: str,
     evaluated_at: dt.datetime,
     metadata_cache: dict[str, ImageMetadata],
@@ -437,6 +498,7 @@ def _discover_for_image(
         )
     candidates, errors = _resolve_candidates(
         client,
+        registry_client,
         selections,
         current.metadata.digest,
         current.version,
@@ -576,12 +638,16 @@ def discover_image_updates(
             listings,
             successors,
             client,
+            registry_client,
             platform,
             evaluated_at,
             metadata_cache,
         )
         output_images.append(discovered)
         errors.extend(image_errors)
+
+    resolution_hosts, errors = _resolution_diagnostics(errors)
+    required_hosts.update(resolution_hosts)
 
     source_summary = report.get("summary")
     source_complete = bool(

@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.13.1" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.13.2" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -198,11 +198,13 @@ unauthorized.
 .BI \-\-allow-registry-host " host"
 With
 .BR \-\-discover-image-updates ,
-explicitly permit bounded anonymous metadata requests to one exact canonical
-registry host. Repeat for multiple hosts. Without this option discovery is
-network-silent and reports the required hosts with exit status 3. Docker
-digest resolution uses a temporary empty Docker configuration; installed
-registry credentials are never read or sent.
+explicitly permit bounded anonymous metadata or token requests to one exact
+host. Repeat for multiple hosts. A registry whose Bearer-token service uses a
+different host reports that host as an additional required approval before
+contacting it. Without this option discovery is network-silent and reports the
+required hosts with exit status 3. Digest resolution uses public Registry V2
+manifests and a temporary empty Docker configuration; installed registry
+credentials are never read or sent, and image layers are not pulled.
 .TP
 .BI \-\-vulnerability-report-file " path"
 Select the schema-version-2 source report consumed by
@@ -219,7 +221,7 @@ Default: the preferred production candidate report when present.
 .BI \-\-max-registry-tags " count"
 Bound tag enumeration per repository for
 .BR \-\-discover-image-updates .
-Range: 1 to 10000. Default: 2000. Hitting the limit leaves discovery
+Range: 1 to 10000. Default: 10000. Hitting the limit leaves discovery
 incomplete instead of guessing the newest tag.
 .TP
 .BI \-\-current-image " image"

@@ -11,6 +11,7 @@ import unittest
 from scripts.image_update_cli import _anonymous_docker_environment
 from scripts.image_update_discovery import discover_image_updates
 from scripts.image_update_registry import (
+    DigestResolution,
     HttpResponse,
     RegistryRepository,
     RegistryTag,
@@ -72,17 +73,35 @@ class FakeTransport:
 class FakeListingClient:
     """Supply predetermined tag listings without performing network I/O."""
 
-    def __init__(self, listings: dict[str, TagListing]) -> None:
+    def __init__(
+        self,
+        listings: dict[str, TagListing],
+        resolutions: dict[tuple[str, str, str], DigestResolution] | None = None,
+    ) -> None:
         """Store listings keyed by canonical repository."""
 
         self.listings = listings
+        self.resolutions = resolutions or {}
         self.calls: list[tuple[str, int]] = []
+        self.resolution_calls: list[tuple[str, str, str]] = []
 
     def list_tags(self, reference: str, max_tags: int) -> TagListing:
         """Return one exact listing and retain the requested bound."""
 
         self.calls.append((reference, max_tags))
         return self.listings[reference]
+
+    def resolve_platform_digest(
+        self,
+        reference: str,
+        tag: str,
+        platform: str,
+    ) -> DigestResolution:
+        """Return one optional Registry V2 resolution fixture."""
+
+        key = (reference, tag, platform)
+        self.resolution_calls.append(key)
+        return self.resolutions.get(key, DigestResolution("digest-unresolved"))
 
 
 class MetadataClient:
@@ -125,6 +144,7 @@ def listing(
     *tags: RegistryTag,
     status: str = "ok",
     complete: bool = True,
+    error: str = "",
 ) -> TagListing:
     """Build one concise registry listing fixture."""
 
@@ -134,6 +154,7 @@ def listing(
         status,
         tags,
         complete,
+        error,
     )
 
 
@@ -256,6 +277,99 @@ class RegistryTagClientTests(unittest.TestCase):
             "Bearer public-token",
         )
 
+    def test_registry_manifest_resolves_exact_platform_digest(self) -> None:
+        """Resolve a selected public tag directly without pulling image layers."""
+
+        transport = FakeTransport(
+            [
+                HttpResponse(
+                    401,
+                    {
+                        "www-authenticate": (
+                            'Bearer realm="https://auth.docker.io/token",'
+                            'service="registry.docker.io",'
+                            'scope="repository:library/postgres:pull"'
+                        )
+                    },
+                    b"",
+                ),
+                HttpResponse(200, {}, b'{"token":"public-token"}'),
+                HttpResponse(
+                    200,
+                    {"content-type": "application/vnd.oci.image.index.v1+json"},
+                    json.dumps(
+                        {
+                            "manifests": [
+                                {
+                                    "digest": MAJOR_DIGEST,
+                                    "platform": {
+                                        "os": "linux",
+                                        "architecture": "arm64",
+                                    },
+                                },
+                                {
+                                    "digest": PATCH_DIGEST,
+                                    "platform": {
+                                        "os": "linux",
+                                        "architecture": "amd64",
+                                    },
+                                },
+                            ]
+                        }
+                    ).encode(),
+                ),
+            ]
+        )
+
+        result = RegistryTagClient({"docker.io"}, transport).resolve_platform_digest(
+            "postgres:16.4.0",
+            "16.4.0",
+            "linux/amd64",
+        )
+
+        self.assertEqual(result, DigestResolution("ok", PATCH_DIGEST))
+        self.assertIn("application/vnd.oci.image.index.v1+json", transport.calls[0][1]["Accept"])
+        self.assertEqual(transport.calls[2][1]["Authorization"], "Bearer public-token")
+
+    def test_external_auth_realm_requires_explicit_host_approval(self) -> None:
+        """Keep a registry token host network-silent until separately approved."""
+
+        challenge = {
+            "www-authenticate": (
+                'Bearer realm="https://auth.linuxserver.io/token",'
+                'service="lscr.io",scope="repository:linuxserver/duplicati:pull"'
+            )
+        }
+        blocked_transport = FakeTransport([HttpResponse(401, challenge, b"")])
+
+        blocked = RegistryTagClient({"lscr.io"}, blocked_transport).list_tags(
+            "lscr.io/linuxserver/duplicati:latest",
+            100,
+        )
+
+        self.assertEqual(blocked.status, "auth-host-approval-required")
+        self.assertEqual(blocked.error, "auth.linuxserver.io")
+        self.assertEqual(len(blocked_transport.calls), 1)
+
+        approved_transport = FakeTransport(
+            [
+                HttpResponse(401, challenge, b""),
+                HttpResponse(200, {}, b'{"token":"public-token"}'),
+                HttpResponse(
+                    200,
+                    {},
+                    b'{"name":"linuxserver/duplicati","tags":["latest"]}',
+                ),
+            ]
+        )
+        approved = RegistryTagClient(
+            {"lscr.io", "auth.linuxserver.io"},
+            approved_transport,
+        ).list_tags("lscr.io/linuxserver/duplicati:latest", 100)
+
+        self.assertTrue(approved.complete)
+        self.assertEqual([tag.name for tag in approved.tags], ["latest"])
+
     def test_provider_overrun_is_incomplete_at_configured_tag_limit(self) -> None:
         """Fail closed if a provider returns more tags than the requested page."""
 
@@ -358,6 +472,33 @@ class ImageUpdateDiscoveryTests(unittest.TestCase):
         )
         self.assertIsNone(outcome.report["policy"]["registry_credentials_used"])
         self.assertEqual(docker.commands, [])
+
+    def test_external_auth_host_is_reported_as_required_approval(self) -> None:
+        """Turn a safe token-realm refusal into a copyable approval host."""
+
+        repository = "lscr.io/linuxserver/duplicati"
+        outcome = discover_image_updates(
+            source_report("lscr.io/linuxserver/duplicati:latest"),
+            Path("vulnerability_scan.json"),
+            MetadataClient({}),
+            FakeListingClient(
+                {
+                    repository: listing(
+                        repository,
+                        status="auth-host-approval-required",
+                        complete=False,
+                        error="auth.linuxserver.io",
+                    )
+                }
+            ),
+            "linux/amd64",
+            10000,
+        )
+        self.assertEqual(outcome.exit_code, 3)
+        self.assertEqual(
+            outcome.report["required_registry_hosts"],
+            ["auth.linuxserver.io"],
+        )
 
     def test_short_display_digest_is_not_claimed_as_immutable_identity(self) -> None:
         """Discard legacy digest prefixes while retaining the source reference."""
@@ -491,6 +632,42 @@ class ImageUpdateDiscoveryTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0]["digest"], PATCH_DIGEST)
         self.assertFalse(outcome.report["errors"])
+
+    def test_registry_manifest_fallback_avoids_docker_resolution_failure(self) -> None:
+        """Use direct public manifest evidence when Docker metadata is unavailable."""
+
+        repository = "docker.io/example/app"
+        resolver = FakeListingClient(
+            {
+                repository: listing(
+                    repository,
+                    RegistryTag("1.2.3"),
+                    RegistryTag("1.2.4"),
+                )
+            },
+            {
+                (repository, "1.2.4", "linux/amd64"): DigestResolution(
+                    "ok",
+                    PATCH_DIGEST,
+                )
+            },
+        )
+
+        outcome = discover_image_updates(
+            source_report(),
+            Path("vulnerability_scan.json"),
+            MetadataClient({f"{repository}:1.2.3@{OLD_DIGEST}": OLD_DIGEST}),
+            resolver,
+            "linux/amd64",
+            10000,
+        )
+
+        self.assertEqual(outcome.exit_code, 0)
+        self.assertEqual(outcome.report["images"][0]["candidates"][0]["digest"], PATCH_DIGEST)
+        self.assertEqual(
+            resolver.resolution_calls,
+            [(repository, "1.2.4", "linux/amd64")],
+        )
 
     def test_reviewed_successor_is_informational_and_never_authorizing(self) -> None:
         """Discover a replacement repository while preserving the trust boundary."""

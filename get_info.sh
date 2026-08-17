@@ -572,7 +572,7 @@ IMAGE_UPDATE_CURRENT_IMAGE=""
 IMAGE_UPDATE_CANDIDATE_IMAGE=""
 IMAGE_UPDATE_REPORT_FILE="NONE"
 IMAGE_UPDATE_CANDIDATE_REPORT_FILE="NONE"
-IMAGE_UPDATE_MAX_REGISTRY_TAGS="2000"
+IMAGE_UPDATE_MAX_REGISTRY_TAGS="10000"
 IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS=()
 
 # Select exactly one live Swarm scope for a focused vulnerability scan.
@@ -1047,7 +1047,7 @@ elif [ -n "$IMAGE_UPDATE_CURRENT_IMAGE" ] || [ -n "$IMAGE_UPDATE_CANDIDATE_IMAGE
     echo "$OP_COMPARE_OPTION_SCOPE" >&2
     exit 64
 elif { [ "${#IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS[@]}" -gt 0 ] \
-    || [ "$IMAGE_UPDATE_MAX_REGISTRY_TAGS" != "2000" ]; } \
+    || [ "$IMAGE_UPDATE_MAX_REGISTRY_TAGS" != "10000" ]; } \
     && [ "$selected_action" != "discover-image-updates" ]; then
     echo "$OP_DISCOVERY_OPTION_SCOPE" >&2
     exit 64

@@ -463,10 +463,16 @@ swarm-info --discover-image-updates \
 
 Repository names can disclose internal system structure, so approval is exact,
 repeatable, and per invocation. Discovery uses bounded anonymous public
-metadata requests, never runs `docker login`, and resolves digests with a
-temporary empty Docker configuration instead of the operator's credential
-store. Private registries that require credentials remain explicitly
-incomplete in Slice 1.
+metadata requests and never runs `docker login`. If a registry advertises a
+Bearer-token service on another host, swarm-info stays network-silent for that
+host, adds it to `required_registry_hosts`, and requires a separate exact
+`--allow-registry-host` approval. Selected tags are resolved without layers,
+using Docker metadata under a temporary empty configuration and a direct public
+Registry V2 manifest fallback for the requested platform. No installed
+registry credentials are used. Private registries that require credentials
+remain explicitly incomplete in Slice 1. Tag enumeration is bounded at 10,000
+entries per repository by default; reaching the bound remains incomplete
+rather than guessing the newest release.
 
 For a recognizable stable `X.Y.Z` tag, the atomic report selects and resolves:
 

@@ -9,6 +9,7 @@ credential files or invokes credential helpers.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import re
 import socket
@@ -27,6 +28,14 @@ AUTH_PARAMETER_PATTERN = re.compile(
 )
 NEXT_LINK_PATTERN = re.compile(r"<([^>]+)>\s*;\s*rel=\"?next\"?", re.IGNORECASE)
 FULL_SHA256_PATTERN = re.compile(r"sha256:[0-9a-fA-F]{64}")
+MANIFEST_ACCEPT = ", ".join(
+    (
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+    )
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -128,6 +137,15 @@ class TagListing:
     error: str = ""
 
 
+@dataclasses.dataclass(frozen=True)
+class DigestResolution:
+    """One platform-specific immutable manifest resolution result."""
+
+    status: str
+    digest: str | None = None
+    error: str = ""
+
+
 def _bounded_read(response: object) -> bytes:
     """Read at most the configured response limit and reject oversized data."""
 
@@ -189,6 +207,43 @@ def _docker_hub_platform_digests(
     return tuple(sorted(digests.items()))
 
 
+def _platform_matches(candidate: Mapping[str, object], platform: str) -> bool:
+    """Return whether registry platform evidence matches the requested target."""
+
+    requested = platform.split("/")
+    if len(requested) not in {2, 3}:
+        return False
+    if candidate.get("os") != requested[0]:
+        return False
+    if candidate.get("architecture") != requested[1]:
+        return False
+    return len(requested) == 2 or candidate.get("variant") == requested[2]
+
+
+def _platform_descriptor_digest(
+    manifest: Mapping[str, object],
+    platform: str,
+) -> str | None:
+    """Select a validated child-manifest digest from a multi-platform index."""
+
+    descriptors = manifest.get("manifests")
+    if not isinstance(descriptors, list):
+        return None
+    for descriptor in descriptors:
+        if not isinstance(descriptor, Mapping):
+            continue
+        candidate_platform = descriptor.get("platform")
+        digest = descriptor.get("digest")
+        if (
+            isinstance(candidate_platform, Mapping)
+            and _platform_matches(candidate_platform, platform)
+            and isinstance(digest, str)
+            and FULL_SHA256_PATTERN.fullmatch(digest)
+        ):
+            return digest.lower()
+    return None
+
+
 def _response_error(response: HttpResponse) -> RegistryRequestError:
     """Translate HTTP status codes into stable operator-facing reason codes."""
 
@@ -213,25 +268,37 @@ def _auth_parameters(challenge: str) -> dict[str, str]:
     }
 
 
-def _allowed_token_realm(registry: str, realm: str) -> bool:
-    """Permit anonymous tokens only from the registry or Docker Hub auth host."""
+def _token_realm_host(realm: str) -> str:
+    """Return one safe HTTPS token host or an empty invalid marker."""
 
     parsed = urlparse(realm)
-    if parsed.scheme != "https" or parsed.username or parsed.password:
-        return False
-    registry_hosts = {registry}
-    if registry == "docker.io":
-        registry_hosts.update({"registry-1.docker.io", "auth.docker.io"})
-    return parsed.netloc.lower() in registry_hosts
+    if (
+        parsed.scheme != "https"
+        or parsed.username
+        or parsed.password
+        or parsed.fragment
+    ):
+        return ""
+    return parsed.netloc.lower()
 
 
-def _token_url(repository: RegistryRepository, challenge: str) -> str:
+def _token_url(
+    repository: RegistryRepository,
+    challenge: str,
+    allowed_hosts: set[str],
+) -> str:
     """Build the anonymous pull-token request from a validated challenge."""
 
     parameters = _auth_parameters(challenge)
     realm = parameters.pop("realm", "")
-    if not realm or not _allowed_token_realm(repository.registry, realm):
+    realm_host = _token_realm_host(realm)
+    built_in_hosts = {repository.registry}
+    if repository.registry == "docker.io":
+        built_in_hosts.update({"registry-1.docker.io", "auth.docker.io"})
+    if not realm_host:
         raise RegistryRequestError("unsupported-auth-realm")
+    if realm_host not in built_in_hosts and realm_host not in allowed_hosts:
+        raise RegistryRequestError("auth-host-approval-required", realm_host)
     parsed = urlparse(realm)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query.update(parameters)
@@ -269,11 +336,14 @@ class RegistryTagClient:
             return TagListing(repository, error.code, error=error.detail)
 
     def _request_registry(
-        self, repository: RegistryRepository, url: str
+        self,
+        repository: RegistryRepository,
+        url: str,
+        accept: str = "application/json",
     ) -> HttpResponse:
         """Fetch one Registry API page, obtaining only an anonymous token."""
 
-        headers = {"Accept": "application/json", "User-Agent": "swarm-info"}
+        headers = {"Accept": accept, "User-Agent": "swarm-info"}
         token = self._tokens.get(repository.canonical)
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -282,7 +352,7 @@ class RegistryTagClient:
             return response
         challenge = response.headers.get("www-authenticate", "")
         token_response = self.transport.get(
-            _token_url(repository, challenge),
+            _token_url(repository, challenge, self.allowed_registries),
             {"Accept": "application/json", "User-Agent": "swarm-info"},
         )
         if token_response.status != 200:
@@ -294,6 +364,88 @@ class RegistryTagClient:
         self._tokens[repository.canonical] = candidate
         headers["Authorization"] = f"Bearer {candidate}"
         return self.transport.get(url, headers)
+
+    def resolve_platform_digest(
+        self,
+        reference: str,
+        tag: str,
+        platform: str,
+    ) -> DigestResolution:
+        """Resolve one selected tag through Registry V2 without pulling layers."""
+
+        repository = parse_repository(reference)
+        if repository.registry not in self.allowed_registries:
+            return DigestResolution(
+                "registry-approval-required",
+                error=repository.registry,
+            )
+        api_host = (
+            "registry-1.docker.io"
+            if repository.registry == "docker.io"
+            else repository.registry
+        )
+        manifest_url = (
+            f"https://{api_host}/v2/{quote(repository.name, safe='/')}/"
+            f"manifests/{quote(tag, safe='')}"
+        )
+        try:
+            response = self._request_registry(
+                repository,
+                manifest_url,
+                MANIFEST_ACCEPT,
+            )
+            if response.status != 200:
+                raise _response_error(response)
+            payload = _json_object(response)
+            descriptor_digest = _platform_descriptor_digest(payload, platform)
+            if descriptor_digest is not None:
+                return DigestResolution("ok", descriptor_digest)
+            if isinstance(payload.get("manifests"), list):
+                return DigestResolution("platform-not-found")
+            return self._single_manifest_digest(
+                repository,
+                api_host,
+                payload,
+                response,
+                platform,
+            )
+        except RegistryRequestError as error:
+            return DigestResolution(error.code, error=error.detail)
+
+    def _single_manifest_digest(
+        self,
+        repository: RegistryRepository,
+        api_host: str,
+        manifest: Mapping[str, object],
+        response: HttpResponse,
+        platform: str,
+    ) -> DigestResolution:
+        """Verify a single-image manifest platform through its small config blob."""
+
+        config = manifest.get("config")
+        config_digest = config.get("digest") if isinstance(config, Mapping) else None
+        if not isinstance(config_digest, str) or not FULL_SHA256_PATTERN.fullmatch(
+            config_digest
+        ):
+            return DigestResolution("manifest-config-missing")
+        config_url = (
+            f"https://{api_host}/v2/{quote(repository.name, safe='/')}/"
+            f"blobs/{config_digest.lower()}"
+        )
+        config_response = self._request_registry(repository, config_url)
+        if config_response.status != 200:
+            raise _response_error(config_response)
+        config_payload = _json_object(config_response)
+        if not _platform_matches(config_payload, platform):
+            return DigestResolution("platform-not-found")
+        calculated = "sha256:" + hashlib.sha256(response.body).hexdigest()
+        header_digest = response.headers.get("docker-content-digest", "").lower()
+        if header_digest and (
+            not FULL_SHA256_PATTERN.fullmatch(header_digest)
+            or header_digest != calculated
+        ):
+            return DigestResolution("manifest-digest-mismatch")
+        return DigestResolution("ok", calculated)
 
     def _list_distribution(
         self,

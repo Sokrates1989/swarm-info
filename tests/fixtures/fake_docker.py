@@ -213,14 +213,17 @@ def inspect_payload(service: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def container_inspect_payload(container: dict[str, Any]) -> list[dict[str, Any]]:
+def container_inspect_payload(
+    container_id: str, container: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Convert one fake local container to Docker inspect JSON form."""
 
     return [
         {
-            "Id": container["image_id"].removeprefix("sha256:")[:12],
+            "Id": container_id,
             "Name": container["name"],
             "Image": container["image_id"],
+            "State": {"Running": container["running"]},
             "Config": {
                 "Image": container["image"],
                 "Labels": {
@@ -328,20 +331,47 @@ def main(arguments: list[str] | None = None) -> int:
         return 0
     if command[:2] == ["container", "ls"]:
         include_all = "--all" in command
+        ancestor = next(
+            (
+                value.removeprefix("ancestor=")
+                for value in command
+                if value.startswith("ancestor=")
+            ),
+            None,
+        )
         selected = [
             container_id
             for container_id, container in containers.items()
-            if include_all or container["running"]
+            if (include_all or container["running"])
+            and (ancestor is None or container["image_id"] == ancestor)
         ]
         print("\n".join(selected))
         return 0
     if command[:2] == ["container", "inspect"]:
-        container_id = command[2] if len(command) > 2 else ""
-        container = containers.get(container_id)
+        selector = command[2] if len(command) > 2 else ""
+        resolved = next(
+            (
+                (container_id, container)
+                for container_id, container in containers.items()
+                if selector in {container_id, container["name"].lstrip("/")}
+            ),
+            None,
+        )
+        if (
+            resolved is not None
+            and scenario == "local-containers-unreadable-stopped"
+            and resolved[0] == "container-beta"
+        ):
+            print(
+                "readlink overlay2/l/BROKEN-LAYER: no such file or directory",
+                file=sys.stderr,
+            )
+            return 1
+        container_id, container = resolved if resolved is not None else ("", None)
         if container is None:
             print("container not found", file=sys.stderr)
             return 1
-        print(json.dumps(container_inspect_payload(container)))
+        print(json.dumps(container_inspect_payload(container_id, container)))
         return 0
     if command == ["service", "ls", "--quiet"]:
         print("\n".join(services))

@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.13.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.13.1" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -270,7 +270,9 @@ Docker Scout
 .B local://
 only, and never substitutes a registry image. Interactive scans show inventory
 totals, per-image counters and results, elapsed time, and a 30-second heartbeat
-while Docker Scout remains active.
+while Docker Scout remains active. A full local scan isolates unreadable
+container metadata, retains readable image results, records inventory errors,
+and returns incomplete status instead of reporting the host clean.
 .TP
 .BI \-\-runtime-mode " mode"
 Set security inventory to
@@ -297,14 +299,16 @@ With
 scan the exact local image used by one exact container name or full container
 ID. This selects local-container mode automatically. Without an explicit output
 path, focused evidence is written separately and does not replace the full-host
-report.
+report. The focused check inspects only that container, so unrelated unreadable
+stopped containers do not block verification.
 .TP
 .BI \-\-image-id " sha256:id"
 With
 .BR \-\-security-check ,
 scan one full content-addressed local image ID and report every selected
 container using that exact artifact. Abbreviated IDs and tags are rejected.
-This selects local-container mode automatically.
+This selects local-container mode automatically and asks Docker to filter the
+candidate containers before exact identity is verified.
 .TP
 .BI \-\-os " host"
 Use host hint

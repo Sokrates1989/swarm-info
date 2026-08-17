@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import unittest
 
-from tests.test_dependency_check import BASH_AVAILABLE
+from tests.test_dependency_check import BASH4_AVAILABLE
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -34,7 +34,7 @@ class HealthCollectionContractTests(unittest.TestCase):
         self.assertIn('swarm-info.monitoring.lifecycle', source)
         self.assertIn("${svc_replicas%% *}", source)
 
-    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for shell execution.")
+    @unittest.skipUnless(BASH4_AVAILABLE, "Bash 4+ is required for Swarm execution.")
     def test_completed_jobs_are_idle_while_failed_jobs_alert(self) -> None:
         """Classify completed scheduled and one-shot work without false outages."""
 

@@ -9,6 +9,7 @@ import unittest
 
 from scripts.operator_report import (
     load_messages,
+    message,
     render_service_health,
     render_vulnerabilities,
 )
@@ -34,6 +35,17 @@ class OperatorReportTests(unittest.TestCase):
         """Require complete German and English message catalogs."""
 
         self.assertEqual(set(load_messages("en")), set(load_messages("de")))
+
+    def test_invalid_image_id_guidance_preserves_docker_template_braces(self) -> None:
+        """Render the copy-ready Docker inspect template exactly."""
+
+        rendered = message(
+            load_messages("en"),
+            "security.focusError.invalid-image-id",
+            selector="sha256:short",
+        )
+
+        self.assertIn("--format '{{.Image}}'", rendered)
 
     def test_service_page_lists_only_services_needing_attention(self) -> None:
         """Keep the operational page focused while preserving counts."""
@@ -188,6 +200,47 @@ class OperatorReportTests(unittest.TestCase):
         self.assertIn("docker compose -f /share/wordpress/compose.yml pull web", output)
         self.assertIn("Registry fallback is intentionally disabled", output)
 
+    def test_legacy_container_report_never_renders_none_as_compose_evidence(self) -> None:
+        """Keep old reports without Compose labels safe and copy-ready."""
+
+        image_id = "sha256:" + ("c" * 64)
+        report = {
+            "completed_at": "2026-08-17T10:00:00Z",
+            "environment": {"container_scope": "all"},
+            "scope": {"resource_type": "container", "resource_count": 1},
+            "summary": {"complete": False, "status": "incomplete"},
+            "images": [
+                {
+                    "reference": "legacy/image:latest",
+                    "local_image_id": image_id,
+                    "status": "error",
+                    "error_code": "local-image-unavailable",
+                    "services": [
+                        {
+                            "name": "legacy_container",
+                            "stack": "legacy-project",
+                            "compose_service": None,
+                            "compose_working_dir": None,
+                        }
+                    ],
+                }
+            ],
+        }
+
+        output, exit_code = render_vulnerabilities(
+            report,
+            Path("/share/Public/swarm-info/security_scan.json"),
+            load_messages("en"),
+            dt.datetime(2026, 8, 17, 11, tzinfo=dt.timezone.utc),
+            30,
+        )
+
+        self.assertEqual(exit_code, 3)
+        self.assertNotIn("None", output)
+        self.assertNotIn("cd None", output)
+        self.assertNotIn("Compose: legacy-project", output)
+        self.assertIn("cd <COMPOSE_WORKING_DIR>", output)
+
 
 class CliOperatorContractTests(unittest.TestCase):
     """Lock public navigation, version, manual, and short options together."""
@@ -200,7 +253,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.13.0")
+        self.assertEqual(version, "1.13.1")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:

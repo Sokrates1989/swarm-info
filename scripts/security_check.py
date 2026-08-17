@@ -25,11 +25,15 @@ from typing import Any, Mapping, Sequence
 
 from scripts.container_inventory import (
     ContainerFocusError,
-    collect_containers,
+    ContainerInventoryFailure,
+    collect_container_inventory,
+    inspect_container,
     select_containers,
+    validate_container_focus,
 )
 from scripts.operator_report import load_messages, message, safe_text, selected_locale
 from scripts.vulnerability_models import (
+    ServiceRecord,
     build_report,
     utc_timestamp,
     write_json_atomic,
@@ -410,6 +414,85 @@ def annotate_container_focus(
     )
 
 
+def annotate_inventory_failures(
+    report: dict[str, Any], failures: Sequence[ContainerInventoryFailure]
+) -> None:
+    """Preserve partial scan results while marking unreadable inventory incomplete."""
+
+    report["inventory_errors"] = [failure.to_dict() for failure in failures]
+    report["scope"]["inventory_failure_count"] = len(failures)
+    report["scope"]["inventory_resource_count"] = (
+        report["scope"]["service_count"] + len(failures)
+    )
+    if not failures:
+        return
+    known_errors = list(report.get("errors") or [])
+    for failure in failures:
+        if failure.error not in known_errors:
+            known_errors.append(failure.error)
+    report["errors"] = known_errors
+    report["summary"]["complete"] = False
+    report["summary"]["status"] = "incomplete"
+
+
+def container_focus_error_report(
+    started_at: str,
+    platform: str,
+    error: ContainerFocusError,
+) -> dict[str, Any]:
+    """Build machine-readable incomplete evidence for one invalid focus request."""
+
+    report = build_report(
+        started_at,
+        platform,
+        [],
+        [],
+        [],
+        None,
+        f"container-focus-{error.code}",
+    )
+    report["focus_error"] = {
+        "code": error.code,
+        "selector": error.selector,
+        "matches": list(error.matches),
+    }
+    return report
+
+
+def collect_focused_containers(
+    client: DockerClient,
+    scope: str,
+    kind: str,
+    selector: str,
+) -> tuple[list[ServiceRecord], tuple[ContainerInventoryFailure, ...], int]:
+    """Resolve focused local evidence without inspecting unrelated containers."""
+
+    selected = validate_container_focus(kind, selector)
+    if kind == "container":
+        container = inspect_container(client, selected)
+        if scope == "running" and container.running is not True:
+            if container.running is False:
+                raise ContainerFocusError("container-not-found", selected)
+            raise InventoryError(
+                f"Docker did not report whether container {selected} is running."
+            )
+        return [container], (), 1
+
+    inventory = collect_container_inventory(
+        client,
+        scope,
+        ancestor_image_id=selected,
+    )
+    if inventory.failures and not inventory.containers:
+        raise InventoryError(inventory.failures[0].error)
+    containers = select_containers(inventory.containers, kind, selected)
+    return (
+        containers,
+        inventory.failures,
+        len(inventory.containers) + len(inventory.failures),
+    )
+
+
 def run_security_check(
     client: DockerClient,
     runtime_mode: str = "auto",
@@ -451,6 +534,7 @@ def run_security_check(
     runtime: DockerRuntimeProfile | None = None
     scout_work: dict[str, str] | None = None
     warnings: list[str] = []
+    inventory_failures: tuple[ContainerInventoryFailure, ...] = ()
     inventory_resource_count = 0
     resolved_platform = requested_platform if requested_platform != "auto" else "unknown"
     try:
@@ -488,62 +572,63 @@ def run_security_check(
             )
         else:
             if progress:
-                progress(
-                    f"[INFO] Collecting {container_scope} local-container image inventory..."
-                )
-            resources = run_with_progress_heartbeat(
-                lambda: collect_containers(client, container_scope),
-                progress,
-                "[INFO] Local-container inventory is still running",
-                heartbeat_interval_seconds,
-            )
-            inventory_resource_count = len(resources)
-            if focus_kind and focus_selector is not None:
-                try:
-                    resources = select_containers(
-                        resources, focus_kind, focus_selector
+                if focus_kind:
+                    progress(
+                        message(
+                            load_messages(selected_locale(process_environment)),
+                            f"security.focusInventory.{focus_kind}",
+                        )
                     )
-                except ContainerFocusError as error:
-                    report = build_report(
-                        started_at,
-                        resolved_platform,
-                        [],
-                        [],
-                        [],
-                        None,
-                        f"container-focus-{error.code}",
-                    )
-                    report["focus_error"] = {
-                        "code": error.code,
-                        "selector": error.selector,
-                        "matches": list(error.matches),
-                    }
-                    exit_code = 3
                 else:
-                    report, exit_code = scan_collected_services(
-                        client,
-                        resources,
-                        resolved_platform,
-                        started_at,
-                        local_only=True,
-                        progress=progress,
-                        heartbeat_interval_seconds=heartbeat_interval_seconds,
+                    progress(
+                        f"[INFO] Collecting {container_scope} local-container image inventory..."
                     )
-            else:
-                report, exit_code = scan_collected_services(
-                    client,
-                    resources,
-                    resolved_platform,
-                    started_at,
-                    local_only=True,
-                    progress=progress,
-                    heartbeat_interval_seconds=heartbeat_interval_seconds,
+            if focus_kind and focus_selector is not None:
+                resources, inventory_failures, inventory_resource_count = (
+                    run_with_progress_heartbeat(
+                        lambda: collect_focused_containers(
+                            client,
+                            container_scope,
+                            focus_kind,
+                            focus_selector,
+                        ),
+                        progress,
+                        "[INFO] Focused local-container inventory is still running",
+                        heartbeat_interval_seconds,
+                    )
                 )
+            else:
+                inventory = run_with_progress_heartbeat(
+                    lambda: collect_container_inventory(client, container_scope),
+                    progress,
+                    "[INFO] Local-container inventory is still running",
+                    heartbeat_interval_seconds,
+                )
+                resources = list(inventory.containers)
+                inventory_failures = inventory.failures
+                inventory_resource_count = len(resources) + len(inventory_failures)
+            report, exit_code = scan_collected_services(
+                client,
+                resources,
+                resolved_platform,
+                started_at,
+                local_only=True,
+                progress=progress,
+                heartbeat_interval_seconds=heartbeat_interval_seconds,
+            )
+            annotate_inventory_failures(report, inventory_failures)
+            if inventory_failures:
+                exit_code = 3
             if runtime_mode == "auto":
                 warnings.append(
                     "Swarm-wide inventory is unavailable; evidence covers only "
                     f"{container_scope} containers on this Docker node."
                 )
+    except ContainerFocusError as error:
+        report = container_focus_error_report(
+            started_at, resolved_platform, error
+        )
+        exit_code = 3
     except InventoryError as error:
         report = build_report(
             started_at, resolved_platform, [], [], [], None, str(error)

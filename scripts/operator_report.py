@@ -97,6 +97,8 @@ def age_text(value: dt.datetime | None, now: dt.datetime) -> str:
 def safe_text(value: object) -> str:
     """Strip terminal control characters from untrusted report strings."""
 
+    if value is None:
+        return ""
     return "".join(
         character
         for character in str(value)
@@ -315,7 +317,7 @@ def image_compose_owners(image: Mapping[str, Any]) -> list[dict[str, Any]]:
             for path in file_values
             if safe_text(path)
         )
-        if not any((project, compose_service, working_dir, files)):
+        if not any((compose_service, working_dir, files)):
             continue
         identity = (project, compose_service, working_dir, files)
         if identity in seen:

@@ -224,7 +224,14 @@ Auto mode reads Docker capability rather than guessing from a distribution:
   `--image-id` accepts one full `sha256:<64-hex-digits>` local image ID and
   scans that artifact once even when several containers use it. Focused checks
   write `swarm_info/security_scan_focused.json` by default so they cannot
-  replace the last full-host report accidentally.
+  replace the last full-host report accidentally. Focused checks inspect only
+  the selected container or Docker-filtered exact-image candidates, so an
+  unrelated unreadable stopped container cannot block verification.
+- Full local-container scans isolate unreadable container metadata instead of
+  discarding readable scan results. The report retains successful image
+  findings under `images`, records failures under `inventory_errors`, sets
+  `summary.complete=false`, and returns exit code `3`; incomplete inventory is
+  never reported as clean.
 - Compose-created containers retain their project, service, working-directory,
   and configuration-file labels in the report. `swarm-info -v` uses this
   evidence to show copy-ready `docker compose pull` and one-service recreate
@@ -274,6 +281,8 @@ Set `SWARM_INFO_SECURITY_REPORT_FILE` to use another full-report path. If an
 exact local image disappeared before Scout could inspect it, the page identifies
 the affected containers and Compose owner and tells the operator to pull and
 recreate that service before rescanning. It is never reported as clean.
+Older reports without Compose label fields use explicit placeholders rather
+than guessing a directory or rendering `None` as a command argument.
 
 This first compatibility mode is deliberately read-only. It scans images used
 by defined containers; it does not patch QTS, change containers, inspect unused

@@ -23,18 +23,18 @@ FAKE_DOCKER = REPOSITORY_ROOT / "tests" / "fixtures" / "fake_docker.py"
 FAKE_GIT = REPOSITORY_ROOT / "tests" / "fixtures" / "fake_git.py"
 
 
-def native_bash_is_available() -> bool:
-    """Return whether Bash can execute directly in the current environment.
+def native_bash_major_version() -> int | None:
+    """Return the native Bash major version when it can execute.
 
     Returns:
-        ``True`` when ``bash --version`` starts and succeeds; otherwise
-        ``False``. Windows installations that expose only an inaccessible WSL
-        launcher therefore skip native shell checks.
+        Parsed major version, or ``None`` when Bash is unavailable. Windows
+        installations exposing only an inaccessible WSL launcher therefore
+        skip native shell checks.
     """
 
     bash_command = shutil.which("bash")
     if bash_command is None:
-        return False
+        return None
     try:
         result = subprocess.run(
             [bash_command, "--version"],
@@ -43,11 +43,20 @@ def native_bash_is_available() -> bool:
             timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
-        return False
-    return result.returncode == 0
+        return None
+    if result.returncode != 0:
+        return None
+    output = result.stdout.decode("utf-8", errors="replace")
+    marker = "version "
+    if marker not in output:
+        return None
+    version = output.split(marker, 1)[1].split(".", 1)[0]
+    return int(version) if version.isdigit() else None
 
 
-BASH_AVAILABLE = native_bash_is_available()
+BASH_MAJOR_VERSION = native_bash_major_version()
+BASH_AVAILABLE = BASH_MAJOR_VERSION is not None
+BASH4_AVAILABLE = BASH_MAJOR_VERSION is not None and BASH_MAJOR_VERSION >= 4
 
 
 class DependencyCheckTests(unittest.TestCase):
@@ -69,7 +78,11 @@ class DependencyCheckTests(unittest.TestCase):
         """
 
         with tempfile.TemporaryDirectory() as temporary_directory:
-            fake_bin = Path(temporary_directory)
+            temporary_path = Path(temporary_directory)
+            fake_bin = temporary_path / "bin"
+            fake_home = temporary_path / "home"
+            fake_bin.mkdir()
+            fake_home.mkdir()
             fake_docker = fake_bin / "docker"
             shutil.copy2(FAKE_DOCKER, fake_docker)
             fake_docker.chmod(0o755)
@@ -99,6 +112,7 @@ class DependencyCheckTests(unittest.TestCase):
                 fake_scout.chmod(0o755)
 
             environment = os.environ.copy()
+            environment["HOME"] = str(fake_home)
             environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
             environment["FAKE_DOCKER_SCENARIO"] = scenario
             return subprocess.run(
@@ -110,7 +124,7 @@ class DependencyCheckTests(unittest.TestCase):
                 timeout=15,
             )
 
-    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for shell execution.")
+    @unittest.skipUnless(BASH4_AVAILABLE, "Bash 4+ is required for Swarm execution.")
     def test_all_dependencies_ready(self) -> None:
         """Return success when manager, Python, and Scout checks pass.
 
@@ -123,7 +137,7 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("All selected swarm-info dependencies are ready", result.stdout)
 
-    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for shell execution.")
+    @unittest.skipUnless(BASH4_AVAILABLE, "Bash 4+ is required for Swarm execution.")
     def test_missing_scout_has_distinct_status_and_install_help(self) -> None:
         """Keep optional scanner absence distinct from a core setup failure.
 
@@ -152,7 +166,7 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn("docker-scout", result.stdout)
 
     @unittest.skipUnless(
-        BASH_AVAILABLE, "Native Bash is required for shell execution."
+        BASH4_AVAILABLE, "Bash 4+ is required for Swarm execution."
     )
     def test_missing_compose_explains_declarative_remediation_dependency(
         self,
@@ -168,7 +182,7 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn("declarative remediation", output)
 
     @unittest.skipUnless(
-        BASH_AVAILABLE, "Native Bash is required for shell execution."
+        BASH4_AVAILABLE, "Bash 4+ is required for Swarm execution."
     )
     def test_missing_compose_does_not_block_scan_only_mode(self) -> None:
         """Keep Docker Compose independent from the all-image Scout scan."""

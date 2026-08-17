@@ -19,7 +19,7 @@ from scripts.security_check import (
     run_security_check,
 )
 from scripts.vulnerability_scan import DockerClient, InventoryError
-from tests.fixtures.fake_docker import DIGEST_A
+from tests.fixtures.fake_docker import DIGEST_A, DIGEST_B
 from tests.test_vulnerability_scan import FakeDockerHarness
 
 
@@ -281,11 +281,117 @@ class ContainerSecurityCheckTests(unittest.TestCase):
             report["scope"]["selector"],
             {"type": "container", "value": "qnap_gateway"},
         )
-        self.assertEqual(report["scope"]["inventory_resource_count"], 3)
+        self.assertEqual(report["scope"]["inventory_resource_count"], 1)
         self.assertEqual(report["scope"]["resource_count"], 1)
         self.assertEqual(report["affected_resources"], ["qnap_gateway"])
         scans = [command for command in commands if command[:2] == ["scout", "cves"]]
         self.assertEqual(len(scans), 1)
+
+    def test_unrelated_broken_stopped_container_does_not_block_container_focus(
+        self,
+    ) -> None:
+        """Inspect only the requested container during exact verification."""
+
+        harness = FakeDockerHarness("local-containers-unreadable-stopped")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="container",
+                focus_selector="qnap_gateway",
+            )
+            commands = harness.commands()
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(report["scope"]["resource_count"], 1)
+        inspected = [
+            command[2]
+            for command in commands
+            if command[:2] == ["container", "inspect"]
+        ]
+        self.assertEqual(inspected, ["qnap_gateway"])
+
+    def test_unrelated_broken_container_does_not_block_exact_image_focus(
+        self,
+    ) -> None:
+        """Use Docker-side ancestor filtering and verify the exact image ID."""
+
+        harness = FakeDockerHarness("local-containers-unreadable-stopped")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="image-id",
+                focus_selector=DIGEST_B,
+            )
+            commands = harness.commands()
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(report["scope"]["resource_count"], 1)
+        list_command = next(
+            command for command in commands if command[:2] == ["container", "ls"]
+        )
+        self.assertIn(f"ancestor={DIGEST_B}", list_command)
+        self.assertFalse(
+            any(
+                command[:3] == ["container", "inspect", "container-beta"]
+                for command in commands
+            )
+        )
+
+    def test_selected_broken_container_is_incomplete_not_misreported_missing(
+        self,
+    ) -> None:
+        """Preserve a corrupt layer diagnostic containing 'no such file'."""
+
+        harness = FakeDockerHarness("local-containers-unreadable-stopped")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="container",
+                focus_selector="qnap_worker",
+            )
+            commands = harness.commands()
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 3)
+        self.assertEqual(report["summary"]["status"], "incomplete")
+        self.assertNotIn("focus_error", report)
+        self.assertIn("BROKEN-LAYER", " ".join(report["errors"]))
+        self.assertFalse(any(command[:1] == ["scout"] for command in commands))
+
+    def test_full_scan_keeps_readable_results_when_one_container_is_broken(
+        self,
+    ) -> None:
+        """Publish partial findings but force incomplete status and exit code 3."""
+
+        harness = FakeDockerHarness("local-containers-unreadable-stopped")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(), host_os_mode="qnap"
+            )
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 3)
+        self.assertEqual(report["summary"]["status"], "incomplete")
+        self.assertFalse(report["summary"]["complete"])
+        self.assertEqual(report["summary"]["scanned_images"], 2)
+        self.assertEqual(report["summary"]["vulnerable_images"], 1)
+        self.assertEqual(report["scope"]["resource_count"], 2)
+        self.assertEqual(report["scope"]["inventory_failure_count"], 1)
+        self.assertEqual(report["scope"]["inventory_resource_count"], 3)
+        self.assertEqual(len(report["inventory_errors"]), 1)
+        self.assertEqual(
+            report["inventory_errors"][0]["container_id"], "container-beta"
+        )
+        self.assertIn("BROKEN-LAYER", report["inventory_errors"][0]["error"])
 
     def test_image_id_focus_scans_shared_exact_artifact_once(self) -> None:
         """Select all containers sharing one full ID while deduplicating Scout."""

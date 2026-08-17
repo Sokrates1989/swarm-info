@@ -7,6 +7,7 @@ deployment files; callers decide which selected records enter Docker Scout.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 from typing import Sequence
@@ -32,6 +33,27 @@ class ContainerFocusError(ValueError):
         self.code = code
         self.selector = selector
         self.matches = tuple(matches[:10])
+
+
+@dataclasses.dataclass(frozen=True)
+class ContainerInventoryFailure:
+    """One local container Docker could list but not inspect safely."""
+
+    container_id: str
+    error: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Serialize bounded failure evidence for the security report."""
+
+        return {"container_id": self.container_id, "error": self.error}
+
+
+@dataclasses.dataclass(frozen=True)
+class ContainerInventory:
+    """Readable local containers plus isolated per-container failures."""
+
+    containers: tuple[ServiceRecord, ...]
+    failures: tuple[ContainerInventoryFailure, ...]
 
 
 def _optional_label(labels: object, key: str) -> str | None:
@@ -69,24 +91,26 @@ def parse_container_inspect(container_id: str, raw_json: str) -> ServiceRecord:
     try:
         payload = json.loads(raw_json)[0]
         name = payload["Name"]
+        actual_container_id = payload.get("Id") or container_id
         image_id = payload["Image"]
         configuration = payload["Config"]
         image_reference = configuration["Image"]
         labels = configuration.get("Labels") or {}
+        state = payload.get("State") or {}
     except (IndexError, KeyError, TypeError, ValueError) as error:
         raise InventoryError(
             f"Container {container_id} returned invalid inspect JSON."
         ) from error
     if not all(
         isinstance(value, str) and value.strip()
-        for value in (name, image_id, image_reference)
+        for value in (actual_container_id, name, image_id, image_reference)
     ):
         raise InventoryError(
             f"Container {container_id} has no valid name, image, or local image ID."
         )
     project = _optional_label(labels, "com.docker.compose.project")
     return ServiceRecord(
-        service_id=container_id,
+        service_id=actual_container_id,
         name=name.lstrip("/"),
         image=image_reference,
         stack=project,
@@ -96,43 +120,110 @@ def parse_container_inspect(container_id: str, raw_json: str) -> ServiceRecord:
             labels, "com.docker.compose.project.working_dir"
         ),
         compose_config_files=_compose_config_files(labels),
+        running=(
+            state.get("Running")
+            if isinstance(state.get("Running"), bool)
+            else None
+        ),
     )
 
 
-def collect_containers(
-    client: DockerClient, scope: str = "all"
-) -> list[ServiceRecord]:
-    """Collect exact images behind local Docker containers.
+def validate_container_focus(kind: str, selector: str) -> str:
+    """Validate one container focus selector before any broad inventory call."""
+
+    selected = selector.strip()
+    if (
+        not selected
+        or len(selected) > 512
+        or any(character.isspace() or ord(character) < 32 for character in selected)
+    ):
+        raise ContainerFocusError("invalid-selector", selector)
+    if kind not in SUPPORTED_CONTAINER_FOCUS_KINDS:
+        raise ContainerFocusError("unsupported-kind", selected)
+    if kind == "image-id" and FULL_IMAGE_ID_PATTERN.fullmatch(selected) is None:
+        raise ContainerFocusError("invalid-image-id", selected)
+    return selected
+
+
+def inspect_container(client: DockerClient, selector: str) -> ServiceRecord:
+    """Inspect one exact container name or ID without enumerating its peers."""
+
+    inspected = client.run(["container", "inspect", selector])
+    if inspected.return_code != 0:
+        detail = sanitize_command_error(inspected.stderr or inspected.stdout)
+        lowered = detail.lower()
+        not_found_markers = (
+            "container not found",
+            "no such container",
+            "no such object",
+        )
+        if any(marker in lowered for marker in not_found_markers):
+            raise ContainerFocusError("container-not-found", selector)
+        raise InventoryError(f"Could not inspect container {selector}: {detail}")
+    return parse_container_inspect(selector, inspected.stdout)
+
+
+def collect_container_inventory(
+    client: DockerClient,
+    scope: str = "all",
+    ancestor_image_id: str | None = None,
+) -> ContainerInventory:
+    """Collect readable local containers while isolating inspect failures.
 
     Args:
         client: Docker command client.
         scope: ``all`` includes stopped containers; ``running`` does not.
+        ancestor_image_id: Optional exact image ID used for Docker-side
+            candidate filtering. Exact identity is verified after inspection.
 
     Returns:
-        Container records sorted by name.
+        Readable container records and sanitized failures.
 
     Raises:
-        InventoryError: If listing or inspecting any selected container fails.
+        InventoryError: If the container list itself cannot be trusted.
     """
 
     arguments = ["container", "ls"]
     if scope == "all":
         arguments.append("--all")
+    if ancestor_image_id:
+        arguments.extend(("--filter", f"ancestor={ancestor_image_id}"))
     arguments.extend(("--quiet", "--no-trunc"))
     listed = client.run(arguments)
     if listed.return_code != 0:
         detail = sanitize_command_error(listed.stderr or listed.stdout)
         raise InventoryError(f"Docker container inventory failed: {detail}")
-    containers = []
+    containers: list[ServiceRecord] = []
+    failures: list[ContainerInventoryFailure] = []
     for container_id in (line.strip() for line in listed.stdout.splitlines()):
         if not container_id:
             continue
         inspected = client.run(["container", "inspect", container_id])
         if inspected.return_code != 0:
             detail = sanitize_command_error(inspected.stderr or inspected.stdout)
-            raise InventoryError(f"Could not inspect container {container_id}: {detail}")
+            failures.append(
+                ContainerInventoryFailure(
+                    container_id=container_id,
+                    error=f"Could not inspect container {container_id}: {detail}",
+                )
+            )
+            continue
         containers.append(parse_container_inspect(container_id, inspected.stdout))
-    return sorted(containers, key=lambda container: container.name)
+    return ContainerInventory(
+        containers=tuple(sorted(containers, key=lambda container: container.name)),
+        failures=tuple(failures),
+    )
+
+
+def collect_containers(
+    client: DockerClient, scope: str = "all"
+) -> list[ServiceRecord]:
+    """Collect containers for callers that require complete inventory evidence."""
+
+    inventory = collect_container_inventory(client, scope)
+    if inventory.failures:
+        raise InventoryError(inventory.failures[0].error)
+    return list(inventory.containers)
 
 
 def _selector_examples(
@@ -170,17 +261,7 @@ def select_containers(
         ContainerFocusError: If validation or exact resolution fails.
     """
 
-    selected = selector.strip()
-    if (
-        not selected
-        or len(selected) > 512
-        or any(character.isspace() or ord(character) < 32 for character in selected)
-    ):
-        raise ContainerFocusError("invalid-selector", selector)
-    if kind not in SUPPORTED_CONTAINER_FOCUS_KINDS:
-        raise ContainerFocusError("unsupported-kind", selected)
-    if kind == "image-id" and FULL_IMAGE_ID_PATTERN.fullmatch(selected) is None:
-        raise ContainerFocusError("invalid-image-id", selected)
+    selected = validate_container_focus(kind, selector)
     matches = [
         container
         for container in containers

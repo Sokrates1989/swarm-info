@@ -10,32 +10,13 @@ import subprocess
 import tempfile
 import unittest
 
+from tests.test_dependency_check import BASH_AVAILABLE, BASH4_AVAILABLE
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 INSTALLER = REPOSITORY_ROOT / "setup" / "linux-cli.sh"
 FAKE_DOCKER = REPOSITORY_ROOT / "tests" / "fixtures" / "fake_docker.py"
 CURRENT_VERSION = (REPOSITORY_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-
-
-def native_bash_is_available() -> bool:
-    """Return whether a native Bash executable can run tests."""
-
-    bash_command = shutil.which("bash")
-    if bash_command is None:
-        return False
-    try:
-        result = subprocess.run(
-            [bash_command, "--version"],
-            capture_output=True,
-            check=False,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return result.returncode == 0
-
-
-BASH_AVAILABLE = native_bash_is_available()
 
 
 class LinuxInstallerTests(unittest.TestCase):
@@ -84,7 +65,7 @@ class LinuxInstallerTests(unittest.TestCase):
             self.assertFalse((fake_home / "tools").exists())
             return result
 
-    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for execution.")
+    @unittest.skipUnless(BASH4_AVAILABLE, "Bash 4+ is required for Swarm execution.")
     def test_disposable_full_install_verifies_command_and_profiles(self) -> None:
         """Install into a disposable HOME without package or network access."""
 
@@ -170,7 +151,7 @@ class LinuxInstallerTests(unittest.TestCase):
             )
             self.assertIn("Existing checkout found; preserving it", repeated.stdout)
 
-    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for execution.")
+    @unittest.skipUnless(BASH4_AVAILABLE, "Bash 4+ is required for Swarm execution.")
     def test_ready_preflight_is_read_only(self) -> None:
         """Report readiness without creating checkout or profile state."""
 
@@ -180,7 +161,7 @@ class LinuxInstallerTests(unittest.TestCase):
         self.assertIn("This host is ready", result.stdout)
         self.assertIn("Docker Scout is available", result.stdout)
 
-    @unittest.skipUnless(BASH_AVAILABLE, "Native Bash is required for execution.")
+    @unittest.skipUnless(BASH4_AVAILABLE, "Bash 4+ is required for Swarm execution.")
     def test_optional_scan_dependency_uses_distinct_status(self) -> None:
         """Keep missing Scout distinct from a required installer failure."""
 

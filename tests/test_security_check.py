@@ -19,6 +19,7 @@ from scripts.security_check import (
     run_security_check,
 )
 from scripts.vulnerability_scan import DockerClient, InventoryError
+from tests.fixtures.fake_docker import DIGEST_A
 from tests.test_vulnerability_scan import FakeDockerHarness
 
 
@@ -182,6 +183,17 @@ class ContainerSecurityCheckTests(unittest.TestCase):
         )
         self.assertIn("local_image_id", shared)
         self.assertTrue(shared["immutable"])
+        compose_web = next(
+            item for item in shared["services"] if item["name"] == "qnap_web"
+        )
+        self.assertEqual(compose_web["compose_service"], "web")
+        self.assertEqual(
+            compose_web["compose_working_dir"], "/share/Container/qnap-app"
+        )
+        self.assertEqual(
+            compose_web["compose_config_files"],
+            ["/share/Container/qnap-app/docker-compose.yml"],
+        )
 
     def test_running_scope_excludes_stopped_containers(self) -> None:
         """Honor an explicit narrower local inventory scope."""
@@ -219,6 +231,8 @@ class ContainerSecurityCheckTests(unittest.TestCase):
         self.assertEqual(exit_code, 3)
         self.assertEqual(report["summary"]["failed_images"], 1)
         self.assertIn("Local image scan failed", " ".join(report["errors"]))
+        failed = next(image for image in report["images"] if image["status"] == "error")
+        self.assertEqual(failed["error_code"], "local-image-unavailable")
         self.assertFalse(
             any(
                 command[-1].startswith("registry://")
@@ -245,6 +259,94 @@ class ContainerSecurityCheckTests(unittest.TestCase):
         self.assertEqual(report["policy"]["source"], "local-first-registry-fallback")
         self.assertTrue(any(command[:2] == ["service", "ls"] for command in commands))
         self.assertFalse(any(command[:2] == ["container", "ls"] for command in commands))
+
+    def test_container_focus_scans_only_the_exact_selected_container(self) -> None:
+        """Keep one-container verification local, exact, and separately marked."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="container",
+                focus_selector="qnap_gateway",
+            )
+            commands = harness.commands()
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(report["scope"]["coverage"], "focused")
+        self.assertEqual(
+            report["scope"]["selector"],
+            {"type": "container", "value": "qnap_gateway"},
+        )
+        self.assertEqual(report["scope"]["inventory_resource_count"], 3)
+        self.assertEqual(report["scope"]["resource_count"], 1)
+        self.assertEqual(report["affected_resources"], ["qnap_gateway"])
+        scans = [command for command in commands if command[:2] == ["scout", "cves"]]
+        self.assertEqual(len(scans), 1)
+
+    def test_image_id_focus_scans_shared_exact_artifact_once(self) -> None:
+        """Select all containers sharing one full ID while deduplicating Scout."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="image-id",
+                focus_selector=DIGEST_A,
+            )
+            commands = harness.commands()
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(report["scope"]["resource_count"], 2)
+        self.assertEqual(report["scope"]["unique_image_count"], 1)
+        scans = [command for command in commands if command[:2] == ["scout", "cves"]]
+        self.assertEqual(len(scans), 1)
+        self.assertEqual(scans[0][-1], f"local://{DIGEST_A}")
+
+    def test_unknown_container_focus_is_incomplete_without_scout(self) -> None:
+        """Never turn a stale container name into clean focused evidence."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="container",
+                focus_selector="missing_container",
+            )
+            commands = harness.commands()
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 3)
+        self.assertEqual(report["summary"]["status"], "incomplete")
+        self.assertEqual(report["focus_error"]["code"], "container-not-found")
+        self.assertFalse(any(command[:1] == ["scout"] for command in commands))
+
+    def test_abbreviated_image_id_focus_is_rejected_without_scout(self) -> None:
+        """Require the full artifact identity before calling Docker Scout."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="image-id",
+                focus_selector="sha256:abc123",
+            )
+            commands = harness.commands()
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 3)
+        self.assertEqual(report["focus_error"]["code"], "invalid-image-id")
+        self.assertFalse(any(command[:1] == ["scout"] for command in commands))
 
     def test_forced_swarm_mode_fails_closed_without_manager(self) -> None:
         """Never mislabel local-node coverage as Swarm-wide coverage."""
@@ -305,6 +407,50 @@ class ContainerSecurityCheckTests(unittest.TestCase):
         self.assertIn("[INFO] [1/2] Scanning", output_text)
         self.assertIn("[OK] [1/2] Completed clean", output_text)
 
+    def test_focused_cli_uses_a_separate_default_report(self) -> None:
+        """Do not overwrite full-host evidence during one-container verification."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                full_output = Path(temporary_directory) / "security_scan.json"
+                focused_output = (
+                    Path(temporary_directory) / "security_scan_focused.json"
+                )
+                full_output.write_text('{"preserved": true}\n', encoding="utf-8")
+                with patch(
+                    "scripts.security_check.DockerClient",
+                    return_value=harness.client(),
+                ), patch(
+                    "scripts.security_check.DEFAULT_FOCUSED_OUTPUT_FILE",
+                    focused_output,
+                ), patch.dict(
+                    os.environ,
+                    {
+                        "HOME": temporary_directory,
+                        "TMPDIR": "",
+                        "DOCKER_SCOUT_CACHE_DIR": "",
+                    },
+                ):
+                    with redirect_stdout(io.StringIO()), redirect_stderr(
+                        io.StringIO()
+                    ):
+                        exit_code = main(
+                            ["--container", "qnap_gateway", "--os=qnap"]
+                        )
+                focused_report = json.loads(
+                    focused_output.read_text(encoding="utf-8")
+                )
+                preserved_report = json.loads(
+                    full_output.read_text(encoding="utf-8")
+                )
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(focused_report["scope"]["coverage"], "focused")
+        self.assertEqual(preserved_report, {"preserved": True})
+
     def test_public_shell_command_is_wired_to_portable_preflight(self) -> None:
         """Lock the documented compatibility action into the Bash dispatcher."""
 
@@ -322,6 +468,8 @@ class ContainerSecurityCheckTests(unittest.TestCase):
         self.assertIn('ORIGINAL_ARGUMENT_COUNT="$#"', entrypoint)
         self.assertIn('SECURITY_RUNTIME_MODE="containers"', entrypoint)
         self.assertIn("--container-mode", entrypoint)
+        self.assertIn("--container)", entrypoint)
+        self.assertIn("--image-id)", entrypoint)
         self.assertIn("--os=*", entrypoint)
         self.assertIn("-m scripts.security_check", bridge)
         self.assertIn("check_swarm_info_dependencies security", bridge)

@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.11.1" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.12.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -275,6 +275,21 @@ defined local containers or only
 .BR running .
 Default: all.
 .TP
+.BI \-\-container " name"
+With
+.BR \-\-security-check ,
+scan the exact local image used by one exact container name or full container
+ID. This selects local-container mode automatically. Without an explicit output
+path, focused evidence is written separately and does not replace the full-host
+report.
+.TP
+.BI \-\-image-id " sha256:id"
+With
+.BR \-\-security-check ,
+scan one full content-addressed local image ID and report every selected
+container using that exact artifact. Abbreviated IDs and tags are rejected.
+This selects local-container mode automatically.
+.TP
 .BI \-\-os " host"
 Use host hint
 .BR auto ,
@@ -384,6 +399,10 @@ deployment authorization or candidate vulnerability verdict.
 Default standalone/QNAP compatibility security report. It is separate from
 watchdog evidence.
 .TP
+.I swarm_info/security_scan_focused.json
+Default focused container or exact-local-image verification report. It does
+not replace the full standalone/QNAP report.
+.TP
 .I /info_json/service_deployment_map.json
 Suggested path for an explicitly generated deployment-map acceptance report.
 .TP
@@ -436,6 +455,12 @@ instead of the capacity-limited system temporary directory.
 Existing values are preserved. On QNAP, security checks otherwise use
 .I ~/.cache/swarm-info/docker-scout/cache
 for Docker Scout cache data.
+.TP
+.B SWARM_INFO_SECURITY_REPORT_FILE
+Explicit full standalone/QNAP report used by
+.BR "swarm-info \-v" .
+Without it, standard QNAP public paths and then the checkout-local security
+report are discovered automatically.
 .SH EXAMPLES
 Verify service-to-stack mappings without changing the Swarm:
 .PP
@@ -497,6 +522,20 @@ Scan exact images used by local QNAP containers:
 .nf
 swarm-info --security-check --container-mode --os=qnap \
   --output-file /share/Public/swarm-info/security_scan.json
+.fi
+.PP
+Recheck one recreated QNAP container without replacing the full report:
+.PP
+.nf
+swarm-info --security-check \
+  --container docker-wordpress-nginx-telegram_homepage-1 --os=qnap
+.fi
+.PP
+Recheck one exact local image artifact and all containers using it:
+.PP
+.nf
+swarm-info --security-check \
+  --image-id sha256:<64-hex-digits> --os=qnap
 .fi
 .PP
 Review unused images on the current Docker node without deleting:

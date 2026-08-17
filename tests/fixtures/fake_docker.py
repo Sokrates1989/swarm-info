@@ -144,6 +144,9 @@ def scenario_containers(scenario: str) -> dict[str, dict[str, Any]]:
             "image": "acme/shared:1",
             "image_id": DIGEST_A,
             "project": "qnap-app",
+            "compose_service": "web",
+            "working_dir": "/share/Container/qnap-app",
+            "config_files": "/share/Container/qnap-app/docker-compose.yml",
             "running": True,
         },
         "container-beta": {
@@ -151,6 +154,9 @@ def scenario_containers(scenario: str) -> dict[str, dict[str, Any]]:
             "image": "docker.io/acme/shared-alias:1",
             "image_id": DIGEST_A,
             "project": "qnap-app",
+            "compose_service": "worker",
+            "working_dir": "/share/Container/qnap-app",
+            "config_files": "/share/Container/qnap-app/docker-compose.yml",
             "running": False,
         },
         "container-gamma": {
@@ -158,6 +164,12 @@ def scenario_containers(scenario: str) -> dict[str, dict[str, Any]]:
             "image": "private.example/gateway:2",
             "image_id": DIGEST_B,
             "project": "gateway",
+            "compose_service": "gateway",
+            "working_dir": "/share/Container/gateway",
+            "config_files": (
+                "/share/Container/gateway/compose.yml,"
+                "/share/Container/gateway/compose.qnap.yml"
+            ),
             "running": True,
         },
     }
@@ -211,7 +223,12 @@ def container_inspect_payload(container: dict[str, Any]) -> list[dict[str, Any]]
             "Image": container["image_id"],
             "Config": {
                 "Image": container["image"],
-                "Labels": {"com.docker.compose.project": container["project"]},
+                "Labels": {
+                    "com.docker.compose.project": container["project"],
+                    "com.docker.compose.service": container["compose_service"],
+                    "com.docker.compose.project.working_dir": container["working_dir"],
+                    "com.docker.compose.project.config_files": container["config_files"],
+                },
             },
         }
     ]

@@ -70,9 +70,31 @@ resolve_health_report_for_operator() {
 # -----------------------------------------------------------------------------
 resolve_vulnerability_report_for_operator() {
     local selected=""
+    local swarm_capability=""
 
     if [ "${CUSTOM_OUTPUT_FILE:-NONE}" != "NONE" ]; then
         printf '%s' "$CUSTOM_OUTPUT_FILE"
+        return
+    fi
+    if [ -n "${SWARM_INFO_SECURITY_REPORT_FILE:-}" ]; then
+        printf '%s' "$SWARM_INFO_SECURITY_REPORT_FILE"
+        return
+    fi
+    if command -v docker >/dev/null 2>&1; then
+        swarm_capability="$(docker info --format '{{.Swarm.ControlAvailable}}' 2>/dev/null || true)"
+    fi
+    if [ "$swarm_capability" = "false" ]; then
+        selected="$(newest_operator_report \
+            "/share/Public/swarm-info/security_scan-running.json" \
+            "/share/Public/swarm-info/security_scan.json" \
+            "$MAIN_DIR/swarm_info/security_scan.json")"
+        if [ -n "$selected" ]; then
+            printf '%s' "$selected"
+        elif [ -d "/share/Public/swarm-info" ] && [ -w "/share/Public/swarm-info" ]; then
+            printf '%s' "/share/Public/swarm-info/security_scan-running.json"
+        else
+            printf '%s' "$MAIN_DIR/swarm_info/security_scan.json"
+        fi
         return
     fi
     selected="$(newest_operator_report \
@@ -85,6 +107,32 @@ resolve_vulnerability_report_for_operator() {
     else
         printf '%s' "$MAIN_DIR/swarm_info/vulnerability_scan.json"
     fi
+}
+
+# -----------------------------------------------------------------------------
+# Return the report workload type and local-container scope for page routing.
+#
+# Output:
+#     A tab-separated ``service|container`` and ``all|running`` pair.
+# -----------------------------------------------------------------------------
+resolve_vulnerability_report_context() {
+    local python_command=""
+    local report_file=""
+
+    python_command="$(resolve_vulnerability_python)" || return 3
+    report_file="$(resolve_vulnerability_report_for_operator)"
+    if [ ! -r "$report_file" ]; then
+        case "$(basename "$report_file")" in
+            security_scan*.json) printf 'container\trunning\n' ;;
+            *) printf 'service\trunning\n' ;;
+        esac
+        return 0
+    fi
+    (
+        cd "$MAIN_DIR" || exit 3
+        "$python_command" -m scripts.operator_report \
+            report-context --report-file "$report_file"
+    )
 }
 
 # -----------------------------------------------------------------------------

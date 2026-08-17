@@ -196,6 +196,16 @@ swarm-info --security-check \
   --container-scope running \
   --os qnap \
   --output-file /share/Public/swarm-info/security_scan.json
+
+# Recheck one exact container after updating and recreating it
+swarm-info --security-check \
+  --container docker-wordpress-nginx-telegram_homepage-1 \
+  --os qnap
+
+# Recheck every container using one exact local image artifact
+image_id=$(docker inspect \
+  --format '{{.Image}}' docker-wordpress-nginx-telegram_homepage-1)
+swarm-info --security-check --image-id "$image_id" --os qnap
 ```
 
 Auto mode reads Docker capability rather than guessing from a distribution:
@@ -210,6 +220,15 @@ Auto mode reads Docker capability rather than guessing from a distribution:
   use `--container-scope running` for a narrower check.
 - Local-container mode uses Docker Scout `local://` only. It never substitutes
   a registry tag, so the report cannot silently describe a different image.
+- `--container` accepts one exact container name or full container ID.
+  `--image-id` accepts one full `sha256:<64-hex-digits>` local image ID and
+  scans that artifact once even when several containers use it. Focused checks
+  write `swarm_info/security_scan_focused.json` by default so they cannot
+  replace the last full-host report accidentally.
+- Compose-created containers retain their project, service, working-directory,
+  and configuration-file labels in the report. `swarm-info -v` uses this
+  evidence to show copy-ready `docker compose pull` and one-service recreate
+  commands; it does not infer ownership when Docker did not provide the labels.
 - Interactive scans print inventory totals, a current/total image counter,
   per-image results and elapsed time. While one Docker Scout process remains
   active, a heartbeat is printed every 30 seconds so a slow scan is visible.
@@ -246,6 +265,15 @@ Without `--output-file`, compatibility evidence is atomically written to
 `swarm_info/security_scan.json`, separate from the Swarm watchdog's
 `vulnerability_scan.json`. Exit code `0` means clean, `2` means fixable HIGH or
 CRITICAL findings, and `3` means incomplete evidence.
+
+On standalone/QNAP hosts, `swarm-info -v` automatically discovers the newest
+readable full report from the standard QNAP paths
+`/share/Public/swarm-info/security_scan-running.json` and
+`/share/Public/swarm-info/security_scan.json`, then the checkout-local report.
+Set `SWARM_INFO_SECURITY_REPORT_FILE` to use another full-report path. If an
+exact local image disappeared before Scout could inspect it, the page identifies
+the affected containers and Compose owner and tells the operator to pull and
+recreate that service before rescanning. It is never reported as clean.
 
 This first compatibility mode is deliberately read-only. It scans images used
 by defined containers; it does not patch QTS, change containers, inspect unused

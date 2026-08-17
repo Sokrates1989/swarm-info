@@ -17,16 +17,19 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
-import json
 import os
 from pathlib import Path
 import platform as host_platform
 import sys
 from typing import Any, Mapping, Sequence
 
-from scripts.operator_report import load_messages, message, selected_locale
+from scripts.container_inventory import (
+    ContainerFocusError,
+    collect_containers,
+    select_containers,
+)
+from scripts.operator_report import load_messages, message, safe_text, selected_locale
 from scripts.vulnerability_models import (
-    ServiceRecord,
     build_report,
     utc_timestamp,
     write_json_atomic,
@@ -46,6 +49,11 @@ from scripts.vulnerability_scout import sanitize_command_error
 
 DEFAULT_OUTPUT_FILE = (
     Path(__file__).resolve().parent.parent / "swarm_info" / "security_scan.json"
+)
+DEFAULT_FOCUSED_OUTPUT_FILE = (
+    Path(__file__).resolve().parent.parent
+    / "swarm_info"
+    / "security_scan_focused.json"
 )
 QNAP_RELEASE_PATHS = (
     Path("/etc/config/uLinux.conf"),
@@ -355,89 +363,6 @@ def resolve_platform(client: DockerClient, requested: str) -> str:
         raise InventoryError(f"Docker reported an unsupported platform: {candidate}") from error
 
 
-def parse_container_inspect(container_id: str, raw_json: str) -> ServiceRecord:
-    """Parse one local ``docker container inspect`` response.
-
-    Args:
-        container_id: Requested container identifier.
-        raw_json: Docker JSON response.
-
-    Returns:
-        Container name, configured image reference, Compose project, and exact
-        local image ID.
-
-    Raises:
-        InventoryError: If required container fields are absent.
-    """
-
-    try:
-        payload = json.loads(raw_json)[0]
-        name = payload["Name"]
-        image_id = payload["Image"]
-        configuration = payload["Config"]
-        image_reference = configuration["Image"]
-        labels = configuration.get("Labels") or {}
-    except (IndexError, KeyError, TypeError, ValueError) as error:
-        raise InventoryError(
-            f"Container {container_id} returned invalid inspect JSON."
-        ) from error
-    if not all(
-        isinstance(value, str) and value.strip()
-        for value in (name, image_id, image_reference)
-    ):
-        raise InventoryError(
-            f"Container {container_id} has no valid name, image, or local image ID."
-        )
-    project = (
-        labels.get("com.docker.compose.project")
-        if isinstance(labels, dict)
-        else None
-    )
-    return ServiceRecord(
-        service_id=container_id,
-        name=name.lstrip("/"),
-        image=image_reference,
-        stack=project if isinstance(project, str) and project else None,
-        local_image_id=image_id,
-    )
-
-
-def collect_containers(
-    client: DockerClient, scope: str = "all"
-) -> list[ServiceRecord]:
-    """Collect exact images behind local Docker containers.
-
-    Args:
-        client: Docker command client.
-        scope: ``all`` includes stopped containers; ``running`` does not.
-
-    Returns:
-        Container records sorted by name.
-
-    Raises:
-        InventoryError: If listing or inspecting any selected container fails.
-    """
-
-    arguments = ["container", "ls"]
-    if scope == "all":
-        arguments.append("--all")
-    arguments.extend(("--quiet", "--no-trunc"))
-    listed = client.run(arguments)
-    if listed.return_code != 0:
-        detail = sanitize_command_error(listed.stderr or listed.stdout)
-        raise InventoryError(f"Docker container inventory failed: {detail}")
-    containers = []
-    for container_id in (line.strip() for line in listed.stdout.splitlines()):
-        if not container_id:
-            continue
-        inspected = client.run(["container", "inspect", container_id])
-        if inspected.return_code != 0:
-            detail = sanitize_command_error(inspected.stderr or inspected.stdout)
-            raise InventoryError(f"Could not inspect container {container_id}: {detail}")
-        containers.append(parse_container_inspect(container_id, inspected.stdout))
-    return sorted(containers, key=lambda container: container.name)
-
-
 def decorate_report(
     report: dict[str, Any],
     host_os: HostOsProfile,
@@ -468,6 +393,23 @@ def decorate_report(
     return report
 
 
+def annotate_container_focus(
+    report: dict[str, Any],
+    kind: str,
+    selector: str,
+    inventory_resource_count: int,
+) -> None:
+    """Mark container-focused evidence as separate from a full security report."""
+
+    report["scope"].update(
+        {
+            "coverage": "focused",
+            "selector": {"type": kind, "value": selector},
+            "inventory_resource_count": inventory_resource_count,
+        }
+    )
+
+
 def run_security_check(
     client: DockerClient,
     runtime_mode: str = "auto",
@@ -479,6 +421,8 @@ def run_security_check(
     progress: ProgressCallback | None = None,
     heartbeat_interval_seconds: float = DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
     process_environment: Mapping[str, str] | None = None,
+    focus_kind: str | None = None,
+    focus_selector: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Detect capabilities, inventory applicable workloads, and scan images.
 
@@ -495,6 +439,8 @@ def run_security_check(
         process_environment: Optional environment enabling QNAP Scout storage
             preparation. The CLI passes its process environment; embedded tests
             and callers can omit it to avoid filesystem side effects.
+        focus_kind: Optional exact local selector type: container or image-id.
+        focus_selector: Selector value paired with ``focus_kind``.
 
     Returns:
         Versioned report and exit code: 0 clean, 2 findings, or 3 incomplete.
@@ -505,6 +451,7 @@ def run_security_check(
     runtime: DockerRuntimeProfile | None = None
     scout_work: dict[str, str] | None = None
     warnings: list[str] = []
+    inventory_resource_count = 0
     resolved_platform = requested_platform if requested_platform != "auto" else "unknown"
     try:
         if process_environment is not None:
@@ -513,9 +460,16 @@ def run_security_check(
             )
         if progress:
             progress("[INFO] Detecting Docker runtime and image platform...")
-        runtime = detect_docker_runtime(client, runtime_mode)
+        effective_runtime_mode = (
+            "containers" if focus_kind and runtime_mode == "auto" else runtime_mode
+        )
+        runtime = detect_docker_runtime(client, effective_runtime_mode)
         resolved_platform = resolve_platform(client, requested_platform)
         if runtime.inventory_mode == "swarm":
+            if focus_kind:
+                raise InventoryError(
+                    "Container-focused checks require local-container inventory mode."
+                )
             if progress:
                 progress("[INFO] Collecting Swarm service image inventory...")
             resources = run_with_progress_heartbeat(
@@ -543,15 +497,48 @@ def run_security_check(
                 "[INFO] Local-container inventory is still running",
                 heartbeat_interval_seconds,
             )
-            report, exit_code = scan_collected_services(
-                client,
-                resources,
-                resolved_platform,
-                started_at,
-                local_only=True,
-                progress=progress,
-                heartbeat_interval_seconds=heartbeat_interval_seconds,
-            )
+            inventory_resource_count = len(resources)
+            if focus_kind and focus_selector is not None:
+                try:
+                    resources = select_containers(
+                        resources, focus_kind, focus_selector
+                    )
+                except ContainerFocusError as error:
+                    report = build_report(
+                        started_at,
+                        resolved_platform,
+                        [],
+                        [],
+                        [],
+                        None,
+                        f"container-focus-{error.code}",
+                    )
+                    report["focus_error"] = {
+                        "code": error.code,
+                        "selector": error.selector,
+                        "matches": list(error.matches),
+                    }
+                    exit_code = 3
+                else:
+                    report, exit_code = scan_collected_services(
+                        client,
+                        resources,
+                        resolved_platform,
+                        started_at,
+                        local_only=True,
+                        progress=progress,
+                        heartbeat_interval_seconds=heartbeat_interval_seconds,
+                    )
+            else:
+                report, exit_code = scan_collected_services(
+                    client,
+                    resources,
+                    resolved_platform,
+                    started_at,
+                    local_only=True,
+                    progress=progress,
+                    heartbeat_interval_seconds=heartbeat_interval_seconds,
+                )
             if runtime_mode == "auto":
                 warnings.append(
                     "Swarm-wide inventory is unavailable; evidence covers only "
@@ -562,17 +549,19 @@ def run_security_check(
             started_at, resolved_platform, [], [], [], None, str(error)
         )
         exit_code = 3
-    return (
-        decorate_report(
-            report,
-            host_os,
-            runtime,
-            container_scope,
-            warnings,
-            scout_work,
-        ),
-        exit_code,
+    decorated = decorate_report(
+        report,
+        host_os,
+        runtime,
+        container_scope,
+        warnings,
+        scout_work,
     )
+    if focus_kind and focus_selector is not None:
+        annotate_container_focus(
+            decorated, focus_kind, focus_selector, inventory_resource_count
+        )
+    return decorated, exit_code
 
 
 def security_platform_argument(value: str) -> str:
@@ -581,7 +570,10 @@ def security_platform_argument(value: str) -> str:
     return value if value == "auto" else platform_argument(value)
 
 
-def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
+def parse_arguments(
+    arguments: Sequence[str] | None,
+    catalog: Mapping[str, str],
+) -> argparse.Namespace:
     """Parse the compatibility security-check command line."""
 
     parser = argparse.ArgumentParser(
@@ -617,6 +609,15 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
         default="all",
         help="Local containers to inspect (default: all).",
     )
+    focus = parser.add_mutually_exclusive_group()
+    focus.add_argument(
+        "--container",
+        help=message(catalog, "security.containerOption"),
+    )
+    focus.add_argument(
+        "--image-id",
+        help=message(catalog, "security.imageIdOption"),
+    )
     parser.add_argument(
         "--platform",
         type=security_platform_argument,
@@ -626,8 +627,7 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
     parser.add_argument(
         "--output-file",
         type=Path,
-        default=DEFAULT_OUTPUT_FILE,
-        help=f"Atomic JSON report path (default: {DEFAULT_OUTPUT_FILE}).",
+        help=message(catalog, "security.outputOption"),
     )
     return parser.parse_args(arguments)
 
@@ -635,7 +635,26 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
 def main(arguments: Sequence[str] | None = None) -> int:
     """Run the capability-aware check and always attempt report publication."""
 
-    options = parse_arguments(arguments)
+    catalog = load_messages(selected_locale())
+    options = parse_arguments(arguments, catalog)
+    focus_kind = "container" if options.container is not None else None
+    focus_selector = options.container
+    if options.image_id is not None:
+        focus_kind = "image-id"
+        focus_selector = options.image_id
+    output_file = options.output_file or (
+        DEFAULT_FOCUSED_OUTPUT_FILE if focus_kind else DEFAULT_OUTPUT_FILE
+    )
+    if focus_kind and focus_selector is not None:
+        print(
+            message(
+                catalog,
+                "security.focusStarting",
+                kind=message(catalog, f"security.focusKind.{focus_kind}"),
+                selector=safe_text(focus_selector),
+            ),
+            flush=True,
+        )
     report, exit_code = run_security_check(
         DockerClient(),
         runtime_mode=options.runtime_mode,
@@ -644,9 +663,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
         container_scope=options.container_scope,
         progress=lambda message: print(message, flush=True),
         process_environment=os.environ,
+        focus_kind=focus_kind,
+        focus_selector=focus_selector,
     )
     try:
-        write_json_atomic(options.output_file, report)
+        write_json_atomic(output_file, report)
     except (OSError, TypeError) as error:
         print(f"[ERROR] Could not write security report: {error}", file=sys.stderr)
         return 3
@@ -671,11 +692,34 @@ def main(arguments: Sequence[str] | None = None) -> int:
         f"{summary['vulnerable_images']} vulnerable images, "
         f"{summary['clean_images']} clean, {summary['failed_images']} failed."
     )
-    print(f"Report written to {options.output_file}")
+    print(f"Report written to {output_file}")
+    focus_error = report.get("focus_error")
+    if isinstance(focus_error, Mapping):
+        code = safe_text(focus_error.get("code"))
+        matches = focus_error.get("matches")
+        match_values = (
+            matches
+            if isinstance(matches, Sequence) and not isinstance(matches, (str, bytes))
+            else []
+        )
+        examples = ", ".join(safe_text(item) for item in match_values)
+        key = f"security.focusError.{code}"
+        if key not in catalog:
+            key = "security.focusError.unknown"
+        print(
+            message(
+                catalog,
+                key,
+                selector=safe_text(focus_error.get("selector")),
+                examples=examples or message(catalog, "common.none"),
+            ),
+            file=sys.stderr,
+        )
     for warning in report["warnings"]:
         print(f"[WARN] {warning}", file=sys.stderr)
     for error in report["errors"]:
-        print(f"[WARN] {error}", file=sys.stderr)
+        if not str(error).startswith("container-focus-"):
+            print(f"[WARN] {error}", file=sys.stderr)
     return exit_code
 
 

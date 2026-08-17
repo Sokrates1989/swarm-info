@@ -469,6 +469,8 @@ display_help() {
     echo -e "  --runtime-mode    Security inventory: auto, swarm, or containers (default: auto)"
     echo -e "  --container-mode  Alias for --runtime-mode containers"
     echo -e "  --container-scope Local containers: all or running (default: all)"
+    echo -e "  --container NAME  $OP_HELP_FOCUSED_CONTAINER"
+    echo -e "  --image-id ID     $OP_HELP_FOCUSED_IMAGE_ID"
     echo -e "  --os              Host hint: auto, qnap, or linux (default: auto)"
     echo -e "  --scheduled-vulnerability-scan"
     echo -e "                    Run a locked scan unless matching evidence is fresh"
@@ -502,6 +504,8 @@ display_help() {
     echo "$OP_HELP_EXAMPLES"
     echo "  swarm-info --security-check"
     echo "  swarm-info --security-check --container-mode --os=qnap"
+    echo "  swarm-info --security-check --container qnap_web --os=qnap"
+    echo "  swarm-info --security-check --image-id sha256:<64-HEX-DIGITS> --os=qnap"
     echo "  swarm-info -i"
     echo "  swarm-info -i --apply"
     echo "  swarm-info --map-service-deployments --deploy-root /swarm"
@@ -542,6 +546,8 @@ SECURITY_PLATFORM="auto"
 SECURITY_RUNTIME_MODE="auto"
 SECURITY_HOST_OS="auto"
 SECURITY_CONTAINER_SCOPE="all"
+SECURITY_FOCUS_KIND="all"
+SECURITY_FOCUS_VALUE=""
 VULNERABILITY_CACHE_AGE_HOURS="20"
 VULNERABILITY_MAX_AGE_HOURS="30"
 VULNERABILITY_HISTORY_DAYS="14"
@@ -574,6 +580,19 @@ set_vulnerability_scope() {
     fi
     VULNERABILITY_SCOPE_KIND="$kind"
     VULNERABILITY_SCOPE_VALUE="$value"
+}
+
+# Select exactly one local-container scope for a focused security check.
+set_security_focus() {
+    local kind="$1"
+    local value="$2"
+
+    if [ "$SECURITY_FOCUS_KIND" != "all" ]; then
+        echo "$OP_SECURITY_FOCUS_CONFLICT" >&2
+        return 64
+    fi
+    SECURITY_FOCUS_KIND="$kind"
+    SECURITY_FOCUS_VALUE="$value"
 }
 
 # Check for command-line options.
@@ -773,6 +792,15 @@ while [ $# -gt 0 ]; do
             SECURITY_RUNTIME_MODE="containers"
             shift
             ;;
+        --container)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            set_security_focus "container" "$1" || exit 64
+            shift
+            ;;
         --container-scope)
             if [ "$#" -lt 2 ]; then
                 echo -e "Missing value for $1" >&2
@@ -872,6 +900,15 @@ while [ $# -gt 0 ]; do
             fi
             shift
             set_vulnerability_scope "image" "$1" || exit 64
+            shift
+            ;;
+        --image-id)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            set_security_focus "image-id" "$1" || exit 64
             shift
             ;;
         --stack)
@@ -1000,6 +1037,17 @@ elif [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
     && [ "$selected_action" != "scan-vulnerabilities" ]; then
     echo "$OP_FOCUS_REQUIRES_SCAN" >&2
     exit 64
+fi
+if [ "$SECURITY_FOCUS_KIND" != "all" ]; then
+    if [ "$selected_action" != "security-check" ]; then
+        echo "$OP_SECURITY_FOCUS_REQUIRES_CHECK" >&2
+        exit 64
+    fi
+    if [ "$SECURITY_RUNTIME_MODE" = "swarm" ]; then
+        echo "$OP_SECURITY_FOCUS_REQUIRES_CONTAINER_MODE" >&2
+        exit 64
+    fi
+    SECURITY_RUNTIME_MODE="containers"
 fi
 
 # Preserve the chosen freshness policy through the script-based tour chain.

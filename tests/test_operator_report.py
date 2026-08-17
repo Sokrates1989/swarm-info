@@ -91,6 +91,103 @@ class OperatorReportTests(unittest.TestCase):
         self.assertIn("swarm-info --scan-vulnerabilities", output)
         self.assertNotIn("Fixable findings:", output)
 
+    def test_container_report_uses_compose_and_local_security_guidance(self) -> None:
+        """Render QNAP evidence without leaking Swarm-only commands or wording."""
+
+        image_id = "sha256:" + ("a" * 64)
+        report = {
+            "completed_at": "2026-08-17T10:00:00Z",
+            "environment": {"container_scope": "running"},
+            "scope": {"resource_type": "container", "resource_count": 1},
+            "policy": {"platform": "linux/amd64"},
+            "summary": {
+                "complete": True,
+                "status": "vulnerable",
+                "critical": 1,
+                "high": 3,
+                "affected_resource_count": 1,
+                "vulnerable_images": 1,
+            },
+            "images": [
+                {
+                    "reference": "wordpress:latest",
+                    "local_image_id": image_id,
+                    "status": "vulnerable",
+                    "counts": {"critical": 1, "high": 3},
+                    "services": [
+                        {
+                            "name": "telegram_homepage",
+                            "stack": "docker-wordpress-nginx",
+                            "compose_service": "telegram_homepage",
+                            "compose_working_dir": "/share/tools/wordpress",
+                            "compose_config_files": [
+                                "/share/tools/wordpress/docker-compose.yml"
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        output, exit_code = render_vulnerabilities(
+            report,
+            Path("/share/Public/swarm-info/security_scan-running.json"),
+            load_messages("en"),
+            dt.datetime(2026, 8, 17, 11, tzinfo=dt.timezone.utc),
+            30,
+        )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("affected containers", output)
+        self.assertIn("Containers: telegram_homepage", output)
+        self.assertIn("/share/tools/wordpress/docker-compose.yml", output)
+        self.assertIn(f"local://{image_id}", output)
+        self.assertIn("swarm-info --security-check --container-mode", output)
+        self.assertNotIn("docker stack deploy", output)
+        self.assertNotIn("affected services", output)
+
+    def test_incomplete_container_report_explains_missing_image_recovery(self) -> None:
+        """Turn an unavailable exact local image into guarded Compose recovery."""
+
+        image_id = "sha256:" + ("b" * 64)
+        report = {
+            "completed_at": "2026-08-17T10:00:00Z",
+            "environment": {"container_scope": "running"},
+            "scope": {"resource_type": "container", "resource_count": 1},
+            "summary": {"complete": False, "status": "incomplete"},
+            "images": [
+                {
+                    "reference": "wordpress:latest",
+                    "local_image_id": image_id,
+                    "status": "error",
+                    "error_code": "local-image-unavailable",
+                    "services": [
+                        {
+                            "name": "telegram_homepage",
+                            "stack": "wordpress",
+                            "compose_service": "web",
+                            "compose_working_dir": "/share/wordpress",
+                            "compose_config_files": ["/share/wordpress/compose.yml"],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        output, exit_code = render_vulnerabilities(
+            report,
+            Path("/share/Public/swarm-info/security_scan-running.json"),
+            load_messages("en"),
+            dt.datetime(2026, 8, 17, 11, tzinfo=dt.timezone.utc),
+            30,
+        )
+
+        self.assertEqual(exit_code, 3)
+        self.assertIn("Exact local-image recovery required", output)
+        self.assertIn("verify", output.lower())
+        self.assertIn("docker compose -f /share/wordpress/compose.yml pull web", output)
+        self.assertIn("Registry fallback is intentionally disabled", output)
+
 
 class CliOperatorContractTests(unittest.TestCase):
     """Lock public navigation, version, manual, and short options together."""
@@ -103,7 +200,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.11.1")
+        self.assertEqual(version, "1.12.0")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:
@@ -207,11 +304,30 @@ class CliOperatorContractTests(unittest.TestCase):
             "--runtime-mode",
             "--container-mode",
             "--container-scope",
+            "--container",
+            "--image-id",
             "--os",
             "--version",
         ):
             self.assertIn(command, entrypoint)
             self.assertIn(command.replace("--", r"\-\-"), manual)
+
+    def test_qnap_report_discovery_and_page_routing_are_mode_aware(self) -> None:
+        """Prefer QNAP evidence and never open Swarm remediation for containers."""
+
+        bridge = (REPOSITORY_ROOT / "res" / "operator_cli.sh").read_text(
+            encoding="utf-8"
+        )
+        page = (REPOSITORY_ROOT / "res" / "vulnerability_info.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("security_scan-running.json", bridge)
+        self.assertIn("SWARM_INFO_SECURITY_REPORT_FILE", bridge)
+        self.assertIn("report-context", bridge)
+        self.assertIn('[ "$report_resource_type" = "container" ]', page)
+        self.assertIn('[ "$report_resource_type" = "service" ]', page)
+        self.assertIn("--security-check", page)
 
 
 if __name__ == "__main__":

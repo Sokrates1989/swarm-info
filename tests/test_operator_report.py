@@ -103,7 +103,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.10.0")
+        self.assertEqual(version, "1.11.0")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:
@@ -158,6 +158,22 @@ class CliOperatorContractTests(unittest.TestCase):
             bridge,
         )
 
+    def test_candidate_discovery_reuses_invoking_repository_policy(self) -> None:
+        """Find reviewed successor evidence before the bridge changes directory."""
+
+        bridge = (REPOSITORY_ROOT / "res" / "vulnerability_cli.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("run_image_update_discovery()", bridge)
+        self.assertIn("-m scripts.image_update_cli", bridge)
+        self.assertIn('local invocation_directory="$PWD"', bridge)
+        self.assertIn(
+            '[ -r "$invocation_directory/configs/remediation-policy.json" ]',
+            bridge,
+        )
+        self.assertIn("--allow-registry-host", bridge)
+
     def test_help_and_manual_cover_new_public_commands(self) -> None:
         """Prevent drift between help routing and the installed manual."""
 
@@ -181,6 +197,10 @@ class CliOperatorContractTests(unittest.TestCase):
             "--image",
             "--stack",
             "--compare-image-update",
+            "--discover-image-updates",
+            "--allow-registry-host",
+            "--vulnerability-report-file",
+            "--max-registry-tags",
             "--current-image",
             "--candidate-image",
             "--security-check",

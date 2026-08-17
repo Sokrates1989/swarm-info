@@ -200,6 +200,26 @@ class RemediationAdviceTests(unittest.TestCase):
             "org.opencontainers.image.version",
         )
 
+    def test_registry_metadata_retains_normalized_creation_timestamp(self) -> None:
+        """Expose OCI lifecycle evidence without interpreting it as release age."""
+
+        metadata = _parse_imagetools(
+            json.dumps(
+                {
+                    "manifest": {"digest": NEW_DIGEST},
+                    "image": {
+                        "created": "2026-08-01T12:30:00+02:00",
+                        "config": {},
+                    },
+                }
+            ),
+            "1.0.0",
+            "linux/amd64",
+        )
+
+        self.assertEqual(metadata.created_at, "2026-08-01T10:30:00Z")
+        self.assertEqual(metadata.created_at_source, "oci-config-created")
+
     def test_manifest_fallback_selects_requested_platform_digest(self) -> None:
         """Keep latest resolution available when Docker Buildx is absent."""
 

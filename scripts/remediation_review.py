@@ -147,7 +147,7 @@ def policy_output_path(
 
 
 def ensure_policy(path: Path) -> bool:
-    """Create an empty schema-v2 policy atomically, or validate an existing one."""
+    """Create an empty current-schema policy atomically, or validate one."""
 
     if path.exists():
         load_policy(path)

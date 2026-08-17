@@ -401,6 +401,62 @@ resolution enabled; a source that pins the old digest must be updated.
 The targeted and guided modes never change Docker or files. ANSI emphasis is
 used only on an interactive terminal; set `NO_COLOR=1` to disable it.
 
+### Discover concrete image update candidates
+
+Candidate discovery is a separate read-only step between a vulnerability scan
+and the security comparison of a chosen replacement. Start with a network-silent
+review of the registry hosts implied by the existing report:
+
+```bash
+swarm-info --discover-image-updates \
+  --vulnerability-report-file /info_json/vulnerability_scan.json \
+  --output-file /info_json/image_update_candidates.json
+```
+
+That first command performs no registry request and normally exits `3`. Its
+JSON and terminal output list `required_registry_hosts`. Review them, then
+repeat the command with only the public registry hosts you approve:
+
+```bash
+swarm-info --discover-image-updates \
+  --allow-registry-host docker.io \
+  --allow-registry-host ghcr.io \
+  --output-file /info_json/image_update_candidates.json
+```
+
+Repository names can disclose internal system structure, so approval is exact,
+repeatable, and per invocation. Discovery uses bounded anonymous public
+metadata requests, never reads Docker credentials, and never runs `docker
+login`. Private registries that require credentials remain explicitly
+incomplete in Slice 1.
+
+For a recognizable stable `X.Y.Z` tag, the atomic report selects and resolves:
+
+- the newest patch on the same `X.Y` track;
+- the newest release on the same `X` major track; and
+- the newest stable release regardless of major version.
+
+Pre-release and non-SemVer tags are never ordered as releases. A deployed
+`latest` tag receives only a `latest` channel refresh candidate. Every selected
+tag is resolved to an immutable registry digest, using the requested platform
+for platform-specific metadata; aliases of the same digest are merged, and each
+candidate records an honest compatibility classification. Docker Hub tag
+timestamps are preferred for lifecycle age;
+otherwise the OCI image creation timestamp is retained with its evidence
+source. Unknown version or timestamp evidence stays unknown rather than being
+guessed.
+
+Abandoned images whose maintained replacement uses another repository cannot
+be inferred safely. Schema 3 of the installation-owned remediation policy can
+record a reviewed `image_update_discovery.successors` mapping with an HTTPS
+evidence URL. Such a mapping affects discovery only. It cannot authorize a
+source edit, backup exemption, deployment, or automatic remediation.
+
+Slice 1 deliberately labels every candidate `security_comparison: not-scanned`
+and `deployment_authorized: false`. Use `--compare-image-update` for one chosen
+candidate today; batch candidate scanning and deployable-fix deltas belong to
+the next slice.
+
 ### Prove what a proposed image update fixes
 
 `fixable` by itself does **not** mean that a newer application image already

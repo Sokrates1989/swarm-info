@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.10.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.11.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -176,6 +176,35 @@ findings. Each side is bound to an exact local image ID when installed, or an
 immutable registry digest otherwise. Cross-repository candidates are accepted
 for read-only evidence but never authorize deployment or prove compatibility.
 .TP
+.B \-\-discover-image-updates
+Consume the existing schema-version-2 vulnerability report and discover
+read-only update candidates. For strict stable X.Y.Z tags it selects the newest
+same-minor, same-major, and overall stable releases; prereleases are not
+ordered. Mutable latest receives only a latest-channel refresh. Selected tags
+are resolved to immutable registry digests, using the requested platform for
+platform-specific metadata, and aliases of the same artifact are merged. No
+candidate is vulnerability-scanned or authorized for deployment by this
+command.
+.TP
+.BI \-\-allow-registry-host " host"
+With
+.BR \-\-discover-image-updates ,
+explicitly permit bounded anonymous metadata requests to one exact canonical
+registry host. Repeat for multiple hosts. Without this option discovery is
+network-silent and reports the required hosts with exit status 3. Docker
+credentials are never read or sent.
+.TP
+.BI \-\-vulnerability-report-file " path"
+Select the schema-version-2 source report consumed by
+.BR \-\-discover-image-updates .
+Default: the preferred production vulnerability report when present.
+.TP
+.BI \-\-max-registry-tags " count"
+Bound tag enumeration per repository for
+.BR \-\-discover-image-updates .
+Range: 1 to 10000. Default: 2000. Hitting the limit leaves discovery
+incomplete instead of guessing the newest tag.
+.TP
 .BI \-\-current-image " image"
 With
 .BR \-\-compare-image-update ,
@@ -327,7 +356,8 @@ unknown or ambiguous services.
 .TP
 .B 3
 Vulnerability evidence is missing, incomplete, stale, or unavailable; or image
-cleanup could not establish or complete its requested safe operation.
+cleanup or image update discovery could not establish or complete its
+requested safe operation.
 .SH FILES
 .TP
 .I /info_json/swarm_info.json
@@ -344,6 +374,11 @@ replaces the all-service watchdog report by default.
 Preferred atomic current-versus-candidate image comparison. It is independent
 from the all-service watchdog report and never authorizes deployment.
 .TP
+.I /info_json/image_update_candidates.json
+Preferred atomic read-only image candidate and lifecycle evidence report. The
+report records exact registry approvals and immutable digests but contains no
+deployment authorization or candidate vulnerability verdict.
+.TP
 .I swarm_info/security_scan.json
 Default standalone/QNAP compatibility security report. It is separate from
 watchdog evidence.
@@ -356,7 +391,8 @@ Default atomic remediation dry-run and sanitized execution record when the
 directory is writable.
 .TP
 .I config/remediation-policy.example.json
-Empty schema-2 policy template. A pre-existing file is optional because a safe
+Empty schema-3 policy template. Its optional successor mappings influence only
+read-only image discovery. A pre-existing file is optional because a safe
 run can create an installation-owned policy and generated review queue.
 .TP
 .I ~/.config/swarm-info/remediation-policy.json
@@ -410,6 +446,21 @@ Show the current vulnerability evidence:
 .PP
 .nf
 swarm-info -v
+.fi
+.PP
+Review required registry hosts without sending repository metadata:
+.PP
+.nf
+swarm-info --discover-image-updates \
+  --output-file /info_json/image_update_candidates.json
+.fi
+.PP
+Discover public Docker Hub and GHCR candidates after reviewing those hosts:
+.PP
+.nf
+swarm-info --discover-image-updates --allow-registry-host docker.io \
+  --allow-registry-host ghcr.io \
+  --output-file /info_json/image_update_candidates.json
 .fi
 .PP
 Verify one service after redeploying its remediated image:

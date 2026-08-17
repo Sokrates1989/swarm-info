@@ -10,3 +10,9 @@ copy it and refresh `started_at`, `completed_at`, and `freshness` timestamps.
 
 Neither file contains credentials, registry responses, or raw Docker Scout
 errors. Update the matching contract tests whenever the producer schema changes.
+
+`image_update_candidates.json` is produced atomically by
+`swarm-info --discover-image-updates`. Candidate reports intentionally retain
+only normalized lifecycle, version, tag, digest, and policy evidence. They do
+not contain registry tokens, credentials, raw HTTP responses, vulnerability
+verdicts for candidates, or deployment authorization.

@@ -6,7 +6,8 @@
 # Description:
 #     Main command dispatcher for Docker Swarm status, inventory, diagnostics,
 #     guarded self-updates, JSON health collection, and manual image
-#     vulnerability scanning, portable security checks, and safe image cleanup.
+#     vulnerability scanning, update-candidate discovery, portable security
+#     checks, and safe image cleanup.
 #
 # Dependencies:
 #     - Bash 4+ for Swarm operations; Bash 3+ for --security-check
@@ -443,12 +444,20 @@ display_help() {
     echo -e "  --network         Display network info"
     echo -e "  --node-services   Display service node information (What service is running on which node)"
     echo -e "  -o                Alias for --output-file"
-    echo -e "  --output-file     Health, scan, image-comparison, map, or cleanup JSON destination"
+    echo -e "  --output-file     Health, scan, image-candidate/comparison, map, or cleanup JSON destination"
     echo -e "  --platform        Swarm default: linux/amd64; security-check default: auto"
     echo -e "  --scan-vulnerabilities"
     echo -e "                    Force a locked scan of all images, or one selected live scope"
     echo -e "  --compare-image-update"
     echo -e "                    $OP_HELP_COMPARE_IMAGE"
+    echo -e "  --discover-image-updates"
+    echo -e "                    $OP_HELP_DISCOVER_IMAGE_UPDATES"
+    echo -e "  --allow-registry-host HOST"
+    echo -e "                    $OP_HELP_ALLOW_REGISTRY_HOST"
+    echo -e "  --vulnerability-report-file FILE"
+    echo -e "                    $OP_HELP_VULNERABILITY_REPORT_FILE"
+    echo -e "  --max-registry-tags COUNT"
+    echo -e "                    $OP_HELP_MAX_REGISTRY_TAGS"
     echo -e "  --current-image IMAGE"
     echo -e "                    $OP_HELP_CURRENT_IMAGE"
     echo -e "  --candidate-image IMAGE"
@@ -501,6 +510,7 @@ display_help() {
     echo "  swarm-info --scan-vulnerabilities --stack my-stack"
     echo "  swarm-info --compare-image-update --service my-stack_api --candidate-image my/app:2.0"
     echo "  swarm-info --compare-image-update --current-image my/app:1.0 --candidate-image my/app:2.0"
+    echo "  swarm-info --discover-image-updates --allow-registry-host docker.io"
     echo "  swarm-info -v"
     echo "  swarm-info --remediate-vulnerabilities --deploy-root /swarm"
 
@@ -549,6 +559,9 @@ IMAGE_CLEANUP_APPLY="false"
 IMAGE_CLEANUP_ASSUME_YES="false"
 IMAGE_UPDATE_CURRENT_IMAGE=""
 IMAGE_UPDATE_CANDIDATE_IMAGE=""
+IMAGE_UPDATE_REPORT_FILE="NONE"
+IMAGE_UPDATE_MAX_REGISTRY_TAGS="2000"
+IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS=()
 
 # Select exactly one live Swarm scope for a focused vulnerability scan.
 set_vulnerability_scope() {
@@ -794,6 +807,37 @@ while [ $# -gt 0 ]; do
             selected_action="compare-image-update"
             shift
             ;;
+        --discover-image-updates)
+            selected_action="discover-image-updates"
+            shift
+            ;;
+        --allow-registry-host)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS+=("$1")
+            shift
+            ;;
+        --vulnerability-report-file)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            IMAGE_UPDATE_REPORT_FILE="$1"
+            shift
+            ;;
+        --max-registry-tags)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            IMAGE_UPDATE_MAX_REGISTRY_TAGS="$1"
+            shift
+            ;;
         --current-image)
             if [ "$#" -lt 2 ]; then
                 echo -e "Missing value for $1" >&2
@@ -946,6 +990,12 @@ if [ "$selected_action" = "compare-image-update" ]; then
 elif [ -n "$IMAGE_UPDATE_CURRENT_IMAGE" ] || [ -n "$IMAGE_UPDATE_CANDIDATE_IMAGE" ]; then
     echo "$OP_COMPARE_OPTION_SCOPE" >&2
     exit 64
+elif { [ "${#IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS[@]}" -gt 0 ] \
+    || [ "$IMAGE_UPDATE_REPORT_FILE" != "NONE" ] \
+    || [ "$IMAGE_UPDATE_MAX_REGISTRY_TAGS" != "2000" ]; } \
+    && [ "$selected_action" != "discover-image-updates" ]; then
+    echo "$OP_DISCOVERY_OPTION_SCOPE" >&2
+    exit 64
 elif [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
     && [ "$selected_action" != "scan-vulnerabilities" ]; then
     echo "$OP_FOCUS_REQUIRES_SCAN" >&2
@@ -1026,6 +1076,9 @@ case "$selected_action" in
         ;;
     "compare-image-update")
         run_image_update_comparison
+        ;;
+    "discover-image-updates")
+        run_image_update_discovery
         ;;
     "security-check")
         run_compatibility_security_check

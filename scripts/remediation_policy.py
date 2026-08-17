@@ -14,13 +14,14 @@ import json
 from pathlib import Path
 import re
 from typing import Any, Mapping, Sequence
+from urllib.parse import urlparse
 
 from scripts.deployment_mapping import normalized_image_reference
 from scripts.vulnerability_models import digest_from_reference, utc_timestamp
 
 
-POLICY_SCHEMA_VERSION = 2
-SUPPORTED_POLICY_SCHEMA_VERSIONS = (1, POLICY_SCHEMA_VERSION)
+POLICY_SCHEMA_VERSION = 3
+SUPPORTED_POLICY_SCHEMA_VERSIONS = (1, 2, POLICY_SCHEMA_VERSION)
 PLAN_SCHEMA_VERSION = 2
 SHA256_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 SAFE_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
@@ -77,11 +78,28 @@ class PolicyTarget:
 
 
 @dataclasses.dataclass(frozen=True)
+class SuccessorRule:
+    """One informational cross-repository image successor mapping.
+
+    Successor rules influence read-only candidate discovery only. They never
+    satisfy the explicit target, backup, source, or auto-eligibility gates
+    required for remediation execution.
+    """
+
+    identifier: str
+    repository: str
+    successor_repository: str
+    reason: str
+    evidence_url: str
+
+
+@dataclasses.dataclass(frozen=True)
 class RemediationPolicy:
     """Validated remediation policy loaded from an operator-owned file."""
 
     path: Path
     targets: tuple[PolicyTarget, ...]
+    successors: tuple[SuccessorRule, ...] = ()
 
 
 def _required_string(mapping: Mapping[str, Any], key: str, code: str) -> str:
@@ -257,6 +275,70 @@ def _parse_target(raw: object, identifiers: set[str]) -> PolicyTarget:
     )
 
 
+def _parse_successor(raw: object, identifiers: set[str]) -> SuccessorRule:
+    """Parse one non-authorizing successor mapping with review evidence."""
+
+    if not isinstance(raw, Mapping):
+        raise RemediationPolicyError("successorObject")
+    _reject_unknown(
+        raw,
+        {"id", "repository", "successor_repository", "reason", "evidence_url"},
+        "successorUnknownField",
+    )
+    identifier = _required_string(raw, "id", "successorId")
+    if not SAFE_IDENTIFIER_PATTERN.fullmatch(identifier) or identifier in identifiers:
+        raise RemediationPolicyError("successorId", identifier)
+    identifiers.add(identifier)
+    repository = image_repository(
+        _required_string(raw, "repository", "successorRepository")
+    )
+    successor_repository = image_repository(
+        _required_string(raw, "successor_repository", "successorReplacement")
+    )
+    if repository == successor_repository:
+        raise RemediationPolicyError("successorSameRepository", identifier)
+    reason = _required_string(raw, "reason", "successorReason")
+    if len(reason) > 500 or "\n" in reason or "\r" in reason:
+        raise RemediationPolicyError("successorReason", identifier)
+    evidence_url = _required_string(raw, "evidence_url", "successorEvidence")
+    parsed_url = urlparse(evidence_url)
+    if (
+        parsed_url.scheme != "https"
+        or not parsed_url.netloc
+        or parsed_url.username is not None
+        or parsed_url.password is not None
+        or len(evidence_url) > 2048
+        or any(character.isspace() for character in evidence_url)
+    ):
+        raise RemediationPolicyError("successorEvidence", identifier)
+    return SuccessorRule(
+        identifier,
+        repository,
+        successor_repository,
+        reason,
+        evidence_url,
+    )
+
+
+def _parse_successors(raw: object) -> tuple[SuccessorRule, ...]:
+    """Parse the optional read-only image update discovery policy."""
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, Mapping):
+        raise RemediationPolicyError("discoveryObject")
+    _reject_unknown(raw, {"successors"}, "discoveryUnknownField")
+    entries = raw.get("successors", [])
+    if not isinstance(entries, Sequence) or isinstance(entries, (str, bytes)):
+        raise RemediationPolicyError("successorList")
+    identifiers: set[str] = set()
+    successors = tuple(_parse_successor(item, identifiers) for item in entries)
+    repositories = [rule.repository for rule in successors]
+    if len(set(repositories)) != len(repositories):
+        raise RemediationPolicyError("successorRepositoryDuplicate")
+    return successors
+
+
 def load_policy(path: Path) -> RemediationPolicy:
     """Load and validate a JSON remediation policy without expanding values."""
 
@@ -270,8 +352,10 @@ def load_policy(path: Path) -> RemediationPolicy:
     if schema_version not in SUPPORTED_POLICY_SCHEMA_VERSIONS:
         raise RemediationPolicyError("policySchema")
     allowed_fields = {"schema_version", "targets"}
-    if schema_version == POLICY_SCHEMA_VERSION:
+    if schema_version in {2, POLICY_SCHEMA_VERSION}:
         allowed_fields.add("generated_review")
+    if schema_version == POLICY_SCHEMA_VERSION:
+        allowed_fields.add("image_update_discovery")
     _reject_unknown(payload, allowed_fields, "policyUnknownField")
     generated_review = payload.get("generated_review")
     if generated_review is not None and not isinstance(generated_review, Mapping):
@@ -284,7 +368,8 @@ def load_policy(path: Path) -> RemediationPolicy:
     services = [target.service for target in targets]
     if len(set(services)) != len(services):
         raise RemediationPolicyError("targetServiceDuplicate")
-    return RemediationPolicy(path.resolve(), targets)
+    successors = _parse_successors(payload.get("image_update_discovery"))
+    return RemediationPolicy(path.resolve(), targets, successors)
 
 
 def _finding_ids(image: Mapping[str, Any]) -> list[str]:

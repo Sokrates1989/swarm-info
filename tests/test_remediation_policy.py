@@ -156,6 +156,59 @@ class RemediationPolicyTests(unittest.TestCase):
 
         self.assertEqual(context.exception.code, "targetUnknownField")
 
+    def test_schema_three_successor_mapping_is_read_only_policy_evidence(self) -> None:
+        """Accept one reviewed repository successor without creating a target."""
+
+        payload = {
+            "schema_version": 3,
+            "image_update_discovery": {
+                "successors": [
+                    {
+                        "id": "maintained-successor",
+                        "repository": "browserless/chrome",
+                        "successor_repository": "ghcr.io/browserless/chromium",
+                        "reason": "Maintainer replacement reviewed by operator.",
+                        "evidence_url": "https://github.com/browserless/browserless",
+                    }
+                ]
+            },
+            "targets": [],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            policy = load_policy(write_policy(Path(temporary), payload))
+
+        self.assertEqual(policy.targets, ())
+        self.assertEqual(len(policy.successors), 1)
+        self.assertEqual(
+            policy.successors[0].successor_repository,
+            "ghcr.io/browserless/chromium",
+        )
+
+    def test_successor_requires_https_review_evidence(self) -> None:
+        """Reject unreviewable successor data instead of guessing replacements."""
+
+        payload = {
+            "schema_version": 3,
+            "image_update_discovery": {
+                "successors": [
+                    {
+                        "id": "unsafe-successor",
+                        "repository": "browserless/chrome",
+                        "successor_repository": "ghcr.io/browserless/chromium",
+                        "reason": "Unverified replacement.",
+                        "evidence_url": "http://example.com/migration",
+                    }
+                ]
+            },
+            "targets": [],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            path = write_policy(Path(temporary), payload)
+            with self.assertRaises(RemediationPolicyError) as context:
+                load_policy(path)
+
+        self.assertEqual(context.exception.code, "successorEvidence")
+
     def test_plan_is_priority_sorted_and_records_shared_consumers(self) -> None:
         """Expose shared-image blast radius and a stable evidence plan."""
 

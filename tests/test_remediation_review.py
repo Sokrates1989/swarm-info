@@ -169,7 +169,7 @@ class RemediationReviewTests(unittest.TestCase):
             stored = json.loads(policy_path.read_text(encoding="utf-8"))
             reloaded = load_policy(policy_path)
 
-        self.assertEqual(stored["schema_version"], 2)
+        self.assertEqual(stored["schema_version"], 3)
         self.assertEqual(stored["targets"][0]["id"], "demo-api-update")
         self.assertIn("generated_review", stored)
         self.assertEqual(reloaded.targets[0].identifier, "demo-api-update")

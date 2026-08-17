@@ -25,9 +25,39 @@ that owns the installation's Swarm stack files and pass that tracked file to
 `swarm-info --remediation-policy <PATH>`. Never add registry credentials,
 Docker secrets, passwords, or tokens to this policy.
 
+## Read-only image successor evidence
+
+Schema 3 adds an optional `image_update_discovery.successors` list for images
+whose maintained replacement lives in a different repository. This list is
+used only by `swarm-info --discover-image-updates`; it cannot authorize an
+edit, deployment, backup exemption, or automatic remediation. Each mapping
+needs an HTTPS evidence URL and an operator-written reason:
+
+```json
+{
+  "schema_version": 3,
+  "image_update_discovery": {
+    "successors": [
+      {
+        "id": "reviewed-browser-successor",
+        "repository": "docker.io/browserless/chrome",
+        "successor_repository": "ghcr.io/browserless/chromium",
+        "reason": "The vendor documents this repository as the maintained replacement.",
+        "evidence_url": "https://github.com/browserless/browserless"
+      }
+    ]
+  },
+  "targets": []
+}
+```
+
+Keep this evidence installation-owned. The discovery command remains
+network-silent for both repositories until their registry hosts are explicitly
+allowed on that invocation.
+
 ## Generated review queue
 
-Schema 2 permits a machine-owned `generated_review` section. Every safe-run
+Schemas 2 and 3 permit a machine-owned `generated_review` section. Every safe-run
 assessment replaces that section while preserving `targets`. It records:
 
 - every vulnerable service not covered by an active target;
@@ -86,7 +116,10 @@ service additionally needs a source adapter.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
+  "image_update_discovery": {
+    "successors": []
+  },
   "targets": [
     {
       "id": "example-web-0-2-2",

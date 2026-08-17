@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 import json
 import re
 from typing import Any, Mapping, Sequence
@@ -29,6 +30,10 @@ VERSION_LABELS = (
     "org.opencontainers.image.version",
     "org.label-schema.version",
 )
+CREATED_LABELS = (
+    "org.opencontainers.image.created",
+    "org.label-schema.build-date",
+)
 TAG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 BASE_IMAGE_PATTERN = re.compile(r"^Base image is\s+(.+?)\s*$", re.IGNORECASE)
 
@@ -41,6 +46,8 @@ class ImageMetadata:
     version: str | None = None
     version_source: str = "unknown"
     local_image_id: str | None = None
+    created_at: str | None = None
+    created_at_source: str = "unknown"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -104,6 +111,39 @@ def _version_from_config(config: Mapping[str, Any], tag: str) -> tuple[str | Non
     return None, "unknown"
 
 
+def _normalized_timestamp(value: object) -> str | None:
+    """Return one aware RFC-3339 timestamp in stable UTC form."""
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _created_from_config(
+    config: Mapping[str, Any], direct_value: object = None
+) -> tuple[str | None, str]:
+    """Prefer the image configuration timestamp, then standard OCI labels."""
+
+    direct = _normalized_timestamp(direct_value)
+    if direct is not None:
+        return direct, "oci-config-created"
+    labels = config.get("Labels") or config.get("labels") or {}
+    if not isinstance(labels, Mapping):
+        return None, "unknown"
+    normalized = {str(key).lower(): value for key, value in labels.items()}
+    for label in CREATED_LABELS:
+        created = _normalized_timestamp(normalized.get(label))
+        if created is not None:
+            return created, label
+    return None, "unknown"
+
+
 def _parse_image_inspect(raw: str, tag: str) -> ImageMetadata | None:
     """Parse a local ``docker image inspect`` response without trusting free text."""
 
@@ -117,6 +157,11 @@ def _parse_image_inspect(raw: str, tag: str) -> ImageMetadata | None:
     config = item.get("Config") or item.get("config") or {}
     version, source = (
         _version_from_config(config, tag)
+        if isinstance(config, Mapping)
+        else (None, "unknown")
+    )
+    created_at, created_source = (
+        _created_from_config(config, item.get("Created") or item.get("created"))
         if isinstance(config, Mapping)
         else (None, "unknown")
     )
@@ -134,7 +179,14 @@ def _parse_image_inspect(raw: str, tag: str) -> ImageMetadata | None:
         and re.fullmatch(r"sha256:[a-fA-F0-9]{64}", image_id.strip())
         else None
     )
-    return ImageMetadata(digest, version, source, local_image_id)
+    return ImageMetadata(
+        digest,
+        version,
+        source,
+        local_image_id,
+        created_at,
+        created_source,
+    )
 
 
 def _platform_descriptor(
@@ -189,15 +241,26 @@ def _parse_imagetools(raw: str, tag: str, platform: str) -> ImageMetadata | None
         if isinstance(config, Mapping)
         else (None, "unknown")
     )
+    created_at, created_source = (
+        _created_from_config(config, image.get("created") or image.get("Created"))
+        if isinstance(config, Mapping) and isinstance(image, Mapping)
+        else (None, "unknown")
+    )
     if version is None and isinstance(manifest, Mapping):
         descriptor = _platform_descriptor(manifest, platform)
         annotations = descriptor.get("annotations") if descriptor else None
         if isinstance(annotations, Mapping):
             version, source = _version_from_config({"Labels": annotations}, tag)
+            if created_at is None:
+                created_at, created_source = _created_from_config(
+                    {"Labels": annotations}
+                )
     return ImageMetadata(
         digest if isinstance(digest, str) and digest_from_reference(f"x@{digest}") else None,
         version,
         source,
+        created_at=created_at,
+        created_at_source=created_source,
     )
 
 

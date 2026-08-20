@@ -282,6 +282,7 @@ class RegistryTagClientTests(unittest.TestCase):
 
         transport = FakeTransport(
             [
+                HttpResponse(404, {}, b""),
                 HttpResponse(
                     401,
                     {
@@ -328,8 +329,57 @@ class RegistryTagClientTests(unittest.TestCase):
         )
 
         self.assertEqual(result, DigestResolution("ok", PATCH_DIGEST))
-        self.assertIn("application/vnd.oci.image.index.v1+json", transport.calls[0][1]["Accept"])
-        self.assertEqual(transport.calls[2][1]["Authorization"], "Bearer public-token")
+        self.assertIn(
+            "application/vnd.oci.image.index.v1+json",
+            transport.calls[1][1]["Accept"],
+        )
+        self.assertEqual(
+            transport.calls[3][1]["Authorization"],
+            "Bearer public-token",
+        )
+
+    def test_docker_hub_tag_detail_is_cached_by_platform(self) -> None:
+        """Resolve repeated candidates through one public provider metadata call."""
+
+        transport = FakeTransport(
+            [
+                HttpResponse(
+                    200,
+                    {},
+                    json.dumps(
+                        {
+                            "images": [
+                                {
+                                    "os": "linux",
+                                    "architecture": "amd64",
+                                    "digest": PATCH_DIGEST,
+                                }
+                            ]
+                        }
+                    ).encode(),
+                )
+            ]
+        )
+        client = RegistryTagClient({"docker.io"}, transport)
+
+        first = client.resolve_platform_digest(
+            "postgres:16.4.0",
+            "16.4.0",
+            "linux/amd64",
+        )
+        second = client.resolve_platform_digest(
+            "docker.io/library/postgres",
+            "16.4.0",
+            "linux/amd64",
+        )
+
+        self.assertEqual(first, DigestResolution("ok", PATCH_DIGEST))
+        self.assertEqual(second, first)
+        self.assertEqual(len(transport.calls), 1)
+        self.assertIn(
+            "/v2/namespaces/library/repositories/postgres/tags/16.4.0",
+            transport.calls[0][0],
+        )
 
     def test_external_auth_realm_requires_explicit_host_approval(self) -> None:
         """Keep a registry token host network-silent until separately approved."""
@@ -609,9 +659,11 @@ class ImageUpdateDiscoveryTests(unittest.TestCase):
 
         repository = "docker.io/example/app"
         tags = (
-            RegistryTag("1.2.3"),
+            RegistryTag("1.2.3", "2026-01-01T00:00:00Z", "registry"),
             RegistryTag(
                 "1.2.4",
+                "2026-02-01T00:00:00Z",
+                "registry",
                 platform_digests=(("linux/amd64", PATCH_DIGEST),),
             ),
         )
@@ -632,6 +684,51 @@ class ImageUpdateDiscoveryTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0]["digest"], PATCH_DIGEST)
         self.assertFalse(outcome.report["errors"])
+        self.assertFalse(docker.commands)
+
+    def test_repeated_rate_limit_is_resolved_and_reported_once(self) -> None:
+        """Avoid multiplying one candidate failure across current image records."""
+
+        repository = "docker.io/example/app"
+        report = source_report()
+        repeated = dict(report["images"][0])
+        repeated["digest"] = "sha256:" + "7" * 64
+        repeated["services"] = [{"name": "demo_scheduler"}]
+        report["images"].append(repeated)
+        resolver = FakeListingClient(
+            {
+                repository: listing(
+                    repository,
+                    RegistryTag("1.2.3", "2026-01-01T00:00:00Z", "registry"),
+                    RegistryTag("1.2.4", "2026-02-01T00:00:00Z", "registry"),
+                )
+            },
+            {
+                (repository, "1.2.4", "linux/amd64"): DigestResolution(
+                    "rate-limited"
+                )
+            },
+        )
+
+        outcome = discover_image_updates(
+            report,
+            Path("vulnerability_scan.json"),
+            MetadataClient({}),
+            resolver,
+            "linux/amd64",
+            10000,
+        )
+
+        self.assertEqual(outcome.exit_code, 3)
+        self.assertEqual(outcome.report["summary"]["error_count"], 1)
+        self.assertEqual(
+            outcome.report["errors"][0]["status"],
+            "digest-rate-limited",
+        )
+        self.assertEqual(
+            resolver.resolution_calls,
+            [(repository, "1.2.4", "linux/amd64")],
+        )
 
     def test_registry_manifest_fallback_avoids_docker_resolution_failure(self) -> None:
         """Use direct public manifest evidence when Docker metadata is unavailable."""

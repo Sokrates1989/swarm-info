@@ -2,8 +2,9 @@
 
 The workflow consumes an existing vulnerability report, enumerates only
 explicitly approved registry hosts, classifies strict stable SemVer tracks,
-and resolves selected tags through Docker to immutable artifact digests. It
-does not run Docker Scout, mutate deployments, or authorize remediation.
+and resolves selected tags through approved provider or OCI registry metadata
+to immutable artifact digests. It does not run Docker Scout, mutate
+deployments, or authorize remediation.
 """
 
 from __future__ import annotations
@@ -234,41 +235,94 @@ def _merge_current_metadata(
     )
 
 
+def _candidate_metadata(
+    selection: CandidateSelection,
+    digest: str | None,
+    inspected: ImageMetadata | None = None,
+) -> ImageMetadata:
+    """Combine exact candidate identity with optional non-authoritative metadata."""
+
+    inspected = inspected or ImageMetadata()
+    selected_version = (
+        selection.version.text() if selection.version is not None else None
+    )
+    return ImageMetadata(
+        digest=digest,
+        version=inspected.version or selected_version,
+        version_source=(
+            inspected.version_source
+            if inspected.version is not None
+            else ("registry-tag" if selected_version is not None else "unknown")
+        ),
+        local_image_id=inspected.local_image_id,
+        created_at=selection.tag.updated_at or inspected.created_at,
+        created_at_source=(
+            selection.tag.updated_at_source
+            if selection.tag.updated_at is not None
+            else inspected.created_at_source
+        ),
+    )
+
+
 def _selected_candidate_identity(
     client: DockerClient,
     registry_client: RegistryTagClient,
     selection: CandidateSelection,
     platform: str,
     metadata_cache: dict[str, ImageMetadata],
+    identity_cache: dict[
+        tuple[str, str, str],
+        tuple[ImageMetadata, str | None, dict[str, str] | None],
+    ],
 ) -> tuple[ImageMetadata, str | None, dict[str, str] | None]:
     """Resolve one selected tag and return sanitized failure evidence."""
 
+    cache_key = (selection.repository, selection.tag.name, platform)
+    if cache_key in identity_cache:
+        return identity_cache[cache_key]
     reference = _metadata_reference(selection.repository, selection.tag.name)
-    metadata = _cached_metadata(client, metadata_cache, reference, platform)
-    candidate_digest = _full_sha256(metadata.digest) or _full_sha256(
-        selection.tag.digest_for_platform(platform)
-    )
+    candidate_digest = _full_sha256(selection.tag.digest_for_platform(platform))
+    resolution = None
+    if candidate_digest is None:
+        resolution = registry_client.resolve_platform_digest(
+            selection.repository,
+            selection.tag.name,
+            platform,
+        )
+        candidate_digest = _full_sha256(resolution.digest)
+    inspected = None
+    if (
+        candidate_digest is not None and selection.tag.updated_at is None
+    ) or (
+        candidate_digest is None
+        and resolution is not None
+        and resolution.status == "digest-unresolved"
+    ):
+        inspected = _cached_metadata(client, metadata_cache, reference, platform)
+        candidate_digest = candidate_digest or _full_sha256(inspected.digest)
+    metadata = _candidate_metadata(selection, candidate_digest, inspected)
     if candidate_digest is not None:
-        return metadata, candidate_digest, None
-    resolution = registry_client.resolve_platform_digest(
-        selection.repository,
-        selection.tag.name,
-        platform,
-    )
-    candidate_digest = _full_sha256(resolution.digest)
-    if candidate_digest is not None:
-        return metadata, candidate_digest, None
+        result = (metadata, candidate_digest, None)
+        identity_cache[cache_key] = result
+        return result
     status = "digest-unresolved"
-    if resolution.status == "auth-host-approval-required":
-        status = resolution.status
-    elif resolution.status != "ok":
-        status = f"digest-{resolution.status}"
-    return metadata, None, {
-        "repository": selection.repository,
-        "tag": selection.tag.name,
-        "status": status,
-        "detail": resolution.error,
-    }
+    if resolution is not None:
+        if resolution.status == "auth-host-approval-required":
+            status = resolution.status
+        elif resolution.status != "ok":
+            status = f"digest-{resolution.status}"
+    result = (
+        metadata,
+        None,
+        {
+            "repository": selection.repository,
+            "tag": selection.tag.name,
+            "status": status,
+            "detail": resolution.error if resolution is not None else "",
+        },
+    )
+    identity_cache[cache_key] = result
+    return result
 
 
 def _resolve_candidates(
@@ -280,6 +334,10 @@ def _resolve_candidates(
     platform: str,
     now: dt.datetime,
     metadata_cache: dict[str, ImageMetadata],
+    identity_cache: dict[
+        tuple[str, str, str],
+        tuple[ImageMetadata, str | None, dict[str, str] | None],
+    ],
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """Resolve candidate tags and merge track aliases by immutable digest."""
 
@@ -293,6 +351,7 @@ def _resolve_candidates(
             selection,
             platform,
             metadata_cache,
+            identity_cache,
         )
         if error is not None or candidate_digest is None:
             errors.append(error or {"status": "digest-unresolved"})
@@ -404,6 +463,26 @@ def _resolution_diagnostics(
     return required_hosts, retained
 
 
+def _deduplicate_diagnostics(
+    errors: Sequence[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Retain one diagnostic for each exact repository, tag, and failure."""
+
+    retained: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for error in errors:
+        key = (
+            error.get("repository", ""),
+            error.get("tag", ""),
+            error.get("status", ""),
+            error.get("detail", ""),
+        )
+        if key not in seen:
+            seen.add(key)
+            retained.append(error)
+    return retained
+
+
 @dataclasses.dataclass(frozen=True)
 class CurrentImageEvidence:
     """Normalized current image identity used to select update tracks."""
@@ -441,7 +520,10 @@ def _current_image_evidence(
         version=(current_tag if parse_semver(current_tag) else None),
         version_source=("configured-tag" if parse_semver(current_tag) else "unknown"),
     )
-    if listing.status == "ok":
+    needs_registry_metadata = metadata.digest is None or (
+        current_tag_record is None or current_tag_record.updated_at is None
+    )
+    if listing.status == "ok" and needs_registry_metadata:
         metadata = _merge_current_metadata(
             metadata,
             _cached_metadata(
@@ -471,6 +553,10 @@ def _discover_for_image(
     platform: str,
     evaluated_at: dt.datetime,
     metadata_cache: dict[str, ImageMetadata],
+    identity_cache: dict[
+        tuple[str, str, str],
+        tuple[ImageMetadata, str | None, dict[str, str] | None],
+    ],
 ) -> tuple[dict[str, Any], list[dict[str, str]]]:
     """Build candidate and lifecycle evidence for one current report image."""
 
@@ -505,6 +591,7 @@ def _discover_for_image(
         platform,
         evaluated_at,
         metadata_cache,
+        identity_cache,
     )
     return (
         {
@@ -631,6 +718,10 @@ def discover_image_updates(
         rule.repository: rule for rule in (policy.successors if policy else ())
     }
     metadata_cache: dict[str, ImageMetadata] = {}
+    identity_cache: dict[
+        tuple[str, str, str],
+        tuple[ImageMetadata, str | None, dict[str, str] | None],
+    ] = {}
     output_images: list[dict[str, Any]] = []
     for image in image_records:
         discovered, image_errors = _discover_for_image(
@@ -642,12 +733,14 @@ def discover_image_updates(
             platform,
             evaluated_at,
             metadata_cache,
+            identity_cache,
         )
         output_images.append(discovered)
         errors.extend(image_errors)
 
     resolution_hosts, errors = _resolution_diagnostics(errors)
     required_hosts.update(resolution_hosts)
+    errors = _deduplicate_diagnostics(errors)
 
     source_summary = report.get("summary")
     source_complete = bool(

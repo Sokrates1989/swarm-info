@@ -319,6 +319,9 @@ class RegistryTagClient:
         self.allowed_registries = {value.lower() for value in allowed_registries}
         self.transport = transport or UrllibTransport()
         self._tokens: dict[str, str] = {}
+        self._digest_resolutions: dict[
+            tuple[str, str, str], DigestResolution
+        ] = {}
 
     def list_tags(self, reference: str, max_tags: int) -> TagListing:
         """Enumerate one approved repository or return a network-silent state."""
@@ -371,14 +374,45 @@ class RegistryTagClient:
         tag: str,
         platform: str,
     ) -> DigestResolution:
-        """Resolve one selected tag through Registry V2 without pulling layers."""
+        """Resolve one selected tag once without pulling image layers."""
 
         repository = parse_repository(reference)
+        cache_key = (repository.canonical, tag, platform)
+        cached = self._digest_resolutions.get(cache_key)
+        if cached is not None:
+            return cached
+        resolution = self._resolve_platform_digest_uncached(
+            repository,
+            tag,
+            platform,
+        )
+        self._digest_resolutions[cache_key] = resolution
+        return resolution
+
+    def _resolve_platform_digest_uncached(
+        self,
+        repository: RegistryRepository,
+        tag: str,
+        platform: str,
+    ) -> DigestResolution:
+        """Resolve provider metadata first, then use the OCI registry fallback."""
+
         if repository.registry not in self.allowed_registries:
             return DigestResolution(
                 "registry-approval-required",
                 error=repository.registry,
             )
+        if repository.registry == "docker.io":
+            try:
+                provider_resolution = self._resolve_docker_hub_tag_detail(
+                    repository,
+                    tag,
+                    platform,
+                )
+            except RegistryRequestError as error:
+                return DigestResolution(error.code, error=error.detail)
+            if provider_resolution is not None:
+                return provider_resolution
         api_host = (
             "registry-1.docker.io"
             if repository.registry == "docker.io"
@@ -411,6 +445,48 @@ class RegistryTagClient:
             )
         except RegistryRequestError as error:
             return DigestResolution(error.code, error=error.detail)
+
+    def _resolve_docker_hub_tag_detail(
+        self,
+        repository: RegistryRepository,
+        tag: str,
+        platform: str,
+    ) -> DigestResolution | None:
+        """Use Docker Hub tag details when they contain exact platform identity."""
+
+        namespace, separator, name = repository.name.partition("/")
+        if not separator or not namespace or not name:
+            return None
+        url = (
+            "https://hub.docker.com/v2/namespaces/"
+            f"{quote(namespace, safe='')}/repositories/"
+            f"{quote(name, safe='')}/tags/{quote(tag, safe='')}"
+        )
+        response = self.transport.get(
+            url,
+            {"Accept": "application/json", "User-Agent": "swarm-info"},
+        )
+        if response.status in {401, 403, 404}:
+            return None
+        if response.status != 200:
+            raise _response_error(response)
+        payload = _json_object(response)
+        platform_digests = _docker_hub_platform_digests(payload)
+        if not platform_digests:
+            return None
+        digest = next(
+            (
+                candidate_digest
+                for candidate_platform, candidate_digest in platform_digests
+                if candidate_platform == platform
+            ),
+            None,
+        )
+        return (
+            DigestResolution("ok", digest)
+            if digest is not None
+            else DigestResolution("platform-not-found")
+        )
 
     def _single_manifest_digest(
         self,

@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.14.2" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.14.3" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -211,7 +211,9 @@ Select the schema-version-2 source report consumed by
 .BR \-\-discover-image-updates
 or
 .BR \-\-assess-image-updates .
-Default: the preferred production vulnerability report when present.
+Assessment defaults to the exact source path recorded by its candidate report;
+an explicit path supports deliberately relocated evidence. Discovery defaults
+to the preferred production vulnerability report when present.
 .TP
 .BI \-\-candidate-report-file " path"
 Select the schema-version-1 candidate report consumed by
@@ -554,7 +556,6 @@ reductions:
 .nf
 swarm-info --assess-image-updates \
   --candidate-report-file /info_json/image_update_candidates.json \
-  --vulnerability-report-file /info_json/vulnerability_scan.json \
   --output-file /info_json/image_update_assessment.json
 .fi
 .PP

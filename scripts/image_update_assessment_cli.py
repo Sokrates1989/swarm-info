@@ -46,17 +46,6 @@ def _default_candidate_report() -> Path:
     )
 
 
-def _default_vulnerability_report() -> Path:
-    """Return the preferred source vulnerability report path."""
-
-    return _preferred_file(
-        "vulnerability_scan.json",
-        Path(__file__).resolve().parent.parent
-        / "swarm_info"
-        / "vulnerability_scan.json",
-    )
-
-
 def _default_output_file() -> Path:
     """Return the preferred batch assessment destination."""
 
@@ -66,6 +55,37 @@ def _default_output_file() -> Path:
         / "swarm_info"
         / "image_update_assessment.json",
     )
+
+
+def _source_vulnerability_report_path(
+    candidate_report: Mapping[str, Any],
+    candidate_report_path: Path,
+    explicit_path: Path | None,
+) -> Path:
+    """Select the exact source snapshot recorded by candidate discovery.
+
+    An explicit operator selection remains authoritative. Otherwise Slice 2
+    follows the source path embedded in the Slice 1 evidence instead of using
+    a mutable default report that may now describe a different Swarm state.
+    Relative recorded paths are first checked beside the candidate report,
+    which keeps copied evidence directories self-contained.
+    """
+
+    if explicit_path is not None:
+        return explicit_path
+    source = candidate_report.get("source_report")
+    recorded = source.get("path") if isinstance(source, Mapping) else None
+    if (
+        not isinstance(recorded, str)
+        or not recorded.strip()
+        or "\x00" in recorded
+    ):
+        raise ImageUpdateAssessmentError("source-path-missing")
+    recorded_path = Path(recorded).expanduser()
+    if recorded_path.is_absolute():
+        return recorded_path
+    colocated_path = candidate_report_path.parent / recorded_path
+    return colocated_path if colocated_path.is_file() else recorded_path
 
 
 def _progress_presenter(catalog: Mapping[str, str]):
@@ -240,7 +260,6 @@ def parse_arguments(
     parser.add_argument(
         "--vulnerability-report-file",
         type=Path,
-        default=_default_vulnerability_report(),
     )
     parser.add_argument("--output-file", type=Path, default=_default_output_file())
     parser.add_argument("--platform", type=platform_argument, default=DEFAULT_PLATFORM)
@@ -273,8 +292,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
             1,
             "candidate-report",
         )
-        vulnerability_report = load_json_report(
+        vulnerability_report_path = _source_vulnerability_report_path(
+            candidate_report,
+            options.candidate_report_file,
             options.vulnerability_report_file,
+        )
+        vulnerability_report = load_json_report(
+            vulnerability_report_path,
             2,
             "vulnerability-report",
         )
@@ -282,7 +306,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             candidate_report,
             options.candidate_report_file,
             vulnerability_report,
-            options.vulnerability_report_file,
+            vulnerability_report_path,
             DockerClient(),
             options.platform,
             progress=_progress_presenter(catalog),

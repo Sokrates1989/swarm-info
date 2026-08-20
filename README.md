@@ -599,9 +599,14 @@ reductions:
 ```bash
 swarm-info --assess-image-updates \
   --candidate-report-file /info_json/image_update_candidates.json \
-  --vulnerability-report-file /info_json/vulnerability_scan.json \
   --output-file /info_json/image_update_assessment.json
 ```
+
+By default, Slice 2 reads the exact vulnerability-report path recorded inside
+the selected candidate report. This avoids comparing the candidates with a
+newer mutable report after the Swarm inventory changes. Use
+`--vulnerability-report-file` only to point at the same recorded snapshot after
+deliberately relocating the evidence files.
 
 The assessment verifies that both input reports describe the same image
 inventory, deduplicates candidates by immutable reference, and scans each exact

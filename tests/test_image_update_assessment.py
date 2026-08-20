@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 
 from scripts.image_update_assessment import (
     ImageUpdateAssessmentError,
     assess_image_updates,
 )
+from scripts.image_update_assessment_cli import _source_vulnerability_report_path
 from scripts.vulnerability_models import ImageScanResult
 
 
@@ -259,6 +261,43 @@ class ImageUpdateAssessmentTests(unittest.TestCase):
             )
 
         self.assertEqual(raised.exception.code, "source-fingerprint-mismatch")
+
+    def test_recorded_source_report_is_selected_beside_candidate_evidence(self) -> None:
+        """Keep a copied Slice 1 evidence directory self-contained by default."""
+
+        with TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            candidate_path = evidence / "image_update_candidates.json"
+            source_path = evidence / "vulnerability_scan.json"
+            source_path.write_text("{}", encoding="utf-8")
+            report = {"source_report": {"path": source_path.name}}
+
+            selected = _source_vulnerability_report_path(
+                report,
+                candidate_path,
+                None,
+            )
+
+            self.assertEqual(selected, source_path)
+
+    def test_explicit_source_report_overrides_recorded_path(self) -> None:
+        """Retain an operator override for deliberately relocated evidence."""
+
+        selected = _source_vulnerability_report_path(
+            {"source_report": {"path": "recorded.json"}},
+            Path("candidates.json"),
+            Path("selected.json"),
+        )
+
+        self.assertEqual(selected, Path("selected.json"))
+
+    def test_missing_recorded_source_path_fails_closed(self) -> None:
+        """Never silently compare candidates with an unrelated mutable report."""
+
+        with self.assertRaises(ImageUpdateAssessmentError) as raised:
+            _source_vulnerability_report_path({}, Path("candidates.json"), None)
+
+        self.assertEqual(raised.exception.code, "source-path-missing")
 
 
 if __name__ == "__main__":

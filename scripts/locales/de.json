@@ -389,5 +389,6 @@
   "imageAssessment.error.source-timestamp-mismatch": "[FEHLER] Die Kandidatenermittlung verwendete eine andere Version des Schwachstellenberichts. Ermittlung erneut ausführen: {detail}",
   "imageAssessment.error.scanner-unavailable": "[FEHLER] Docker Scout ist nicht verfügbar; Sicherheitsreduktionen der Kandidaten können nicht geprüft werden: {detail}",
   "imageAssessment.error.candidate-report-platform": "[FEHLER] Die Plattform des Kandidatenberichts weicht von der angeforderten Bewertungsplattform ab: {detail}",
+  "imageAssessment.error.source-path-missing": "[FEHLER] Der Kandidatenbericht nennt seinen exakten Quell-Schwachstellenbericht nicht. Kandidatenermittlung erneut ausführen oder --vulnerability-report-file angeben.",
   "imageAssessment.error.operational-error": "[FEHLER] Die gebündelte Image-Update-Bewertung wurde sicher beendet: {detail}"
 }

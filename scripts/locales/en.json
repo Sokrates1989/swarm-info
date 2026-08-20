@@ -389,5 +389,6 @@
   "imageAssessment.error.source-timestamp-mismatch": "[ERROR] Candidate discovery used a different vulnerability report revision. Rerun discovery: {detail}",
   "imageAssessment.error.scanner-unavailable": "[ERROR] Docker Scout is unavailable, so candidate security reductions cannot be verified: {detail}",
   "imageAssessment.error.candidate-report-platform": "[ERROR] Candidate report platform differs from the requested assessment platform: {detail}",
+  "imageAssessment.error.source-path-missing": "[ERROR] The candidate report does not identify its exact source vulnerability report. Rerun candidate discovery or pass --vulnerability-report-file.",
   "imageAssessment.error.operational-error": "[ERROR] Batch image-update assessment failed safely: {detail}"
 }

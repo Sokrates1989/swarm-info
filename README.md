@@ -350,6 +350,21 @@ swarm-info --scheduled-security-check \
   --output-file /share/Public/swarm-info/security_scan-running.json
 ```
 
+For an end-to-end acceptance check, use the repository-owned workflow instead
+of pasting a large heredoc into the QNAP SSH terminal:
+
+```bash
+swarm-info -u
+/bin/bash "$HOME/tools/swarm-info/tests/qnap_security_schedule_acceptance.sh"
+```
+
+It verifies dependencies, persistent cron ownership, complete JSON evidence,
+freshness, immediate cache reuse, and non-overlap locking. Fresh matching
+evidence makes the check quick. A missing, stale, or changed running-container
+scope correctly starts the bounded scan and can therefore take several hours.
+The unit-test suite is intentionally not rerun by this live acceptance command;
+its simulated missing-Scout cases are release tests, not QNAP runtime failures.
+
 Remove only this managed block while preserving unrelated cron entries:
 
 ```bash

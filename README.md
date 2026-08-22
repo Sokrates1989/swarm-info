@@ -180,6 +180,11 @@ swarm-info --vulnerabilities
 
 ## QNAP and standalone Docker security mode
 
+The accepted QNAP compatibility implementation is the baseline for the
+[standalone container watchdog parity plan](docs/standalone_container_watchdog_parity/README.md).
+That roadmap keeps QNAP-specific integration behind platform adapters while
+adding capability-based support for standard Linux hosts such as Debian.
+
 Use the explicit compatibility command on QNAP or any Linux host with a local
 Docker daemon:
 

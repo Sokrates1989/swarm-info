@@ -19,6 +19,10 @@ REQUIRED_FAILURES=0
 SCAN_FAILURES=0
 CHECK_MODE="all"
 
+dependency_script_directory="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=res/platforms/qnap.sh
+source "$dependency_script_directory/platforms/qnap.sh"
+
 # -----------------------------------------------------------------------------
 # Print command usage for direct dependency-check execution.
 #
@@ -140,7 +144,7 @@ show_docker_scout_install_help() {
     echo "       curl -fsSL ${scout_installer_url} -o install-scout.sh"
     echo "       sed -n '1,240p' install-scout.sh"
     echo "       sh install-scout.sh"
-    if command -v getcfg >/dev/null 2>&1 &&
+    if qnap_host_detected &&
         command -v df >/dev/null 2>&1 && command -v awk >/dev/null 2>&1; then
         qnap_tmp_kb="$(df -Pk /tmp 2>/dev/null | awk 'END {print $4}')"
         case "$qnap_tmp_kb" in
@@ -318,20 +322,16 @@ check_core_dependencies() {
 # -----------------------------------------------------------------------------
 resolve_scanner_python() {
     local candidate=""
-    local qnap_python_root=""
+    local qnap_candidate=""
+    local qnap_candidates=""
     local candidates=(python3 python)
 
-    if command -v getcfg >/dev/null 2>&1; then
-        qnap_python_root="$(getcfg Python3 Install_Path -f /etc/config/qpkg.conf 2>/dev/null || true)"
-        if [ -n "$qnap_python_root" ]; then
-            candidates+=(
-                "$qnap_python_root/bin/python3"
-                "$qnap_python_root/bin/python"
-                "$qnap_python_root/opt/python3/bin/python3"
-                "$qnap_python_root/opt/python3/bin/python"
-            )
+    qnap_candidates="$(qnap_python_command_candidates)"
+    while IFS= read -r qnap_candidate; do
+        if [ -n "$qnap_candidate" ]; then
+            candidates+=("$qnap_candidate")
         fi
-    fi
+    done <<< "$qnap_candidates"
 
     for candidate in "${candidates[@]}"; do
         if { command -v "$candidate" >/dev/null 2>&1 || [ -x "$candidate" ]; } &&

@@ -265,6 +265,9 @@ class DependencyCheckTests(unittest.TestCase):
         bridge_source = (
             REPOSITORY_ROOT / "res" / "vulnerability_cli.sh"
         ).read_text(encoding="utf-8")
+        qnap_adapter_source = (
+            REPOSITORY_ROOT / "res" / "platforms" / "qnap.sh"
+        ).read_text(encoding="utf-8")
         installer_source = (
             REPOSITORY_ROOT / "setup" / "linux-cli.sh"
         ).read_text(encoding="utf-8")
@@ -272,10 +275,12 @@ class DependencyCheckTests(unittest.TestCase):
         self.assertIn("check_security_core_dependencies", dependency_source)
         self.assertIn('CHECK_MODE="security"', dependency_source)
         self.assertIn("Docker daemon access is available for local inventory", dependency_source)
-        self.assertIn("getcfg Python3 Install_Path", dependency_source)
-        self.assertIn("opt/python3/bin/python3", dependency_source)
-        self.assertIn("getcfg Python3 Install_Path", bridge_source)
-        self.assertIn("opt/python3/bin/python3", bridge_source)
+        self.assertIn("platforms/qnap.sh", dependency_source)
+        self.assertIn("qnap_python_command_candidates", dependency_source)
+        self.assertIn("platforms/qnap.sh", bridge_source)
+        self.assertIn("qnap_python_command_candidates", bridge_source)
+        self.assertIn("getcfg", qnap_adapter_source)
+        self.assertIn("opt/python3/bin/python3", qnap_adapter_source)
         self.assertIn(".tmp-scout", dependency_source)
         self.assertIn("getcfg QGit Install_Path", installer_source)
         self.assertIn('"$GIT_COMMAND" clone', installer_source)

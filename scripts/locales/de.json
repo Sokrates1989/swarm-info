@@ -390,5 +390,19 @@
   "imageAssessment.error.scanner-unavailable": "[FEHLER] Docker Scout ist nicht verfügbar; Sicherheitsreduktionen der Kandidaten können nicht geprüft werden: {detail}",
   "imageAssessment.error.candidate-report-platform": "[FEHLER] Die Plattform des Kandidatenberichts weicht von der angeforderten Bewertungsplattform ab: {detail}",
   "imageAssessment.error.source-path-missing": "[FEHLER] Der Kandidatenbericht nennt seinen exakten Quell-Schwachstellenbericht nicht. Kandidatenermittlung erneut ausführen oder --vulnerability-report-file angeben.",
-  "imageAssessment.error.operational-error": "[FEHLER] Die gebündelte Image-Update-Bewertung wurde sicher beendet: {detail}"
+  "imageAssessment.error.operational-error": "[FEHLER] Die gebündelte Image-Update-Bewertung wurde sicher beendet: {detail}",
+  "platformInfo.help.description": "Das bereinigte Hostplattform- und F\u00e4higkeitsprofil ermitteln und ver\u00f6ffentlichen.",
+  "platformInfo.help.json": "Das maschinenlesbare JSON-Profil ausgeben.",
+  "platformInfo.help.output": "Das Profil atomar in diese private JSON-Datei schreiben.",
+  "platformInfo.help.noWrite": "Das Profil ausgeben, ohne eine Nachweisdatei zu schreiben.",
+  "platformInfo.title": "Hostplattform und F\u00e4higkeiten",
+  "platformInfo.adapter": "Adapter: {adapter}",
+  "platformInfo.os": "Betriebssystem: {name} | Familie={family} | Version={version}",
+  "platformInfo.docker": "Docker-Laufzeit: {mode} | Plattform={platform}",
+  "platformInfo.compose": "Docker Compose: {status}",
+  "platformInfo.scheduler": "Zeitplanung: {scheduler}",
+  "platformInfo.available": "verf\u00fcgbar",
+  "platformInfo.unavailable": "nicht verf\u00fcgbar",
+  "platformInfo.report": "Privates Plattformprofil: {path}",
+  "platformInfo.writeError": "[FEHLER] Das Plattformprofil konnte nicht geschrieben werden: {detail}"
 }

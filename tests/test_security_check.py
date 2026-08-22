@@ -127,7 +127,7 @@ class HostCompatibilityTests(unittest.TestCase):
 
         client = DockerClient(("fake-docker",), {"FAKE_DOCKER": "1"})
         with patch(
-            "scripts.security_check.Path.mkdir",
+            "scripts.platforms.qnap.Path.mkdir",
             side_effect=OSError("permission denied"),
         ):
             with self.assertRaisesRegex(

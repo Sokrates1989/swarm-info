@@ -185,6 +185,24 @@ The accepted QNAP compatibility implementation is the baseline for the
 That roadmap keeps QNAP-specific integration behind platform adapters while
 adding capability-based support for standard Linux hosts such as Debian.
 
+Inspect the versioned, sanitized host/capability contract before setup or
+acceptance:
+
+```bash
+# Human summary; writes platform_info.json to the adapter-owned evidence path
+swarm-info --platform-info
+
+# Machine-readable contract for deployment and API consumers
+swarm-info --platform-info --json
+
+# Diagnostic-only output without publishing evidence
+swarm-info --platform-info --json --no-write
+```
+
+QNAP publishes to `/share/Public/swarm-info/platform_info.json`. Standard Linux
+uses `${XDG_STATE_HOME:-$HOME/.local/state}/swarm-info/platform_info.json`.
+Both adapters write the same schema and keep the file private.
+
 Use the explicit compatibility command on QNAP or any Linux host with a local
 Docker daemon:
 
@@ -295,13 +313,23 @@ recreate that service before rescanning. It is never reported as clean.
 Older reports without Compose label fields use explicit placeholders rather
 than guessing a directory or rendering `None` as a command argument.
 
-### Scheduled QNAP/container security checks
+### Scheduled standalone-container security checks
 
-Install the managed schedule after one successful manual check. QNAP only
-persists custom jobs across reboot through `/etc/config/crontab`, so this one
-configuration step needs `sudo`; the scheduled scan itself switches back to
-your normal account and therefore reuses its Docker access, Scout installation,
-credentials, and cache:
+Install the managed schedule after one successful manual check. On standard
+Linux, the current user owns the marked crontab block and the default report is
+`${XDG_STATE_HOME:-$HOME/.local/state}/swarm-info/security_scan-running.json`:
+
+```bash
+swarm-info --install-security-cron --os linux
+swarm-info --security-status --os linux
+swarm-info --remove-security-cron --os linux
+swarm-info --install-security-cron --os linux
+```
+
+QNAP persists custom jobs across reboot through `/etc/config/crontab`, so this
+one configuration step needs `sudo`; the scheduled scan itself switches back
+to your normal account and therefore reuses its Docker access, Scout
+installation, credentials, and cache:
 
 ```bash
 runtime_user="$(id -un)"

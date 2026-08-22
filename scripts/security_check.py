@@ -16,10 +16,8 @@ Dependencies:
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import os
 from pathlib import Path
-import platform as host_platform
 import sys
 from typing import Any, Mapping, Sequence
 
@@ -32,6 +30,17 @@ from scripts.container_inventory import (
     validate_container_focus,
 )
 from scripts.operator_report import load_messages, message, safe_text, selected_locale
+from scripts.platforms import (
+    HOST_OS_MODES,
+    OS_RELEASE_PATH,
+    QNAP_RELEASE_PATHS,
+    DockerRuntimeProfile,
+    HostOsProfile,
+    detect_docker_runtime,
+    detect_host_os,
+    platform_adapter_for,
+    resolve_platform,
+)
 from scripts.vulnerability_models import (
     ServiceRecord,
     build_report,
@@ -48,7 +57,6 @@ from scripts.vulnerability_scan import (
     run_with_progress_heartbeat,
     scan_collected_services,
 )
-from scripts.vulnerability_scout import sanitize_command_error
 
 
 DEFAULT_OUTPUT_FILE = (
@@ -59,56 +67,10 @@ DEFAULT_FOCUSED_OUTPUT_FILE = (
     / "swarm_info"
     / "security_scan_focused.json"
 )
-QNAP_RELEASE_PATHS = (
-    Path("/etc/config/uLinux.conf"),
-    Path("/etc/default_config/uLinux.conf"),
-)
-OS_RELEASE_PATH = Path("/etc/os-release")
 RUNTIME_MODES = ("auto", "swarm", "containers")
-HOST_OS_MODES = ("auto", "qnap", "linux")
 CONTAINER_SCOPES = ("all", "running")
 DEFAULT_SCOUT_TIMEOUT_MINUTES = 45.0
 DEFAULT_SCAN_BUDGET_MINUTES = 240.0
-ARCHITECTURE_ALIASES = {
-    "x86_64": "amd64",
-    "x64": "amd64",
-    "aarch64": "arm64",
-    "arm64v8": "arm64",
-    "armv7l": "arm/v7",
-    "armv7": "arm/v7",
-}
-QNAP_SCOUT_WORK_SUBDIRECTORY = Path(".cache/swarm-info/docker-scout")
-
-
-@dataclasses.dataclass(frozen=True)
-class HostOsProfile:
-    """Sanitized host operating-system identity for report metadata."""
-
-    family: str
-    name: str
-    version: str | None
-    model: str | None
-    detection: str
-
-    def to_dict(self) -> dict[str, str | None]:
-        """Serialize the profile without host configuration contents."""
-
-        return dataclasses.asdict(self)
-
-
-@dataclasses.dataclass(frozen=True)
-class DockerRuntimeProfile:
-    """Selected Docker inventory mode and observed Swarm capability."""
-
-    inventory_mode: str
-    swarm_state: str
-    manager: bool
-    detection: str
-
-    def to_dict(self) -> dict[str, str | bool]:
-        """Serialize the capability decision for auditability."""
-
-        return dataclasses.asdict(self)
 
 
 def prepare_qnap_scout_client(
@@ -116,257 +78,9 @@ def prepare_qnap_scout_client(
     host_os: HostOsProfile,
     environment: Mapping[str, str],
 ) -> tuple[DockerClient, dict[str, str] | None]:
-    """Move QNAP Scout extraction and cache storage off the small `/tmp`.
+    """Retain the public helper while delegating storage behavior to the adapter."""
 
-    Args:
-        client: Docker command client to clone when QNAP configuration applies.
-        host_os: Detected host profile.
-        environment: Process environment used to resolve existing overrides.
-
-    Returns:
-        Configured client and auditable work-directory metadata. Non-QNAP hosts
-        return the original client and no metadata.
-
-    Raises:
-        InventoryError: If the private default directories cannot be prepared.
-
-    Note:
-        Existing ``TMPDIR`` and ``DOCKER_SCOUT_CACHE_DIR`` values always win.
-        Only automatically selected directories are created by this function.
-    """
-
-    if host_os.family != "qnap":
-        return client, None
-
-    home_directory = Path(environment.get("HOME") or str(Path.home()))
-    work_root = home_directory / QNAP_SCOUT_WORK_SUBDIRECTORY
-    overrides: dict[str, str] = {}
-    automatic_directories: list[Path] = []
-
-    temporary_directory = environment.get("TMPDIR")
-    if not temporary_directory:
-        automatic_temp = work_root / "tmp"
-        temporary_directory = str(automatic_temp)
-        overrides["TMPDIR"] = temporary_directory
-        automatic_directories.append(automatic_temp)
-
-    cache_directory = environment.get("DOCKER_SCOUT_CACHE_DIR")
-    if not cache_directory:
-        automatic_cache = work_root / "cache"
-        cache_directory = str(automatic_cache)
-        overrides["DOCKER_SCOUT_CACHE_DIR"] = cache_directory
-        automatic_directories.append(automatic_cache)
-
-    try:
-        for directory in automatic_directories:
-            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-    except OSError as error:
-        catalog = load_messages(selected_locale(environment))
-        raise InventoryError(
-            message(
-                catalog,
-                "security.scoutWorkStorageError",
-                path=work_root,
-                detail=error,
-            )
-        ) from error
-
-    configured_client = client.with_environment_overrides(
-        {
-            "TMPDIR": temporary_directory,
-            "DOCKER_SCOUT_CACHE_DIR": cache_directory,
-        }
-    )
-    return configured_client, {
-        "temporary_directory": temporary_directory,
-        "cache_directory": cache_directory,
-        "selection": (
-            "operator-environment" if not overrides else "qnap-home-default"
-        ),
-    }
-
-
-def parse_release_values(raw_text: str) -> dict[str, str]:
-    """Parse simple shell/INI-style release fields into lowercase keys.
-
-    Args:
-        raw_text: Release file contents.
-
-    Returns:
-        Normalized key/value mapping. Sections and malformed lines are ignored.
-    """
-
-    values: dict[str, str] = {}
-    for raw_line in raw_text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith(("#", ";", "[")) or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        normalized_key = key.strip().lower().replace(" ", "_")
-        normalized_value = value.strip().strip('"\'')
-        if normalized_key and normalized_value:
-            values[normalized_key] = normalized_value
-    return values
-
-
-def read_release_file(path: Path) -> dict[str, str]:
-    """Read a release file defensively.
-
-    Args:
-        path: Candidate operating-system release file.
-
-    Returns:
-        Parsed values, or an empty mapping when the file is unavailable.
-    """
-
-    try:
-        return parse_release_values(path.read_text(encoding="utf-8", errors="replace"))
-    except OSError:
-        return {}
-
-
-def first_value(values: Mapping[str, str], *keys: str) -> str | None:
-    """Return the first non-empty release value for candidate keys."""
-
-    for key in keys:
-        value = values.get(key)
-        if value:
-            return value
-    return None
-
-
-def detect_host_os(
-    requested: str = "auto",
-    qnap_release_paths: Sequence[Path] = QNAP_RELEASE_PATHS,
-    os_release_path: Path = OS_RELEASE_PATH,
-) -> HostOsProfile:
-    """Detect QNAP or generic Linux without executing vendor commands.
-
-    Args:
-        requested: ``auto``, explicit ``qnap``, or generic ``linux``.
-        qnap_release_paths: Candidate QNAP release files.
-        os_release_path: Generic freedesktop release file.
-
-    Returns:
-        Sanitized host profile and whether it was detected or overridden.
-    """
-
-    if requested == "qnap":
-        return HostOsProfile("qnap", "QNAP", None, None, "operator-override")
-
-    if requested == "auto":
-        for path in qnap_release_paths:
-            values = read_release_file(path)
-            if values:
-                return HostOsProfile(
-                    family="qnap",
-                    name="QNAP QTS/QuTS hero",
-                    version=first_value(
-                        values, "version", "version_number", "firmware_version"
-                    ),
-                    model=first_value(values, "model", "internal_model", "display_model"),
-                    detection=f"release-file:{path}",
-                )
-
-    values = read_release_file(os_release_path)
-    detected_family = first_value(values, "id") or "linux"
-    detected_name = (
-        first_value(values, "pretty_name", "name")
-        or host_platform.system()
-        or "Linux"
-    )
-    family = "linux" if requested == "linux" else detected_family.lower()
-    if requested == "auto" and family in {"qts", "qnap", "quts", "qutscloud"}:
-        family = "qnap"
-    return HostOsProfile(
-        family=family,
-        name=detected_name,
-        version=first_value(values, "version_id", "version"),
-        model=None,
-        detection="operator-override" if requested == "linux" else "os-release",
-    )
-
-
-def detect_docker_runtime(
-    client: DockerClient, requested: str = "auto"
-) -> DockerRuntimeProfile:
-    """Select Swarm-wide or local-container inventory from Docker capability.
-
-    Args:
-        client: Docker command client.
-        requested: ``auto``, ``swarm``, or ``containers``.
-
-    Returns:
-        Selected runtime profile.
-
-    Raises:
-        InventoryError: If Docker is unavailable or forced Swarm mode lacks
-            manager control.
-    """
-
-    result = client.run(
-        ["info", "--format", "{{.Swarm.LocalNodeState}}\t{{.Swarm.ControlAvailable}}"]
-    )
-    if result.return_code != 0:
-        detail = sanitize_command_error(result.stderr or result.stdout)
-        raise InventoryError(f"Docker daemon preflight failed: {detail}")
-    fields = result.stdout.strip().lower().split("\t")
-    if len(fields) != 2:
-        raise InventoryError("Docker returned an invalid runtime capability response.")
-    swarm_state, manager_text = fields
-    manager = swarm_state == "active" and manager_text == "true"
-    if requested == "swarm" and not manager:
-        raise InventoryError(
-            "Swarm mode was requested, but this node does not have manager control."
-        )
-    selected = (
-        "swarm"
-        if requested == "swarm" or (requested == "auto" and manager)
-        else "containers"
-    )
-    return DockerRuntimeProfile(
-        inventory_mode=selected,
-        swarm_state=swarm_state or "unknown",
-        manager=manager,
-        detection="capability-auto" if requested == "auto" else "operator-override",
-    )
-
-
-def normalize_architecture(value: str) -> str:
-    """Normalize common Docker/QNAP architecture names for Scout."""
-
-    normalized = value.strip().lower()
-    return ARCHITECTURE_ALIASES.get(normalized, normalized)
-
-
-def resolve_platform(client: DockerClient, requested: str) -> str:
-    """Resolve ``auto`` to the Docker daemon platform.
-
-    Args:
-        client: Docker command client.
-        requested: Explicit Docker platform or ``auto``.
-
-    Returns:
-        Validated ``os/architecture[/variant]`` platform.
-
-    Raises:
-        InventoryError: If Docker cannot report a valid platform.
-    """
-
-    if requested != "auto":
-        return platform_argument(requested)
-    result = client.run(["info", "--format", "{{.OSType}}\t{{.Architecture}}"])
-    if result.return_code != 0:
-        detail = sanitize_command_error(result.stderr or result.stdout)
-        raise InventoryError(f"Docker platform detection failed: {detail}")
-    fields = result.stdout.strip().split("\t")
-    if len(fields) != 2 or not all(fields):
-        raise InventoryError("Docker returned an invalid platform response.")
-    candidate = f"{fields[0].lower()}/{normalize_architecture(fields[1])}"
-    try:
-        return platform_argument(candidate)
-    except argparse.ArgumentTypeError as error:
-        raise InventoryError(f"Docker reported an unsupported platform: {candidate}") from error
+    return platform_adapter_for(host_os).prepare_scout_client(client, environment)
 
 
 def decorate_report(

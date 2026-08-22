@@ -13,16 +13,14 @@ import dataclasses
 import os
 from pathlib import Path
 import shlex
-import stat
 import sys
-import tempfile
 from typing import Mapping, Sequence
 
 from scripts.operator_report import load_messages, message, selected_locale
+from scripts.platforms import platform_adapter_for
 from scripts.security_check import (
     CONTAINER_SCOPES,
     HOST_OS_MODES,
-    DEFAULT_OUTPUT_FILE,
     detect_host_os,
     security_platform_argument,
 )
@@ -34,7 +32,6 @@ from scripts.security_job import (
     validate_security_job_policy,
 )
 from scripts.vulnerability_cron import (
-    CommandResult as CronCommandResult,
     CrontabClient,
     bounded_integer,
     default_command_path,
@@ -51,8 +48,6 @@ from scripts.vulnerability_job import (
 
 BLOCK_BEGIN = "# BEGIN swarm-info managed container security scan"
 BLOCK_END = "# END swarm-info managed container security scan"
-QNAP_SYSTEM_CRONTAB = Path("/etc/config/crontab")
-QNAP_CROND_RESTART = Path("/etc/init.d/crond.sh")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -102,84 +97,6 @@ class QnapRuntimeIdentity:
     home: Path
     user_id: int
     group_id: int
-
-
-class QnapSystemCrontabClient(CrontabClient):
-    """Atomically maintain QNAP's reboot-persistent system crontab."""
-
-    def __init__(
-        self,
-        crontab_path: Path = QNAP_SYSTEM_CRONTAB,
-        restart_path: Path = QNAP_CROND_RESTART,
-    ) -> None:
-        """Select exact QNAP configuration and daemon-reload paths."""
-
-        self.crontab_path = crontab_path
-        self.restart_path = restart_path
-
-    def run(
-        self, arguments: Sequence[str], input_text: str | None = None
-    ) -> CronCommandResult:
-        """Read or atomically replace and activate the persistent table."""
-
-        if list(arguments) == ["-l"]:
-            try:
-                return CronCommandResult(
-                    0, self.crontab_path.read_text(encoding="utf-8"), ""
-                )
-            except OSError as error:
-                return CronCommandResult(2, "", str(error))
-        if list(arguments) != ["-"] or input_text is None:
-            return CronCommandResult(64, "", "unsupported crontab operation")
-        try:
-            self._write_atomic(input_text)
-        except OSError as error:
-            return CronCommandResult(1, "", str(error))
-        activated = super().run([self.crontab_path.as_posix()])
-        if activated.return_code != 0:
-            return activated
-        try:
-            import subprocess
-
-            completed = subprocess.run(
-                [self.restart_path.as_posix(), "restart"],
-                capture_output=True,
-                check=False,
-                text=True,
-            )
-        except OSError as error:
-            return CronCommandResult(127, "", str(error))
-        return CronCommandResult(
-            completed.returncode, completed.stdout, completed.stderr
-        )
-
-    def _write_atomic(self, content: str) -> None:
-        """Replace ``/etc/config/crontab`` without a partially written file."""
-
-        metadata = self.crontab_path.stat()
-        descriptor, temporary_name = tempfile.mkstemp(
-            prefix=".swarm-info-crontab.", dir=self.crontab_path.parent
-        )
-        temporary_path = Path(temporary_name)
-        try:
-            if hasattr(os, "fchmod"):
-                os.fchmod(descriptor, stat.S_IMODE(metadata.st_mode))
-            if hasattr(os, "fchown"):
-                os.fchown(descriptor, metadata.st_uid, metadata.st_gid)
-            with os.fdopen(
-                descriptor, "w", encoding="utf-8", newline="\n"
-            ) as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary_path, self.crontab_path)
-        except BaseException:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-            temporary_path.unlink(missing_ok=True)
-            raise
 
 
 def cron_command(settings: SecurityCronSettings) -> str:
@@ -284,7 +201,7 @@ def add_install_arguments(
     parser.add_argument(
         "--output-file",
         type=Path,
-        default=DEFAULT_OUTPUT_FILE,
+        default=None,
         help=message(catalog, "securityJob.help.output"),
     )
     parser.add_argument(
@@ -403,16 +320,6 @@ def resolve_qnap_runtime_identity(
     )
 
 
-def qnap_crontab_client(
-    catalog: Mapping[str, str],
-) -> QnapSystemCrontabClient:
-    """Require root only for QNAP's exact persistent scheduler files."""
-
-    if not hasattr(os, "geteuid") or os.geteuid() != 0:
-        raise PermissionError(message(catalog, "securityJob.qnapRootRequired"))
-    return QnapSystemCrontabClient()
-
-
 def settings_from_options(
     options: argparse.Namespace,
     catalog: Mapping[str, str],
@@ -469,13 +376,20 @@ def main(arguments: Sequence[str] | None = None) -> int:
     options = parse_arguments(arguments, catalog)
     try:
         host_os = detect_host_os(options.host_os)
-        qnap_mode = host_os.family == "qnap"
-        selected_client = qnap_crontab_client(catalog) if qnap_mode else None
+        adapter = platform_adapter_for(host_os)
+        qnap_mode = adapter.name == "qnap"
+        selected_client = adapter.crontab_client(catalog)
+
         if options.command == "remove":
             changed = remove_schedule(selected_client)
             key = "securityJob.removed" if changed else "securityJob.notInstalled"
             print(message(catalog, key))
             return 0
+        if options.output_file is None:
+            options.output_file = (
+                adapter.default_evidence_directory(os.environ)
+                / "security_scan-running.json"
+            )
         runtime_identity = (
             resolve_qnap_runtime_identity(
                 options.runtime_user, os.environ, catalog

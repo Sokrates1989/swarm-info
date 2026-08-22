@@ -390,5 +390,19 @@
   "imageAssessment.error.scanner-unavailable": "[ERROR] Docker Scout is unavailable, so candidate security reductions cannot be verified: {detail}",
   "imageAssessment.error.candidate-report-platform": "[ERROR] Candidate report platform differs from the requested assessment platform: {detail}",
   "imageAssessment.error.source-path-missing": "[ERROR] The candidate report does not identify its exact source vulnerability report. Rerun candidate discovery or pass --vulnerability-report-file.",
-  "imageAssessment.error.operational-error": "[ERROR] Batch image-update assessment failed safely: {detail}"
+  "imageAssessment.error.operational-error": "[ERROR] Batch image-update assessment failed safely: {detail}",
+  "platformInfo.help.description": "Detect and publish the sanitized host platform and capability profile.",
+  "platformInfo.help.json": "Print the machine-readable JSON profile.",
+  "platformInfo.help.output": "Write the profile to this private atomic JSON file.",
+  "platformInfo.help.noWrite": "Print the profile without writing an evidence file.",
+  "platformInfo.title": "Host platform and capabilities",
+  "platformInfo.adapter": "Adapter: {adapter}",
+  "platformInfo.os": "Operating system: {name} | family={family} | version={version}",
+  "platformInfo.docker": "Docker runtime: {mode} | platform={platform}",
+  "platformInfo.compose": "Docker Compose: {status}",
+  "platformInfo.scheduler": "Scheduler: {scheduler}",
+  "platformInfo.available": "available",
+  "platformInfo.unavailable": "unavailable",
+  "platformInfo.report": "Private platform profile: {path}",
+  "platformInfo.writeError": "[ERROR] The platform profile could not be written: {detail}"
 }

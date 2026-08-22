@@ -2,7 +2,7 @@
 
 **Plan ID:** `SCWP`
 
-**Status:** Planned
+**Status:** SCWP-01 automated implementation complete; real-host acceptance pending
 
 **Scope:** `swarm-info`, `swarm-info-watchdog`, and their standalone-container
 deployment contract

@@ -12,6 +12,7 @@ set -u
 script_directory="$(CDPATH= cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 checkout="$(CDPATH= cd "$script_directory/.." && pwd -P)"
 acceptance_helper="$script_directory/qnap_security_schedule_acceptance.py"
+. "$checkout/res/platforms/qnap.sh"
 report="${SWARM_INFO_ACCEPTANCE_REPORT_FILE:-/share/Public/swarm-info/security_scan-running.json}"
 cron_log="${report%.json}.log"
 lock_holder=""
@@ -27,7 +28,6 @@ fail() {
 # Locate QNAP's supported Python 3.10+ command, including its QPKG paths.
 resolve_python() {
     local candidate=""
-    local python_root=""
 
     for candidate in python3 python; do
         if command -v "$candidate" >/dev/null 2>&1 \
@@ -38,24 +38,17 @@ resolve_python() {
             return 0
         fi
     done
-    if command -v getcfg >/dev/null 2>&1; then
-        python_root="$(
-            getcfg Python3 Install_Path -f /etc/config/qpkg.conf 2>/dev/null \
-                || true
-        )"
-        for candidate in \
-            "$python_root/opt/python3/bin/python3" \
-            "$python_root/bin/python3"
-        do
-            if [ -x "$candidate" ]; then
-                printf '%s\n' "$candidate"
-                return 0
-            fi
-        done
-    fi
+    while IFS= read -r candidate; do
+        if [ -x "$candidate" ] \
+            && "$candidate" -c \
+                'import sys; raise SystemExit(sys.version_info < (3, 10))' \
+                >/dev/null 2>&1; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done < <(qnap_python_command_candidates)
     return 1
 }
-
 # Run the exact command as root only when QNAP persistence requires it.
 run_privileged() {
     if [ "$(id -u)" -eq 0 ]; then

@@ -448,6 +448,7 @@ display_help() {
     echo -e "  -o                Alias for --output-file"
     echo -e "  --output-file     Health, scan, image-candidate/comparison, map, or cleanup JSON destination"
     echo -e "  --platform        Swarm default: linux/amd64; security-check default: auto"
+    echo -e "  --platform-info   $OP_HELP_PLATFORM_INFO"
     echo -e "  --scan-vulnerabilities"
     echo -e "                    Force a locked scan of all images, or one selected live scope"
     echo -e "  --compare-image-update"
@@ -790,6 +791,10 @@ while [ $# -gt 0 ]; do
             fi
             shift
             CUSTOM_OUTPUT_FILE="$1"
+            shift
+            ;;
+        --platform-info)
+            selected_action="platform-info"
             shift
             ;;
         --platform)
@@ -1240,6 +1245,9 @@ case "$selected_action" in
         ;;
     "security-check")
         run_compatibility_security_check
+        ;;
+    "platform-info")
+        run_platform_info
         ;;
     "scheduled-vulnerability-scan")
         run_service_image_vulnerability_job scheduled

@@ -10,10 +10,10 @@ import tempfile
 import unittest
 
 from scripts.operator_report import load_messages
+from scripts.platforms.qnap import QnapSystemCrontabClient
 from scripts.security_cron import (
     BLOCK_BEGIN,
     BLOCK_END,
-    QnapSystemCrontabClient,
     SecurityCronSettings,
     cron_command,
     install_schedule,

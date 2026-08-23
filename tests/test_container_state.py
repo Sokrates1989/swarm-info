@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import time
 import tempfile
 import unittest
 
@@ -16,9 +17,9 @@ from scripts.container_state import (
     parse_inspect,
     restart_sample,
 )
+from scripts.vulnerability_job import ScanLock
 from scripts.vulnerability_models import write_json_atomic
 from scripts.vulnerability_scan import CommandResult
-
 
 NOW = dt.datetime(2026, 8, 23, 10, 0, tzinfo=dt.timezone.utc)
 
@@ -171,6 +172,26 @@ class ContainerStateTests(unittest.TestCase):
 
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
             self.assertIsNotNone(load_previous(path))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX advisory lock required")
+    def test_long_security_lock_does_not_block_operational_collection(self) -> None:
+        """Collect immediately while a simulated multi-hour scan owns its lock."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            lock = ScanLock(Path(directory) / "security_scan-running.json.lock")
+            self.assertTrue(lock.acquire())
+            try:
+                started = time.monotonic()
+                report = collect(
+                    FakeClient({"container-alpha": inspect_payload()}),
+                    NOW,
+                )
+                elapsed = time.monotonic() - started
+            finally:
+                lock.release()
+
+        self.assertTrue(report["collection"]["complete"])
+        self.assertLess(elapsed, 1.0)
 
 
 if __name__ == "__main__":

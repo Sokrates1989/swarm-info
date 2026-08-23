@@ -72,7 +72,7 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 | Slice | Automated | QNAP real host | Debian/Ubuntu real host | Swarm regression | Accepted |
 | --- | --- | --- | --- | --- | --- |
 | `SCWP-01` | Pending | Pending | Pending | Pending | No |
-| `SCWP-02` | Pending | Pending | Pending | Pending | No |
+| `SCWP-02` | Complete | Pending | Pending | Passed (2026-08-23) | No |
 | `SCWP-03` | Pending | Pending | Pending | Pending | No |
 
 ## SCWP-01 checkpoints
@@ -123,13 +123,13 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 
 ### Automated
 
-- [ ] Running, healthy, unhealthy, restarting, successful one-shot, failed exit,
+- [x] Running, healthy, unhealthy, restarting, successful one-shot, failed exit,
   intentionally stopped, unknown, stale, partial, missing, and recovered fixtures.
-- [ ] Expected-state validation and precedence.
-- [ ] API/UI/Telegram aggregate parity.
-- [ ] Transition suppression and failed-delivery retry.
-- [ ] Operational collection remains responsive during a simulated long scan.
-- [ ] English and German UI contract checks.
+- [x] Expected-state validation and precedence.
+- [x] API/UI/Telegram aggregate parity.
+- [x] Transition suppression and failed-delivery retry.
+- [x] Operational collection remains responsive during a simulated long scan.
+- [x] English and German UI contract checks.
 
 ### QNAP and Debian/Ubuntu real hosts
 
@@ -145,10 +145,10 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 
 ### Swarm regression
 
-- [ ] Existing service expectations and health totals remain unchanged.
-- [ ] Existing Telegram transition semantics remain unchanged.
-- [ ] Existing admin API and UI service cards remain available.
-- [ ] No standalone Docker evidence mount or daemon access appears in the stack.
+- [x] Existing service expectations and health totals remain unchanged.
+- [x] Existing Telegram transition semantics remain unchanged.
+- [x] Existing admin API and UI service cards remain available.
+- [x] No standalone Docker evidence mount or daemon access appears in the stack.
 
 ## SCWP-03 checkpoints
 

@@ -75,7 +75,7 @@ class QnapSecurityAcceptanceTests(unittest.TestCase):
 
         self.assertEqual(semantic_version("1.14.2"), (1, 14, 2))
         validate_version("1.14.2")
-        validate_version("1.16.0")
+        validate_version("1.16.1")
         with self.assertRaisesRegex(ValueError, "1.14.2"):
             validate_version("1.14.1")
 

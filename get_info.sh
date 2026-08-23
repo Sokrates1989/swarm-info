@@ -1254,7 +1254,11 @@ case "$selected_action" in
         update_swarm_info_tool
         ;;
     "scan-vulnerabilities")
-        run_service_image_vulnerability_job manual
+        if [ "$SECURITY_RUNTIME_MODE" = "containers" ]; then
+            run_container_security_job manual
+        else
+            run_service_image_vulnerability_job manual
+        fi
         ;;
     "compare-image-update")
         run_image_update_comparison
@@ -1275,7 +1279,7 @@ case "$selected_action" in
         run_service_image_vulnerability_job scheduled
         ;;
     "scheduled-security-check")
-        run_scheduled_container_security_job
+        run_container_security_job scheduled
         ;;
     "container-state"|"scheduled-container-state")
         run_scheduled_container_state_job

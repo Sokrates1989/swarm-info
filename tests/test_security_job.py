@@ -61,6 +61,25 @@ class MemoryCrontabClient:
 class SecurityJobTests(unittest.TestCase):
     """Verify running scope, bounded policy, and exact-scope cache reuse."""
 
+    def test_forced_container_scan_routes_through_progress_job(self) -> None:
+        """Keep explicit container scans out of the legacy Swarm job."""
+
+        entrypoint = (REPOSITORY_ROOT / "get_info.sh").read_text(encoding="utf-8")
+        bridge = (REPOSITORY_ROOT / "res" / "vulnerability_cli.sh").read_text(
+            encoding="utf-8"
+        )
+        container_job = bridge.split("run_container_security_job()", maxsplit=1)[1]
+        container_job = container_job.split(
+            "inspect_container_security_report()", maxsplit=1
+        )[0]
+
+        self.assertIn('if [ "$SECURITY_RUNTIME_MODE" = "containers" ]', entrypoint)
+        self.assertIn("run_container_security_job manual", entrypoint)
+        self.assertIn("run_service_image_vulnerability_job manual", entrypoint)
+        self.assertIn("run_container_security_job scheduled", entrypoint)
+        self.assertIn('local mode="$1"', container_job)
+        self.assertIn("job_arguments+=(--force)", container_job)
+
     def test_running_job_publishes_policy_and_reuses_matching_evidence(self) -> None:
         """Scan once, retain timing evidence, then avoid repeat Scout work."""
 

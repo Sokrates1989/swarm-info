@@ -17,10 +17,13 @@ from scripts.security_cron import (
     SecurityCronSettings,
     cron_command,
     install_schedule,
+    managed_block,
+    operational_cron_command,
     remove_schedule,
 )
 from scripts.security_job import (
     execute_security_job,
+    run_locked_security_job,
     security_cache_is_fresh,
     validate_security_job_policy,
 )
@@ -88,8 +91,7 @@ class SecurityJobTests(unittest.TestCase):
                 completed_at = parse_utc_timestamp(report["completed_at"])
                 self.assertIsNotNone(completed_at)
                 scans_before = sum(
-                    command[:2] == ["scout", "cves"]
-                    for command in harness.commands()
+                    command[:2] == ["scout", "cves"] for command in harness.commands()
                 )
 
                 second_status = execute_security_job(
@@ -108,8 +110,7 @@ class SecurityJobTests(unittest.TestCase):
                     240,
                 )
                 scans_after = sum(
-                    command[:2] == ["scout", "cves"]
-                    for command in harness.commands()
+                    command[:2] == ["scout", "cves"] for command in harness.commands()
                 )
 
             self.assertEqual(first_status, 2)
@@ -124,6 +125,46 @@ class SecurityJobTests(unittest.TestCase):
             )
             self.assertEqual(scans_before, scans_after)
             self.assertEqual(scans_before, 2)
+        finally:
+            harness.close()
+
+    def test_locked_job_publishes_terminal_machine_status(self) -> None:
+        """Keep progress separate while preserving the complete report."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                output = root / "security_scan-running.json"
+
+                exit_code = run_locked_security_job(
+                    output,
+                    "auto",
+                    "qnap",
+                    "running",
+                    96,
+                    14,
+                    True,
+                    client=harness.client(),
+                    process_environment={"HOME": str(root), "PATH": ""},
+                    cache_age_hours=72,
+                    scout_timeout_minutes=45,
+                    scan_budget_minutes=240,
+                    next_run_at="2026-08-24T03:17:00Z",
+                )
+                report = json.loads(output.read_text(encoding="utf-8"))
+                status = json.loads(
+                    output.with_name("security_scan-running.status.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(status["status"], "complete")
+            self.assertEqual(status["progress"]["current"], 2)
+            self.assertEqual(status["progress"]["total"], 2)
+            self.assertEqual(status["last_complete_report_at"], report["completed_at"])
+            self.assertEqual(status["next_run_at"], "2026-08-24T03:17:00Z")
         finally:
             harness.close()
 
@@ -177,9 +218,7 @@ class SecurityCronTests(unittest.TestCase):
 
         return SecurityCronSettings(
             command_path=Path("/share/homes/Patrick/.local/bin/swarm-info"),
-            output_file=Path(
-                "/share/Public/swarm-info/security_scan-running.json"
-            ),
+            output_file=Path("/share/Public/swarm-info/security_scan-running.json"),
             platform="auto",
             host_os="qnap",
             container_scope="running",
@@ -225,7 +264,21 @@ class SecurityCronTests(unittest.TestCase):
         self.assertIn("--max-age-hours 96", rendered)
         self.assertIn("--scout-timeout-minutes 45", rendered)
         self.assertIn("--scan-budget-minutes 240", rendered)
+        self.assertIn("--schedule-hour 3", rendered)
+        self.assertIn("--schedule-minute 17", rendered)
         self.assertIn(">>", rendered)
+
+    def test_managed_block_includes_cheap_operational_collection(self) -> None:
+        """Collect health every five minutes without invoking Scout."""
+
+        rendered = operational_cron_command(self.settings())
+        block = managed_block(self.settings())
+
+        self.assertIn("--scheduled-container-state", rendered)
+        self.assertIn("/share/Public/swarm-info/container_state.json", rendered)
+        self.assertIn("--freshness-minutes 15.0", rendered)
+        self.assertIn("*/5 * * * *", block)
+        self.assertIn("17 3 * * *", block)
 
     def test_qnap_command_switches_back_to_non_root_runtime_user(self) -> None:
         """Use root only for persistence, never for the long Scout workload."""
@@ -260,9 +313,7 @@ class SecurityCronTests(unittest.TestCase):
     def test_remove_preserves_unrelated_entries(self) -> None:
         """Remove only this workflow's marked block."""
 
-        client = MemoryCrontabClient(
-            "0 1 * * * /usr/local/bin/backup\n\n"
-        )
+        client = MemoryCrontabClient("0 1 * * * /usr/local/bin/backup\n\n")
         install_schedule(self.settings(), client)
 
         changed = remove_schedule(client)
@@ -280,6 +331,9 @@ class SecurityCronTests(unittest.TestCase):
         self.assertIn("--scheduled-security-check", source)
         self.assertIn("--security-status", source)
         self.assertIn("--remove-security-cron", source)
+
+        self.assertIn("--container-state", source)
+        self.assertIn("--scheduled-container-state", source)
 
     def test_locale_catalogs_keep_security_job_keys_in_sync(self) -> None:
         """Require complete English and German scheduled-job translations."""

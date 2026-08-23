@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.14.3" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.16.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -327,6 +327,16 @@ or
 Default: auto. The hint changes metadata and guidance but never bypasses
 Docker capability checks.
 .TP
+.TP
+.B \-\-container-state
+Publish private, atomic operational evidence for all local containers without
+invoking Docker Scout or interpreting watchdog policy.
+.TP
+.B \-\-scheduled-container-state
+Run the same cheap collector used by the managed five-minute schedule.
+.TP
+.BI \-\-freshness-minutes " minutes"
+Set the operational evidence freshness window. Default: 15.
 .B \-\-scheduled-vulnerability-scan
 Run the locked scan unless matching evidence is fresh.
 .TP
@@ -344,8 +354,9 @@ Check local-container report completeness and freshness without Docker Scout.
 Install or update the current user's managed daily scan.
 .TP
 .B \-\-install-security-cron
-Install or update the current user's managed daily running-container check.
-The default 72-hour cache interval avoids a full Scout run every day. On QNAP,
+Install or update a managed five-minute operational collector and daily
+running-container security check. The default 72-hour cache interval avoids a
+full Scout run every day. On QNAP,
 run this installation once with sudo and
 .B \-\-cron-runtime-user
 so swarm-info updates /etc/config/crontab persistently, reloads cron, and runs
@@ -455,6 +466,14 @@ deployment authorization or candidate vulnerability verdict.
 Preferred atomic batch candidate-scan report. It contains global and
 per-service verified update reductions while explicitly withholding
 compatibility proof and deployment authorization.
+.TP
+.I .../swarm-info/container_state.json
+Adapter-owned raw local-container state, written every five minutes and fresh
+for 15 minutes by default.
+.TP
+.I .../swarm-info/security_scan-running.status.json
+Atomic scan phase, image counter, 30-second heartbeat, last-complete time, and
+next-run evidence. It never replaces the last complete vulnerability report.
 .TP
 .I swarm_info/security_scan.json
 Default standalone/QNAP compatibility security report. It is separate from

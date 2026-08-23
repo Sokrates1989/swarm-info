@@ -246,9 +246,9 @@ def build_host_profile(
     capabilities = HostCapabilities(
         image_vulnerability_scan=effective_scanner,
         focused_container_scan=effective_scanner,
-        container_health=False,
-        expected_state_policy=False,
-        scan_progress=False,
+        container_health=docker.daemon_available,
+        expected_state_policy=docker.daemon_available,
+        scan_progress=effective_scanner,
         runtime_hardening=False,
         guided_remediation="read-only" if docker.daemon_available else "unavailable",
         image_cleanup=docker.daemon_available,

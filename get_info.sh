@@ -449,6 +449,8 @@ display_help() {
     echo -e "  --output-file     Health, scan, image-candidate/comparison, map, or cleanup JSON destination"
     echo -e "  --platform        Swarm default: linux/amd64; security-check default: auto"
     echo -e "  --platform-info   $OP_HELP_PLATFORM_INFO"
+    echo -e "  --container-state Publish all local-container operational evidence"
+    echo -e "  --freshness-minutes Container-state freshness window (default: 15)"
     echo -e "  --scan-vulnerabilities"
     echo -e "                    Force a locked scan of all images, or one selected live scope"
     echo -e "  --compare-image-update"
@@ -483,6 +485,8 @@ display_help() {
     echo -e "                    Run a locked scan unless matching evidence is fresh"
     echo -e "  --scheduled-security-check"
     echo -e "                    $OP_HELP_SCHEDULED_SECURITY"
+    echo -e "  --scheduled-container-state"
+    echo -e "                    Run the cheap cron-compatible state collector"
     echo -e "  --scout-timeout-minutes"
     echo -e "                    $OP_HELP_SCOUT_TIMEOUT"
     echo -e "  --scan-budget-minutes"
@@ -574,6 +578,7 @@ SECURITY_CACHE_AGE_HOURS="72"
 SECURITY_MAX_AGE_HOURS="96"
 SECURITY_SCOUT_TIMEOUT_MINUTES="45"
 SECURITY_SCAN_BUDGET_MINUTES="240"
+CONTAINER_STATE_FRESHNESS_MINUTES="15"
 SECURITY_CRON_RUNTIME_USER="NONE"
 VULNERABILITY_HISTORY_DAYS="14"
 VULNERABILITY_LOCK_FILE="NONE"
@@ -979,6 +984,23 @@ while [ $# -gt 0 ]; do
             selected_action="scheduled-security-check"
             shift
             ;;
+        --container-state)
+            selected_action="container-state"
+            shift
+            ;;
+        --scheduled-container-state)
+            selected_action="scheduled-container-state"
+            shift
+            ;;
+        --freshness-minutes)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            CONTAINER_STATE_FRESHNESS_MINUTES="$1"
+            shift
+            ;;
         --scout-timeout-minutes)
             if [ "$#" -lt 2 ]; then
                 echo -e "Missing value for $1" >&2
@@ -1254,6 +1276,9 @@ case "$selected_action" in
         ;;
     "scheduled-security-check")
         run_scheduled_container_security_job
+        ;;
+    "container-state"|"scheduled-container-state")
+        run_scheduled_container_state_job
         ;;
     "remove-vulnerability-cron")
         configure_vulnerability_cron remove

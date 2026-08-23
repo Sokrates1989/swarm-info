@@ -87,6 +87,8 @@ class SecurityCronSettings:
     log_file: Path
     runtime_user: str | None = None
     runtime_home: Path | None = None
+    operational_interval_minutes: int = 5
+    operational_freshness_minutes: float = 15.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -130,6 +132,10 @@ def cron_command(settings: SecurityCronSettings) -> str:
         str(settings.scout_timeout_minutes),
         "--scan-budget-minutes",
         str(settings.scan_budget_minutes),
+        "--schedule-hour",
+        str(settings.hour),
+        "--schedule-minute",
+        str(settings.minute),
     ]
     command = " ".join(shlex.quote(argument) for argument in arguments)
     command_directory = shlex.quote(settings.command_path.parent.as_posix())
@@ -147,11 +153,46 @@ def cron_command(settings: SecurityCronSettings) -> str:
     )
 
 
-def managed_block(settings: SecurityCronSettings) -> str:
-    """Render the complete marked daily crontab block."""
+def operational_cron_command(settings: SecurityCronSettings) -> str:
+    """Render the cheap five-minute local-container state command."""
 
-    schedule = f"{settings.minute} {settings.hour} * * *"
-    return f"{BLOCK_BEGIN}\n{schedule} {cron_command(settings)}\n{BLOCK_END}\n"
+    output_file = settings.output_file.with_name("container_state.json")
+    log_file = settings.output_file.with_name("container_state.log")
+    arguments = [
+        settings.command_path.as_posix(),
+        "--scheduled-container-state",
+        "--os",
+        settings.host_os,
+        "--output-file",
+        output_file.as_posix(),
+        "--freshness-minutes",
+        str(settings.operational_freshness_minutes),
+    ]
+    command = " ".join(shlex.quote(argument) for argument in arguments)
+    command_directory = shlex.quote(settings.command_path.parent.as_posix())
+    direct_command = (
+        f"PATH={command_directory}:$PATH {command} "
+        f">> {shlex.quote(log_file.as_posix())} 2>&1"
+    )
+    if settings.runtime_user is None:
+        return direct_command
+    runtime_home = shlex.quote(settings.runtime_home.as_posix())
+    user_command = f"HOME={runtime_home} {direct_command}"
+    return (
+        f"/bin/su - {shlex.quote(settings.runtime_user)} -c "
+        f"{shlex.quote(user_command)}"
+    )
+
+
+def managed_block(settings: SecurityCronSettings) -> str:
+    """Render cheap operational and bounded daily security schedules."""
+
+    operational_schedule = f"*/{settings.operational_interval_minutes} * * * *"
+    security_schedule = f"{settings.minute} {settings.hour} * * *"
+    return (
+        f"{BLOCK_BEGIN}\n{operational_schedule} {operational_cron_command(settings)}\n"
+        f"{security_schedule} {cron_command(settings)}\n{BLOCK_END}\n"
+    )
 
 
 def install_schedule(
@@ -391,9 +432,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 / "security_scan-running.json"
             )
         runtime_identity = (
-            resolve_qnap_runtime_identity(
-                options.runtime_user, os.environ, catalog
-            )
+            resolve_qnap_runtime_identity(options.runtime_user, os.environ, catalog)
             if qnap_mode
             else None
         )
@@ -434,7 +473,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
     print(message(catalog, "securityJob.reportPath", path=settings.output_file))
     print(message(catalog, "securityJob.logPath", path=settings.log_file))
     if qnap_mode:
-        print(message(catalog, "securityJob.qnapPersistent", user=settings.runtime_user))
+        print(
+            message(catalog, "securityJob.qnapPersistent", user=settings.runtime_user)
+        )
     return 0
 
 

@@ -315,9 +315,15 @@ than guessing a directory or rendering `None` as a command argument.
 
 ### Scheduled standalone-container security checks
 
-Install the managed schedule after one successful manual check. On standard
-Linux, the current user owns the marked crontab block and the default report is
-`${XDG_STATE_HOME:-$HOME/.local/state}/swarm-info/security_scan-running.json`:
+Install the managed schedule after one successful manual check. The same marked
+block publishes cheap all-container operational evidence every five minutes to
+`container_state.json` (private, atomic, and fresh for 15 minutes) and runs the
+bounded Scout workflow daily. The scan publishes a separate
+`security_scan-running.status.json` at start, every 30 seconds, after each
+image, and at its terminal state; the last complete vulnerability report stays
+readable throughout. On standard Linux, the current user owns the block and
+evidence lives under
+`${XDG_STATE_HOME:-$HOME/.local/state}/swarm-info`:
 
 ```bash
 swarm-info --install-security-cron --os linux
@@ -353,10 +359,13 @@ QNAP's documented persistent-cron procedure; a normal `crontab -e`/`crontab -`
 entry can be overwritten on reboot. See
 [QNAP: How to add jobs to crontab](https://www.qnap.com/en/how-to/faq/article/how-to-add-jobs-to-crontab-to-schedule-a-job).
 
-The generated cron entry runs daily at 03:17 but inventories only currently
-running containers. When the exact container-to-image scope is unchanged, it
-reuses complete evidence for 72 hours, so daily cron activation does not mean
-a daily multi-hour Scout run. Evidence becomes stale after 96 hours. A changed
+The generated block runs the operational collector every five minutes and the
+security scan daily at 03:17. The collector invokes only Docker list/inspect;
+it never invokes Scout and records raw observed state rather than watchdog
+policy. The security scan inventories only currently running containers. When
+the exact container-to-image scope is unchanged, it reuses complete evidence
+for 72 hours, so daily cron activation does not mean a daily multi-hour Scout
+run. Vulnerability evidence becomes stale after 96 hours. A changed
 running-container scope invalidates the cache immediately. The scheduled job
 scans serially to avoid overloading a NAS, limits one image to 45 minutes,
 limits aggregate image work to 240 minutes, uses an adjacent non-blocking lock,

@@ -223,14 +223,28 @@ def container_inspect_payload(
             "Id": container_id,
             "Name": container["name"],
             "Image": container["image_id"],
-            "State": {"Running": container["running"]},
+            "RestartCount": 1,
+            "State": {
+                "Running": container["running"],
+                "Status": "running" if container["running"] else "exited",
+                "ExitCode": 0,
+                "StartedAt": "2026-08-23T09:00:00Z",
+                "FinishedAt": "0001-01-01T00:00:00Z",
+                "Health": {"Status": "healthy"} if container["running"] else None,
+            },
+            "HostConfig": {"RestartPolicy": {"Name": "unless-stopped"}},
+            "NetworkSettings": {
+                "Ports": {"8080/tcp": [{"HostIp": "0.0.0.0", "HostPort": "18080"}]}
+            },
             "Config": {
                 "Image": container["image"],
                 "Labels": {
                     "com.docker.compose.project": container["project"],
                     "com.docker.compose.service": container["compose_service"],
                     "com.docker.compose.project.working_dir": container["working_dir"],
-                    "com.docker.compose.project.config_files": container["config_files"],
+                    "com.docker.compose.project.config_files": container[
+                        "config_files"
+                    ],
                 },
             },
         }

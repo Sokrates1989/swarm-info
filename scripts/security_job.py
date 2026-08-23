@@ -68,7 +68,14 @@ from scripts.vulnerability_scan import (
     DockerClient,
     InventoryError,
     ProgressCallback,
+    StructuredProgressCallback,
     scan_collected_services,
+)
+from scripts.scan_status import (
+    ScanStatusSession,
+    next_daily_run,
+    report_timed_out,
+    timestamp as scan_status_timestamp,
 )
 
 
@@ -144,9 +151,7 @@ def security_cache_is_fresh(
         ``True`` only for complete matching full-container evidence.
     """
 
-    if not cached_report_is_fresh(
-        report, fingerprint, platform, cache_age_hours, now
-    ):
+    if not cached_report_is_fresh(report, fingerprint, platform, cache_age_hours, now):
         return False
     if report is None:
         return False
@@ -241,6 +246,7 @@ def scan_security_job_inventory(
     scout_timeout_minutes: float,
     scan_budget_minutes: float,
     progress: ProgressCallback | None = None,
+    structured_progress: StructuredProgressCallback | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Scan one collected scope and apply QNAP/container report metadata.
 
@@ -250,6 +256,7 @@ def scan_security_job_inventory(
         scout_timeout_minutes: Per-image Scout command limit.
         scan_budget_minutes: Overall image-scanning budget.
         progress: Optional operator-facing progress callback.
+        structured_progress: Optional machine-readable progress callback.
 
     Returns:
         Decorated report and the public 0/2/3 exit status.
@@ -264,6 +271,7 @@ def scan_security_job_inventory(
         progress=progress,
         heartbeat_interval_seconds=DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
         scan_budget_seconds=scan_budget_minutes * 60,
+        structured_progress=structured_progress,
     )
     annotate_inventory_failures(report, inventory.failures)
     if inventory.failures:
@@ -295,6 +303,7 @@ def execute_security_job(
     scout_timeout_minutes: float,
     scan_budget_minutes: float,
     progress: ProgressCallback | None = None,
+    structured_progress: StructuredProgressCallback | None = None,
     qnap_release_paths: Sequence[Path] = QNAP_RELEASE_PATHS,
     os_release_path: Path = OS_RELEASE_PATH,
 ) -> int:
@@ -318,9 +327,7 @@ def execute_security_job(
             progress,
         )
     except InventoryError as error:
-        host_os = detect_host_os(
-            host_os_mode, qnap_release_paths, os_release_path
-        )
+        host_os = detect_host_os(host_os_mode, qnap_release_paths, os_release_path)
         report = build_report(
             started_at,
             requested_platform if requested_platform != "auto" else "unknown",
@@ -330,9 +337,7 @@ def execute_security_job(
             None,
             str(error),
         )
-        report = decorate_report(
-            report, host_os, None, container_scope, (), None
-        )
+        report = decorate_report(report, host_os, None, container_scope, (), None)
         add_execution_policy(report, scout_timeout_minutes, scan_budget_minutes)
         publish_report(
             output_file, report, previous_report, max_age_hours, history_days, now
@@ -363,6 +368,7 @@ def execute_security_job(
         scout_timeout_minutes,
         scan_budget_minutes,
         progress,
+        structured_progress,
     )
     publish_report(
         output_file, report, previous_report, max_age_hours, history_days, now
@@ -387,6 +393,8 @@ def run_locked_security_job(
     scout_timeout_minutes: float = DEFAULT_SCOUT_TIMEOUT_MINUTES,
     scan_budget_minutes: float = DEFAULT_SCAN_BUDGET_MINUTES,
     progress: ProgressCallback | None = None,
+    next_run_at: str | None = None,
+    status_heartbeat_seconds: float = 30.0,
 ) -> int:
     """Run or reuse one bounded local-container scan under a non-blocking lock.
 
@@ -394,18 +402,26 @@ def run_locked_security_job(
         0 for clean/skipped, 2 for findings, or 3 for incomplete/failure.
     """
 
-    environment = dict(os.environ if process_environment is None else process_environment)
+    environment = dict(
+        os.environ if process_environment is None else process_environment
+    )
     selected_client = (client or DockerClient()).with_scout_timeout(
         scout_timeout_minutes * 60
     )
     selected_lock = lock_file or output_file.with_suffix(output_file.suffix + ".lock")
     lock = ScanLock(selected_lock)
     catalog = load_messages(selected_locale(environment))
+    status_session = ScanStatusSession(
+        output_file,
+        next_run_at=next_run_at,
+        heartbeat_seconds=status_heartbeat_seconds,
+    )
     try:
         if not lock.acquire():
             print(message(catalog, "securityJob.locked", path=selected_lock))
             return 0
-        return execute_security_job(
+        status_session.start()
+        result = execute_security_job(
             output_file,
             requested_platform,
             host_os_mode,
@@ -420,8 +436,22 @@ def run_locked_security_job(
             scout_timeout_minutes,
             scan_budget_minutes,
             progress,
+            status_session.progress,
         )
+        terminal = (
+            "timed_out"
+            if report_timed_out(output_file)
+            else ("failed" if result == 3 else "complete")
+        )
+        status_session.finish(terminal)
+        return result
+    except KeyboardInterrupt:
+        if status_session.started:
+            status_session.finish("cancelled", "interrupted")
+        raise
     except (OSError, RuntimeError, TypeError, ValueError) as error:
+        if status_session.started:
+            status_session.finish("failed", type(error).__name__)
         print(
             message(catalog, "securityJob.failed", detail=error),
             file=sys.stderr,
@@ -510,6 +540,18 @@ def parse_arguments(
         help=message(catalog, "securityJob.help.scanBudget"),
     )
     run_parser.add_argument(
+        "--schedule-hour",
+        type=int,
+        choices=range(24),
+        default=3,
+    )
+    run_parser.add_argument(
+        "--schedule-minute",
+        type=int,
+        choices=range(60),
+        default=17,
+    )
+    run_parser.add_argument(
         "--force",
         action="store_true",
         help=message(catalog, "securityJob.help.force"),
@@ -550,6 +592,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
         scout_timeout_minutes=options.scout_timeout_minutes,
         scan_budget_minutes=options.scan_budget_minutes,
         progress=lambda text: print(text, flush=True),
+        next_run_at=scan_status_timestamp(
+            next_daily_run(options.schedule_hour, options.schedule_minute)
+        ),
     )
 
 

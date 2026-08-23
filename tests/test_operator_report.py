@@ -253,7 +253,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.14.3")
+        self.assertEqual(version, "1.16.0")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:

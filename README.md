@@ -416,10 +416,30 @@ sudo "$(command -v swarm-info)" --remove-security-cron --os qnap
 Use an occasional manual `--container-scope all` audit for stopped/dormant
 containers. It is intentionally not the frequent scheduled default.
 
-This first compatibility mode is deliberately read-only. It scans images used
-by defined containers; it does not patch QTS, change containers, inspect unused
-images, audit Docker runtime hardening (privileged mode, mounts, ports), or run
-Swarm deployment mapping/remediation on a standalone host.
+Focused standalone checks can select an exact container, full local image ID,
+Compose project, or Compose project/service pair without replacing the complete
+scheduled report:
+
+```bash
+swarm-info --security-check --container my-project-web-1 --os auto
+swarm-info --security-check --image-id sha256:<64-HEX-DIGITS> --os auto
+swarm-info --security-check --compose-project my-project --os auto
+swarm-info --security-check --compose-service my-project/web --os auto
+```
+
+The discovery and assessment pipeline also supports standalone reports. It
+retains the exact scanned local image ID, affected containers, and Docker
+Compose ownership labels. The assessment publishes current and candidate
+lineage, compatibility evidence, verified critical/high reductions, remaining
+findings, image age, and copy-ready backup, pull/build, recreate, verify, and
+focused-rescan commands. Timestamped backup commands avoid replacing an older
+review copy. Every row remains non-authorizing; the browser and watchdog cannot
+run the commands or access the Docker socket.
+
+This compatibility mode is deliberately read-only. It does not patch QTS,
+change containers, audit Docker runtime hardening (privileged mode, mounts,
+ports), or run Swarm deployment mutation on a standalone host. Unused-image
+inspection remains the separate safe workflow below.
 
 ## Safe unused-image cleanup
 
@@ -635,8 +655,9 @@ below to scan every discovered immutable candidate once.
 
 ### Assess all discovered candidates
 
-After candidate discovery, calculate verified global and per-service update
-reductions:
+After candidate discovery, calculate verified global and per-workload update
+reductions. Swarm reports use service rows; standalone reports use container
+rows with exact Compose ownership when Docker labels provide it:
 
 ```bash
 swarm-info --assess-image-updates \
@@ -664,7 +685,10 @@ The atomic schema-version-1 assessment contains:
   scans—not authorization or compatibility proof;
 - a conservative remaining count after each image's best verified candidate;
 - per-image comparisons and a best verified candidate;
-- per-service current, removable, and candidate-remaining counts for the UI;
+- per-service or per-container current, removable, and candidate-remaining
+  counts for the UI;
+- current/candidate lineage, affected workloads, exact Compose selectors, and
+  copy-ready read-only host guidance when ownership evidence is complete;
 - candidate scan failures and inherited candidate-discovery gaps.
 
 Exit status `2` means the assessment is complete but current findings still

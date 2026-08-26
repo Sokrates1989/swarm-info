@@ -176,6 +176,87 @@ def _service_names(image: Mapping[str, Any]) -> list[str]:
     )
 
 
+def _resource_type(report: Mapping[str, Any]) -> str:
+    """Return the source inventory vocabulary with a Swarm-safe default."""
+
+    scope = report.get("scope")
+    if isinstance(scope, Mapping) and scope.get("resource_type") == "container":
+        return "container"
+    return "service"
+
+
+def _bounded_text(value: object, maximum: int = 1024) -> str | None:
+    """Return one bounded source string without coercing foreign structures."""
+
+    if not isinstance(value, str):
+        return None
+    normalized = safe_text(value)[:maximum]
+    return normalized or None
+
+
+def _workload_resources(
+    image: Mapping[str, Any],
+    resource_type: str,
+) -> list[dict[str, Any]]:
+    """Retain exact container or service ownership needed for read-only guidance."""
+
+    raw_resources = image.get("services")
+    if not isinstance(raw_resources, list):
+        return []
+    local_image_id = _full_sha256(image.get("local_image_id"))
+    resources: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for raw in raw_resources:
+        if not isinstance(raw, Mapping):
+            continue
+        name = _bounded_text(raw.get("name"), 255)
+        if name is None or (resource_type, name) in seen:
+            continue
+        seen.add((resource_type, name))
+        project = _bounded_text(raw.get("stack"), 255)
+        compose_service = _bounded_text(raw.get("compose_service"), 255)
+        working_directory = _bounded_text(raw.get("compose_working_dir"))
+        raw_files = raw.get("compose_config_files")
+        config_files = (
+            [
+                normalized
+                for value in raw_files[:20]
+                if (normalized := _bounded_text(value)) is not None
+            ]
+            if isinstance(raw_files, list)
+            else []
+        )
+        selectors: dict[str, str] = {
+            "service" if resource_type == "service" else "container": name
+        }
+        if local_image_id is not None:
+            selectors["image_id"] = local_image_id
+        if project:
+            selectors["compose_project"] = project
+        if project and compose_service:
+            selectors["compose_service"] = f"{project}/{compose_service}"
+        resources.append(
+            {
+                "type": resource_type,
+                "name": name,
+                "selectors": selectors,
+                "ownership": {
+                    "compose_project": project,
+                    "compose_service": compose_service,
+                    "working_directory": working_directory,
+                    "config_files": config_files,
+                    "complete": bool(
+                        project
+                        and compose_service
+                        and working_directory
+                        and config_files
+                    ),
+                },
+            }
+        )
+    return sorted(resources, key=lambda item: (item["type"], item["name"]))
+
+
 def _compatibility(
     current: SemanticVersion | None,
     candidate: SemanticVersion | None,
@@ -546,6 +627,7 @@ def _current_image_evidence(
 
 def _discover_for_image(
     image: Mapping[str, Any],
+    resource_type: str,
     listings: Mapping[str, TagListing],
     successors: Mapping[str, SuccessorRule],
     client: DockerClient,
@@ -593,6 +675,8 @@ def _discover_for_image(
         metadata_cache,
         identity_cache,
     )
+    local_image_id = _full_sha256(image.get("local_image_id"))
+    source_digest = _full_sha256(image.get("digest"))
     return (
         {
             "current": {
@@ -600,10 +684,15 @@ def _discover_for_image(
                 "repository": repository,
                 "tag": current.tag,
                 "digest": current.metadata.digest,
+                "source_digest": source_digest,
+                "source_artifact": local_image_id or source_digest,
                 "platform": platform,
                 "version": current.metadata.version,
                 "version_source": current.metadata.version_source,
                 "services": _service_names(image),
+                "resource_type": resource_type,
+                "resources": _workload_resources(image, resource_type),
+                "local_image_id": local_image_id,
                 "vulnerability_status": image.get("status"),
                 "lifecycle": _lifecycle_evidence(
                     current.tag_record,
@@ -723,9 +812,11 @@ def discover_image_updates(
         tuple[ImageMetadata, str | None, dict[str, str] | None],
     ] = {}
     output_images: list[dict[str, Any]] = []
+    source_resource_type = _resource_type(report)
     for image in image_records:
         discovered, image_errors = _discover_for_image(
             image,
+            source_resource_type,
             listings,
             successors,
             client,

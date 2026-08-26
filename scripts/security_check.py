@@ -197,7 +197,7 @@ def collect_focused_containers(
     inventory = collect_container_inventory(
         client,
         scope,
-        ancestor_image_id=selected,
+        ancestor_image_id=selected if kind == "image-id" else None,
     )
     if inventory.failures and not inventory.containers:
         raise InventoryError(inventory.failures[0].error)
@@ -239,7 +239,8 @@ def run_security_check(
         process_environment: Optional environment enabling QNAP Scout storage
             preparation. The CLI passes its process environment; embedded tests
             and callers can omit it to avoid filesystem side effects.
-        focus_kind: Optional exact local selector type: container or image-id.
+        focus_kind: Optional exact local selector type: container, image-id,
+            compose-project, or compose-service.
         focus_selector: Selector value paired with ``focus_kind``.
         scan_budget_seconds: Optional overall image-scanning time budget.
 
@@ -435,6 +436,14 @@ def parse_arguments(
         "--image-id",
         help=message(catalog, "security.imageIdOption"),
     )
+    focus.add_argument(
+        "--compose-project",
+        help=message(catalog, "security.composeProjectOption"),
+    )
+    focus.add_argument(
+        "--compose-service",
+        help=message(catalog, "security.composeServiceOption"),
+    )
     parser.add_argument(
         "--platform",
         type=security_platform_argument,
@@ -471,6 +480,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
     if options.image_id is not None:
         focus_kind = "image-id"
         focus_selector = options.image_id
+    if options.compose_project is not None:
+        focus_kind = "compose-project"
+        focus_selector = options.compose_project
+    if options.compose_service is not None:
+        focus_kind = "compose-service"
+        focus_selector = options.compose_service
     output_file = options.output_file or (
         DEFAULT_FOCUSED_OUTPUT_FILE if focus_kind else DEFAULT_OUTPUT_FILE
     )

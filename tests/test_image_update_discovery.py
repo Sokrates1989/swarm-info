@@ -489,6 +489,76 @@ class RegistryTagClientTests(unittest.TestCase):
 class ImageUpdateDiscoveryTests(unittest.TestCase):
     """Select immutable update tracks without making security claims."""
 
+    def test_container_source_retains_exact_compose_ownership_and_selectors(
+        self,
+    ) -> None:
+        """Project only bounded standalone ownership fields into discovery."""
+
+        report = source_report()
+        report["scope"]["resource_type"] = "container"
+        report["images"][0]["local_image_id"] = OLD_DIGEST
+        report["images"][0]["services"] = [
+            {
+                "name": "demo_api_1",
+                "stack": "demo",
+                "compose_service": "api",
+                "compose_working_dir": "/srv/demo",
+                "compose_config_files": [
+                    "/srv/demo/compose.yml",
+                    "/srv/demo/compose.override.yml",
+                ],
+                "environment": {"TOKEN": "must-not-copy"},
+            }
+        ]
+        repository = "docker.io/example/app"
+
+        outcome = discover_image_updates(
+            report,
+            Path("security_scan-running.json"),
+            MetadataClient({}),
+            FakeListingClient(
+                {
+                    repository: listing(
+                        repository,
+                        status="registry-approval-required",
+                        complete=False,
+                    )
+                }
+            ),
+            "linux/amd64",
+            2000,
+        )
+
+        current = outcome.report["images"][0]["current"]
+        self.assertEqual(current["resource_type"], "container")
+        self.assertEqual(current["local_image_id"], OLD_DIGEST)
+        self.assertEqual(
+            current["resources"],
+            [
+                {
+                    "type": "container",
+                    "name": "demo_api_1",
+                    "selectors": {
+                        "container": "demo_api_1",
+                        "image_id": OLD_DIGEST,
+                        "compose_project": "demo",
+                        "compose_service": "demo/api",
+                    },
+                    "ownership": {
+                        "compose_project": "demo",
+                        "compose_service": "api",
+                        "working_directory": "/srv/demo",
+                        "config_files": [
+                            "/srv/demo/compose.yml",
+                            "/srv/demo/compose.override.yml",
+                        ],
+                        "complete": True,
+                    },
+                }
+            ],
+        )
+        self.assertNotIn("environment", json.dumps(current))
+
     def test_no_registry_approval_returns_actionable_incomplete_report(self) -> None:
         """List required hosts without invoking Docker metadata resolution."""
 

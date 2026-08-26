@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.16.1" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.17.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -189,11 +189,13 @@ command.
 .B \-\-assess-image-updates
 Consume the Slice 1 candidate report and its exact schema-version-2 source
 vulnerability report. Every immutable candidate is scanned once and reused
-across consuming images and services. The report records current findings,
-verified critical/high reductions, conservative remaining counts, and
-per-service opportunities. Selection prioritizes critical findings removed,
-then high findings removed. Compatibility and deployment remain unverified and
-unauthorized.
+across consuming images and workload resources. Swarm evidence retains
+per-service opportunities. Standalone evidence retains exact local image IDs,
+affected containers, Compose ownership labels, current/candidate lineage, and
+copy-ready backup, pull/build, recreate, verify, and focused-rescan commands.
+Selection prioritizes critical findings removed, then high findings removed.
+All commands are guidance only; compatibility and deployment remain unverified
+and unauthorized.
 .TP
 .BI \-\-allow-registry-host " host"
 With
@@ -317,6 +319,21 @@ scan one full content-addressed local image ID and report every selected
 container using that exact artifact. Abbreviated IDs and tags are rejected.
 This selects local-container mode automatically and asks Docker to filter the
 candidate containers before exact identity is verified.
+.TP
+.BI \-\-compose-project " project"
+With
+.BR \-\-security-check ,
+scan every container whose exact
+.B com.docker.compose.project
+label matches the selected project. This selects local-container mode and
+writes separate focused evidence.
+.TP
+.BI \-\-compose-service " project/service"
+With
+.BR \-\-security-check ,
+scan every container whose exact Compose project and service labels match the
+selected pair. Missing or ambiguous selector parts are rejected; no container
+name or path guessing is performed.
 .TP
 .BI \-\-os " host"
 Use host hint

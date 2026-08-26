@@ -480,6 +480,10 @@ display_help() {
     echo -e "  --container-scope $OP_HELP_CONTAINER_SCOPE"
     echo -e "  --container NAME  $OP_HELP_FOCUSED_CONTAINER"
     echo -e "  --image-id ID     $OP_HELP_FOCUSED_IMAGE_ID"
+    echo -e "  --compose-project PROJECT"
+    echo -e "                    $OP_HELP_FOCUSED_COMPOSE_PROJECT"
+    echo -e "  --compose-service PROJECT/SERVICE"
+    echo -e "                    $OP_HELP_FOCUSED_COMPOSE_SERVICE"
     echo -e "  --os              Host hint: auto, qnap, or linux (default: auto)"
     echo -e "  --scheduled-vulnerability-scan"
     echo -e "                    Run a locked scan unless matching evidence is fresh"
@@ -528,6 +532,8 @@ display_help() {
     echo "  swarm-info --security-check --container-mode --os=qnap"
     echo "  swarm-info --security-check --container qnap_web --os=qnap"
     echo "  swarm-info --security-check --image-id sha256:<64-HEX-DIGITS> --os=qnap"
+    echo "  swarm-info --security-check --compose-project qnap-app --os=qnap"
+    echo "  swarm-info --security-check --compose-service qnap-app/web --os=qnap"
     echo "  swarm-info -i"
     echo "  swarm-info -i --apply"
     echo "  swarm-info --map-service-deployments --deploy-root /swarm"
@@ -840,6 +846,24 @@ while [ $# -gt 0 ]; do
             fi
             shift
             set_security_focus "container" "$1" || exit 64
+            shift
+            ;;
+        --compose-project)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            set_security_focus "compose-project" "$1" || exit 64
+            shift
+            ;;
+        --compose-service)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            set_security_focus "compose-service" "$1" || exit 64
             shift
             ;;
         --container-scope)

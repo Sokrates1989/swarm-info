@@ -156,6 +156,20 @@ pending until a non-Swarm Debian or Ubuntu Docker host is available.
 
 ## SCWP-03 checkpoints
 
+### SCWP-03A automated checkpoint
+
+- [x] Exact container, image ID, Compose project, and Compose service selectors.
+- [x] Container-native candidate discovery and assessment retain exact local
+  artifact, Compose ownership, lineage, reductions, remaining findings, age,
+  and affected workloads.
+- [x] The sanitized watchdog API and UI expose container/Compose evidence and
+  copy-ready host guidance while preserving legacy Swarm service rows.
+- [x] Contract tests prove that no API mutation route or Docker socket
+  dependency was added.
+
+The QNAP and Swarm operator gates for `SCWP-03A` remain pending. The broader
+`SCWP-03B` and `SCWP-03C` checkpoints below remain open.
+
 ### Automated
 
 - [ ] Container, image, Compose project, and Compose service focused selectors.

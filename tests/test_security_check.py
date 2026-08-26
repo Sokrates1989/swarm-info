@@ -415,6 +415,81 @@ class ContainerSecurityCheckTests(unittest.TestCase):
         self.assertEqual(len(scans), 1)
         self.assertEqual(scans[0][-1], f"local://{DIGEST_A}")
 
+    def test_compose_project_focus_selects_every_exact_project_container(
+        self,
+    ) -> None:
+        """Select a whole Compose project without matching unrelated projects."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="compose-project",
+                focus_selector="qnap-app",
+            )
+            commands = harness.commands()
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(report["scope"]["resource_count"], 2)
+        self.assertEqual(
+            report["scope"]["selector"],
+            {"type": "compose-project", "value": "qnap-app"},
+        )
+        list_command = next(
+            command for command in commands if command[:2] == ["container", "ls"]
+        )
+        self.assertFalse(any(value.startswith("ancestor=") for value in list_command))
+        selected = {
+            service["name"]
+            for image in report["images"]
+            for service in image["services"]
+        }
+        self.assertEqual(selected, {"qnap_web", "qnap_worker"})
+
+    def test_compose_service_focus_selects_one_exact_project_service(self) -> None:
+        """Resolve the stable PROJECT/SERVICE selector from Compose labels."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="compose-service",
+                focus_selector="gateway/gateway",
+            )
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(report["scope"]["resource_count"], 1)
+        self.assertEqual(report["affected_resources"], ["qnap_gateway"])
+        self.assertEqual(
+            report["scope"]["selector"],
+            {"type": "compose-service", "value": "gateway/gateway"},
+        )
+
+    def test_invalid_compose_service_focus_is_incomplete_without_scout(self) -> None:
+        """Require the unambiguous PROJECT/SERVICE selector form."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            report, exit_code = run_security_check(
+                harness.client(),
+                host_os_mode="qnap",
+                focus_kind="compose-service",
+                focus_selector="gateway",
+            )
+            commands = harness.commands()
+        finally:
+            harness.close()
+
+        self.assertEqual(exit_code, 3)
+        self.assertEqual(report["focus_error"]["code"], "invalid-compose-service")
+        self.assertFalse(any(command[:1] == ["scout"] for command in commands))
+
     def test_unknown_container_focus_is_incomplete_without_scout(self) -> None:
         """Never turn a stale container name into clean focused evidence."""
 
@@ -576,6 +651,8 @@ class ContainerSecurityCheckTests(unittest.TestCase):
         self.assertIn("--container-mode", entrypoint)
         self.assertIn("--container)", entrypoint)
         self.assertIn("--image-id)", entrypoint)
+        self.assertIn("--compose-project)", entrypoint)
+        self.assertIn("--compose-service)", entrypoint)
         self.assertIn("--os=*", entrypoint)
         self.assertIn("-m scripts.security_check", bridge)
         self.assertIn("check_swarm_info_dependencies security", bridge)

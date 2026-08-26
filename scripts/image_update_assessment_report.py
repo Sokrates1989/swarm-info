@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from typing import Any, Mapping, Sequence
 
 from scripts.image_update_evidence import compare_candidate_evidence
@@ -154,8 +155,13 @@ def assess_image_record(
         "best_verified_candidate": (
             {
                 "immutable_reference": best["immutable_reference"],
+                "reference": best.get("reference"),
+                "tag": best.get("tag"),
+                "version": best.get("version"),
+                "version_source": best.get("version_source"),
                 "compatibility": best.get("compatibility"),
                 "tracks": best.get("tracks", []),
+                "lifecycle": best.get("lifecycle"),
                 "comparison": best["comparison"],
                 "deployment_authorized": False,
             }
@@ -211,6 +217,221 @@ def service_rows(images: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda item: str(item["service"]))
 
 
+def _resource_records(current: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Normalize additive resource records or synthesize legacy service rows."""
+
+    raw_resources = current.get("resources")
+    if isinstance(raw_resources, list):
+        return [
+            dict(resource)
+            for resource in raw_resources
+            if isinstance(resource, Mapping)
+            and resource.get("type") in {"container", "service"}
+            and isinstance(resource.get("name"), str)
+            and resource["name"]
+        ]
+    raw_services = current.get("services")
+    if not isinstance(raw_services, list):
+        return []
+    return [
+        {
+            "type": "service",
+            "name": service,
+            "selectors": {"service": service},
+            "ownership": {
+                "compose_project": None,
+                "compose_service": None,
+                "working_directory": None,
+                "config_files": [],
+                "complete": False,
+            },
+        }
+        for service in raw_services
+        if isinstance(service, str) and service
+    ]
+
+
+def _shell_command(arguments: Sequence[str]) -> str:
+    """Render one copy-ready POSIX shell command from exact argument values."""
+
+    return shlex.join(str(argument) for argument in arguments)
+
+
+def _backup_command(path: str) -> str:
+    """Create a timestamped, permission-preserving backup command."""
+
+    quoted_path = shlex.quote(path)
+    return (
+        f"cp -p -- {quoted_path} "
+        f"{quoted_path}.swarm-info.bak.$(date -u +%Y%m%dT%H%M%SZ)"
+    )
+
+
+def _compose_arguments(resource: Mapping[str, Any]) -> list[str] | None:
+    """Build the exact Compose ownership prefix or report incomplete mapping."""
+
+    ownership = resource.get("ownership")
+    if not isinstance(ownership, Mapping) or ownership.get("complete") is not True:
+        return None
+    project = ownership.get("compose_project")
+    working_directory = ownership.get("working_directory")
+    config_files = ownership.get("config_files")
+    if (
+        not isinstance(project, str)
+        or not project
+        or not isinstance(working_directory, str)
+        or not working_directory
+        or not isinstance(config_files, list)
+        or not config_files
+        or not all(isinstance(path, str) and path for path in config_files)
+    ):
+        return None
+    arguments = [
+        "docker",
+        "compose",
+        "--project-name",
+        project,
+        "--project-directory",
+        working_directory,
+    ]
+    for path in config_files:
+        arguments.extend(("--file", path))
+    return arguments
+
+
+def _resource_commands(
+    resource: Mapping[str, Any],
+    best: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Create non-authorizing host commands only from exact retained evidence."""
+
+    name = str(resource["name"])
+    selectors = resource.get("selectors")
+    selector_values = selectors if isinstance(selectors, Mapping) else {}
+    commands: dict[str, Any] = {
+        "verify": _shell_command(["docker", "container", "inspect", name]),
+        "focused_rescan": _shell_command(
+            [
+                "swarm-info",
+                "--security-check",
+                "--container",
+                name,
+                "--os",
+                "auto",
+            ]
+        ),
+    }
+    candidate = best.get("immutable_reference") if best is not None else None
+    if isinstance(candidate, str) and candidate:
+        commands["candidate_pull"] = _shell_command(["docker", "pull", candidate])
+    compose = _compose_arguments(resource)
+    ownership = resource.get("ownership")
+    if compose is None or not isinstance(ownership, Mapping):
+        return commands
+    compose_service = ownership.get("compose_service")
+    config_files = ownership.get("config_files")
+    compose_selector = selector_values.get("compose_service")
+    if not isinstance(compose_service, str) or not compose_service:
+        return commands
+    commands.update(
+        {
+            "source_backup": [
+                _backup_command(path) for path in config_files
+            ],
+            "compose_validate": _shell_command([*compose, "config", "--quiet"]),
+            "compose_pull": _shell_command([*compose, "pull", compose_service]),
+            "compose_build": _shell_command(
+                [*compose, "build", "--pull", compose_service]
+            ),
+            "compose_recreate": _shell_command(
+                [*compose, "up", "--detach", "--no-deps", compose_service]
+            ),
+            "verify": _shell_command([*compose, "ps", compose_service]),
+        }
+    )
+    if isinstance(compose_selector, str) and compose_selector:
+        commands["focused_rescan"] = _shell_command(
+            [
+                "swarm-info",
+                "--security-check",
+                "--compose-service",
+                compose_selector,
+                "--os",
+                "auto",
+            ]
+        )
+    return commands
+
+
+def _resource_row(
+    resource: Mapping[str, Any],
+    current: Mapping[str, Any],
+    best: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Project image evidence and safe host guidance onto one workload."""
+
+    row = _service_row(resource["name"], current, best)
+    row.update(
+        {
+            "resource_type": resource["type"],
+            "resource": resource["name"],
+            "selectors": dict(resource.get("selectors") or {}),
+            "ownership": dict(resource.get("ownership") or {}),
+            "current_lineage": {
+                key: current.get(key)
+                for key in (
+                    "reference",
+                    "repository",
+                    "tag",
+                    "digest",
+                    "local_image_id",
+                    "version",
+                    "version_source",
+                    "lifecycle",
+                )
+            },
+            "candidate_lineage": (
+                {
+                    key: best.get(key)
+                    for key in (
+                        "reference",
+                        "immutable_reference",
+                        "tag",
+                        "version",
+                        "version_source",
+                        "compatibility",
+                        "tracks",
+                        "lifecycle",
+                    )
+                }
+                if best is not None
+                else None
+            ),
+            "commands": _resource_commands(resource, best),
+            "deployment_authorized": False,
+        }
+    )
+    return row
+
+
+def resource_rows(images: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Project assessed image evidence onto container-native ownership rows."""
+
+    rows: list[dict[str, Any]] = []
+    for image in images:
+        current = image["current"]
+        raw_best = image.get("best_verified_candidate")
+        best = raw_best if isinstance(raw_best, Mapping) else None
+        rows.extend(
+            _resource_row(resource, current, best)
+            for resource in _resource_records(current)
+        )
+    return sorted(
+        rows,
+        key=lambda item: (str(item["resource_type"]), str(item["resource"])),
+    )
+
+
 def _source_summary_counts(report: Mapping[str, Any]) -> tuple[int, int]:
     """Return validated global source vulnerability counts."""
 
@@ -255,6 +476,7 @@ def assessment_summary(
     images: Sequence[Mapping[str, Any]],
     scans: Mapping[str, ImageScanResult],
     services: Sequence[Mapping[str, Any]],
+    resources: Sequence[Mapping[str, Any]],
     errors: Sequence[Mapping[str, str]],
     discovery_error_count: int,
     complete: bool,
@@ -308,6 +530,9 @@ def assessment_summary(
         "images_with_verified_candidate": len(selected),
         "services_with_verified_candidate": sum(
             item["status"] in VERIFIED_STATES for item in services
+        ),
+        "resources_with_verified_candidate": sum(
+            item["status"] in VERIFIED_STATES for item in resources
         ),
         "error_count": len(errors),
         "discovery_error_count": discovery_error_count,

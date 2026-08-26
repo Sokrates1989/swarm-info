@@ -17,6 +17,7 @@ from typing import Any, Callable, Mapping, Sequence
 from scripts.image_update_assessment_report import (
     assess_image_record,
     assessment_summary,
+    resource_rows,
     service_rows,
 )
 from scripts.operator_report import safe_text
@@ -128,11 +129,14 @@ def _current_key(reference: object, digest: object) -> tuple[str, str]:
 def _source_index(
     vulnerability_report: Mapping[str, Any],
 ) -> dict[tuple[str, str], Mapping[str, Any]]:
-    """Index complete current vulnerability evidence by reference and digest."""
+    """Index current evidence by reference and exact scanned artifact."""
 
     records: dict[tuple[str, str], Mapping[str, Any]] = {}
     for image in _report_images(vulnerability_report, "vulnerability-report"):
-        key = _current_key(image.get("reference"), image.get("digest"))
+        key = _current_key(
+            image.get("reference"),
+            image.get("local_image_id") or image.get("digest"),
+        )
         if key in records:
             raise ImageUpdateAssessmentError("source-image-duplicate", key[0])
         records[key] = image
@@ -268,7 +272,13 @@ def _assess_images(
         current = discovery_image.get("current")
         if not isinstance(current, Mapping):
             raise ImageUpdateAssessmentError("current-object")
-        key = _current_key(current.get("reference"), current.get("digest"))
+        key = _current_key(
+            current.get("reference"),
+            current.get("source_artifact")
+            or current.get("local_image_id")
+            or current.get("source_digest")
+            or current.get("digest"),
+        )
         source_image = sources.get(key)
         if source_image is None:
             raise ImageUpdateAssessmentError("current-source-missing", key[0])
@@ -300,6 +310,17 @@ def _required_registry_hosts(candidate_report: Mapping[str, Any]) -> list[str]:
     return sorted(set(hosts))
 
 
+def _assessment_resource_type(images: Sequence[Mapping[str, Any]]) -> str:
+    """Use container vocabulary only when every current image declares it."""
+
+    declared = {
+        current.get("resource_type")
+        for image in images
+        if isinstance((current := image.get("current")), Mapping)
+    }
+    return "container" if declared == {"container"} else "service"
+
+
 def _assessment_report(
     candidate_report: Mapping[str, Any],
     candidate_report_path: Path,
@@ -312,6 +333,8 @@ def _assessment_report(
     complete: bool,
     summary: Mapping[str, Any],
     services: Sequence[Mapping[str, Any]],
+    resources: Sequence[Mapping[str, Any]],
+    resource_type: str,
     images: Sequence[Mapping[str, Any]],
     errors: Sequence[Mapping[str, str]],
     discovery_errors: Sequence[object],
@@ -326,6 +349,7 @@ def _assessment_report(
         "scanner": {"name": "docker-scout", "version": scanner_version},
         "policy": {
             "platform": platform,
+            "resource_type": resource_type,
             "severities": ["critical", "high"],
             "fixable_only": True,
             "candidate_selection": "critical-then-high-reduction",
@@ -348,8 +372,13 @@ def _assessment_report(
                 ),
             },
         },
+        "scope": {
+            "resource_type": resource_type,
+            "resource_count": len(resources),
+        },
         "summary": summary,
         "services": list(services),
+        "resources": list(resources),
         "images": list(images),
         "errors": list(errors),
         "discovery_errors": list(discovery_errors),
@@ -370,7 +399,7 @@ def assess_image_updates(
     scanner: Scanner = scan_image,
     version_reader: VersionReader = docker_scout_version,
 ) -> AssessmentOutcome:
-    """Scan all unique candidates and publish global plus per-service deltas."""
+    """Scan unique candidates and publish image plus workload-resource deltas."""
 
     started_at = utc_timestamp()
     _validate_source_identity(candidate_report, vulnerability_report)
@@ -397,6 +426,8 @@ def assess_image_updates(
     )
     complete = bool(candidate_report.get("complete")) and source_complete and not errors
     services = service_rows(assessed_images)
+    resources = resource_rows(assessed_images)
+    resource_type = _assessment_resource_type(assessed_images)
     discovery_errors = candidate_report.get("errors")
     if not isinstance(discovery_errors, list):
         raise ImageUpdateAssessmentError("candidate-report-errors")
@@ -406,6 +437,7 @@ def assess_image_updates(
             assessed_images,
             scans,
             services,
+            resources,
             errors,
             len(discovery_errors),
             complete,
@@ -424,6 +456,8 @@ def assess_image_updates(
         complete,
         summary,
         services,
+        resources,
+        resource_type,
         assessed_images,
         errors,
         discovery_errors,

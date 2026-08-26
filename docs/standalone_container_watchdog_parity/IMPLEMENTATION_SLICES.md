@@ -240,6 +240,9 @@ host-side guided workflow. The browser remains read-only guidance.
 - `SCWP-03B`: runtime-hardening, cleanup evidence, and read-only UI.
 - `SCWP-03C`: guarded host mutation, rollback, regressions, and acceptance.
 
+`SCWP-03A` has passed its automated implementation gate. QNAP and Swarm
+operator acceptance remain pending. `SCWP-03B` and `SCWP-03C` have not started.
+
 ### `swarm-info` ownership
 
 - Add focused selectors for Compose project and Compose service.

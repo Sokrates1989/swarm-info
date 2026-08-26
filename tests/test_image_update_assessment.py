@@ -181,6 +181,164 @@ class ImageUpdateAssessmentTests(unittest.TestCase):
                 for service in outcome.report["services"]
             )
         )
+        self.assertEqual(outcome.report["scope"]["resource_type"], "service")
+        self.assertEqual(outcome.report["scope"]["resource_count"], 3)
+        self.assertEqual(summary["resources_with_verified_candidate"], 3)
+
+    def test_container_assessment_projects_compose_lineage_and_host_commands(
+        self,
+    ) -> None:
+        """Publish exact Compose guidance without authorizing browser mutation."""
+
+        candidates = candidate_report()
+        resources = [
+            ("demo_api", "api"),
+            ("demo_worker", "worker"),
+            ("other_api", "other"),
+        ]
+        resource_index = 0
+        for image in candidates["images"]:
+            current = image["current"]
+            count = len(current["services"])
+            current["resource_type"] = "container"
+            current["local_image_id"] = current["digest"]
+            current["resources"] = []
+            for name, service in resources[resource_index : resource_index + count]:
+                current["resources"].append(
+                    {
+                        "type": "container",
+                        "name": name,
+                        "selectors": {
+                            "container": name,
+                            "image_id": current["digest"],
+                            "compose_project": "demo",
+                            "compose_service": f"demo/{service}",
+                        },
+                        "ownership": {
+                            "compose_project": "demo",
+                            "compose_service": service,
+                            "working_directory": "/srv/demo",
+                            "config_files": [
+                                "/srv/demo/compose.yml",
+                                "/srv/demo/compose.override.yml",
+                            ],
+                            "complete": True,
+                        },
+                    }
+                )
+            resource_index += count
+
+        outcome = assess_image_updates(
+            candidates,
+            Path("candidates.json"),
+            vulnerability_report(),
+            Path("vulnerabilities.json"),
+            NoopClient(),
+            "linux/amd64",
+            scanner=lambda client, target, platform: ImageScanResult(
+                target=target,
+                status="clean",
+                scanner_exit_code=0,
+                scan_source="registry",
+            ),
+            version_reader=lambda client: "v1.24.0",
+        )
+
+        self.assertEqual(outcome.report["scope"], {
+            "resource_type": "container",
+            "resource_count": 3,
+        })
+        row = next(
+            item
+            for item in outcome.report["resources"]
+            if item["resource"] == "demo_api"
+        )
+        self.assertEqual(row["resource_type"], "container")
+        self.assertEqual(
+            row["ownership"]["config_files"],
+            ["/srv/demo/compose.yml", "/srv/demo/compose.override.yml"],
+        )
+        self.assertEqual(
+            row["candidate_lineage"]["immutable_reference"],
+            CANDIDATE_REFERENCE,
+        )
+        self.assertEqual(
+            row["commands"]["focused_rescan"],
+            "swarm-info --security-check --compose-service demo/api --os auto",
+        )
+        self.assertEqual(
+            row["commands"]["compose_validate"],
+            "docker compose --project-name demo --project-directory /srv/demo "
+            "--file /srv/demo/compose.yml --file "
+            "/srv/demo/compose.override.yml config --quiet",
+        )
+        self.assertEqual(
+            row["commands"]["candidate_pull"],
+            f"docker pull {CANDIDATE_REFERENCE}",
+        )
+        self.assertEqual(len(row["commands"]["source_backup"]), 2)
+        self.assertIn(
+            "/srv/demo/compose.yml.swarm-info.bak.$(date -u +%Y%m%dT%H%M%SZ)",
+            row["commands"]["source_backup"][0],
+        )
+        self.assertFalse(row["deployment_authorized"])
+        self.assertEqual(
+            outcome.report["summary"]["resources_with_verified_candidate"],
+            3,
+        )
+
+    def test_container_assessment_joins_exact_local_artifact_identity(self) -> None:
+        """Match current evidence by local image ID when no registry digest exists."""
+
+        candidates = candidate_report()
+        candidates["images"] = [candidates["images"][0]]
+        current = candidates["images"][0]["current"]
+        current["digest"] = None
+        current["source_artifact"] = CURRENT_ONE_DIGEST
+        current["local_image_id"] = CURRENT_ONE_DIGEST
+        current["resource_type"] = "container"
+        current["resources"] = [
+            {
+                "type": "container",
+                "name": "demo_api",
+                "selectors": {
+                    "container": "demo_api",
+                    "image_id": CURRENT_ONE_DIGEST,
+                },
+                "ownership": {
+                    "compose_project": None,
+                    "compose_service": None,
+                    "working_directory": None,
+                    "config_files": [],
+                    "complete": False,
+                },
+            }
+        ]
+        source = vulnerability_report()
+        source["images"][0]["digest"] = None
+        source["images"][0]["local_image_id"] = CURRENT_ONE_DIGEST
+
+        outcome = assess_image_updates(
+            candidates,
+            Path("candidates.json"),
+            source,
+            Path("security_scan-running.json"),
+            NoopClient(),
+            "linux/amd64",
+            scanner=lambda client, target, platform: ImageScanResult(
+                target=target,
+                status="clean",
+                scanner_exit_code=0,
+            ),
+            version_reader=lambda client: "v1.24.0",
+        )
+
+        self.assertEqual(outcome.exit_code, 2)
+        self.assertEqual(outcome.report["scope"]["resource_type"], "container")
+        self.assertEqual(
+            outcome.report["resources"][0]["current_lineage"]["local_image_id"],
+            CURRENT_ONE_DIGEST,
+        )
 
     def test_incomplete_discovery_retains_partial_assessment(self) -> None:
         """Publish useful scans but return incomplete when Slice 1 was partial."""

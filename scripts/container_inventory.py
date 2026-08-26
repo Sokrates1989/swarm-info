@@ -18,7 +18,12 @@ from scripts.vulnerability_scout import sanitize_command_error
 
 
 FULL_IMAGE_ID_PATTERN = re.compile(r"sha256:[0-9a-fA-F]{64}")
-SUPPORTED_CONTAINER_FOCUS_KINDS = ("container", "image-id")
+SUPPORTED_CONTAINER_FOCUS_KINDS = (
+    "container",
+    "image-id",
+    "compose-project",
+    "compose-service",
+)
 
 
 class ContainerFocusError(ValueError):
@@ -142,6 +147,12 @@ def validate_container_focus(kind: str, selector: str) -> str:
         raise ContainerFocusError("unsupported-kind", selected)
     if kind == "image-id" and FULL_IMAGE_ID_PATTERN.fullmatch(selected) is None:
         raise ContainerFocusError("invalid-image-id", selected)
+    if kind == "compose-project" and "/" in selected:
+        raise ContainerFocusError("invalid-compose-project", selected)
+    if kind == "compose-service":
+        parts = selected.split("/")
+        if len(parts) != 2 or not all(parts):
+            raise ContainerFocusError("invalid-compose-service", selected)
     return selected
 
 
@@ -233,6 +244,20 @@ def _selector_examples(
 
     if kind == "container":
         return tuple(sorted(container.name for container in containers)[:10])
+    if kind == "compose-project":
+        return tuple(
+            sorted({container.stack for container in containers if container.stack})[:10]
+        )
+    if kind == "compose-service":
+        return tuple(
+            sorted(
+                {
+                    f"{container.stack}/{container.compose_service}"
+                    for container in containers
+                    if container.stack and container.compose_service
+                }
+            )[:10]
+        )
     return tuple(
         sorted(
             {
@@ -247,12 +272,14 @@ def _selector_examples(
 def select_containers(
     containers: Sequence[ServiceRecord], kind: str, selector: str
 ) -> list[ServiceRecord]:
-    """Select one exact container or every container using one exact image ID.
+    """Select exact container, image, or Docker Compose ownership evidence.
 
     Args:
         containers: Current inventory in the requested all/running scope.
-        kind: ``container`` or ``image-id``.
-        selector: Exact container name/ID or full content-addressed image ID.
+        kind: ``container``, ``image-id``, ``compose-project``, or
+            ``compose-service``.
+        selector: Exact container name/ID, full content-addressed image ID,
+            Compose project, or ``PROJECT/SERVICE`` pair.
 
     Returns:
         Matching records sorted by container name.
@@ -262,15 +289,19 @@ def select_containers(
     """
 
     selected = validate_container_focus(kind, selector)
-    matches = [
-        container
-        for container in containers
-        if (
-            selected in {container.name, container.service_id}
-            if kind == "container"
-            else selected.lower() == (container.local_image_id or "").lower()
-        )
-    ]
+
+    def matches_selector(container: ServiceRecord) -> bool:
+        """Match one already validated exact selector without fuzzy fallback."""
+
+        if kind == "container":
+            return selected in {container.name, container.service_id}
+        if kind == "image-id":
+            return selected.lower() == (container.local_image_id or "").lower()
+        if kind == "compose-project":
+            return selected == container.stack
+        return selected == f"{container.stack}/{container.compose_service}"
+
+    matches = [container for container in containers if matches_selector(container)]
     if not matches:
         raise ContainerFocusError(
             f"{kind}-not-found", selected, _selector_examples(containers, kind)

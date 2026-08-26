@@ -2,8 +2,8 @@
 
 **Plan ID:** `SCWP`
 
-**Status:** SCWP-02 automated, QNAP, and Swarm regression accepted;
-standard-Linux real-host acceptance remains pending; SCWP-03A authorized
+**Status:** SCWP-03A automated implementation complete; QNAP and Swarm
+acceptance are pending; standard-Linux real-host acceptance remains pending
 
 **Scope:** `swarm-info`, `swarm-info-watchdog`, and their standalone-container
 deployment contract

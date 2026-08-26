@@ -18,6 +18,9 @@ class Scwp03aSwarmAcceptanceTests(unittest.TestCase):
         for fragment in (
             "SCWP_WATCHDOG_VERSION",
             "docker service ls",
+            "docker service inspect",
+            'swarm.cronjob.enable',
+            '{"0/0", "0/1", "1/1"}',
             "--platform-info",
             "--service-health",
             "--vulnerability-status",

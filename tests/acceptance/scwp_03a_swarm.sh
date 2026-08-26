@@ -89,9 +89,17 @@ for suffix, (image, replicas) in by_suffix.items():
     if suffix in {"_admin-api", "_web"}:
         assert replicas == "1/1", (suffix, replicas)
     else:
-        assert replicas in {"0/1", "1/1"}, (suffix, replicas)
+        assert replicas in {"0/0", "0/1", "1/1"}, (suffix, replicas)
 print(f"[OK] Deployed application and web images use explicit tag {version}.")
 PY
+
+watchdog_schedule=$(docker service inspect "${stack_name}_watchdog" \
+    --format '{{index .Spec.Labels "swarm.cronjob.enable"}}|{{.Spec.Mode.Replicated.Replicas}}') \
+    || acceptance_fail "Could not inspect the cron-triggered watchdog service."
+[ "$watchdog_schedule" = "true|0" ] \
+    || acceptance_fail \
+        "Watchdog is not configured as an idle cron-triggered service: $watchdog_schedule"
+printf '[OK] Watchdog 0/0 is the expected idle state between scheduled executions.\n'
 
 printf '\n=== Producer and deployment regressions ===\n'
 "$repository_root/get_info.sh" --platform-info --json \

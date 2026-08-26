@@ -697,6 +697,20 @@ scan is incomplete; useful partial results remain in the output, but must never
 be interpreted as clean. This command changes no image, service, file, or
 deployment, and every result retains `deployment_authorized: false`.
 
+After publishing and deploying a matching watchdog application/web image tag,
+run the tracked Ubuntu Swarm regression as root on the manager:
+
+```bash
+SCWP_WATCHDOG_VERSION=0.5.0 \
+  tests/acceptance/scwp_03a_swarm.sh
+```
+
+The gate is non-mutating. It checks the exact deployed image tags, platform and
+producer regressions, the existing service assessment, the authenticated
+sanitized API from inside the admin task, and the public web version. It then
+pauses for browser and Telegram confirmation. Image build/push and stack
+deployment remain in the operator's existing release workflow.
+
 ### Prove what a proposed image update fixes
 
 `fixable` by itself does **not** mean that a newer application image already

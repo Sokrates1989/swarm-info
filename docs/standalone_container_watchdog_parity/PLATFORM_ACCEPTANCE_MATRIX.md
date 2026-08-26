@@ -72,7 +72,7 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 | Slice | Automated | QNAP real host | Debian/Ubuntu real host | Swarm regression | Accepted |
 | --- | --- | --- | --- | --- | --- |
 | `SCWP-01` | Pending | Pending | Pending | Pending | No |
-| `SCWP-02` | Complete | Pending | Pending | Passed (2026-08-23) | No |
+| `SCWP-02` | Complete | [Passed (2026-08-25)](SCWP_02_QNAP_EVIDENCE.md) | Pending | [Passed (2026-08-26)](SCWP_02_SWARM_REGRESSION.md) | Conditional |
 | `SCWP-03` | Pending | Pending | Pending | Pending | No |
 
 ## SCWP-01 checkpoints
@@ -149,6 +149,10 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 - [x] Existing Telegram transition semantics remain unchanged.
 - [x] Existing admin API and UI service cards remain available.
 - [x] No standalone Docker evidence mount or daemon access appears in the stack.
+
+The operator accepted the QNAP and Swarm results and authorized `SCWP-03A` to
+start. This does not promote standard Linux to Tier 1: its real-host row remains
+pending until a non-Swarm Debian or Ubuntu Docker host is available.
 
 ## SCWP-03 checkpoints
 

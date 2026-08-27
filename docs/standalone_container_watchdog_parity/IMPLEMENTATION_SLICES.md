@@ -240,8 +240,11 @@ host-side guided workflow. The browser remains read-only guidance.
 - `SCWP-03B`: runtime-hardening, cleanup evidence, and read-only UI.
 - `SCWP-03C`: guarded host mutation, rollback, regressions, and acceptance.
 
-`SCWP-03A` has passed its automated implementation gate. QNAP and Swarm
-operator acceptance remain pending. `SCWP-03B` and `SCWP-03C` have not started.
+`SCWP-03A` has passed its automated implementation gate and its QNAP and Swarm
+operator gates. See the [QNAP evidence](SCWP_03A_QNAP_EVIDENCE.md) and
+[Swarm regression evidence](SCWP_03A_SWARM_REGRESSION.md). `SCWP-03B` and
+`SCWP-03C` have not started, and standalone Debian/Ubuntu real-host acceptance
+remains pending.
 
 ### `swarm-info` ownership
 

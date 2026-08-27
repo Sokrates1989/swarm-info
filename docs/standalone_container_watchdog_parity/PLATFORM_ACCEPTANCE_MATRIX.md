@@ -73,7 +73,7 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 | --- | --- | --- | --- | --- | --- |
 | `SCWP-01` | Pending | Pending | Pending | Pending | No |
 | `SCWP-02` | Complete | [Passed (2026-08-25)](SCWP_02_QNAP_EVIDENCE.md) | Pending | [Passed (2026-08-26)](SCWP_02_SWARM_REGRESSION.md) | Conditional |
-| `SCWP-03` | Pending | Pending | Pending | Pending | No |
+| `SCWP-03` | `03A` complete; `03B`/`03C` pending | [`03A` passed (2026-08-28)](SCWP_03A_QNAP_EVIDENCE.md); later checkpoints pending | Pending | [`03A` passed (2026-08-27)](SCWP_03A_SWARM_REGRESSION.md); later checkpoints pending | No |
 
 ## SCWP-01 checkpoints
 
@@ -167,8 +167,11 @@ pending until a non-Swarm Debian or Ubuntu Docker host is available.
 - [x] Contract tests prove that no API mutation route or Docker socket
   dependency was added.
 
-The QNAP and Swarm operator gates for `SCWP-03A` remain pending. The broader
-`SCWP-03B` and `SCWP-03C` checkpoints below remain open.
+The operator accepted the QNAP and Swarm `SCWP-03A` gates. See the
+[QNAP evidence](SCWP_03A_QNAP_EVIDENCE.md) and
+[Swarm regression evidence](SCWP_03A_SWARM_REGRESSION.md). Standalone
+Debian/Ubuntu acceptance and the broader `SCWP-03B` and `SCWP-03C` checkpoints
+below remain open.
 
 ### Automated
 

@@ -411,12 +411,61 @@ class ImageCleanupTests(unittest.TestCase):
         self.assertEqual(report["action"]["already_absent_image_ids"], [])
         self.assertEqual(report["schema_version"], 2)
         self.assertEqual(report["summary"]["removed_images"], 1)
+        self.assertEqual(report["last_result"]["status"], "applied")
+        self.assertEqual(report["history"], [report["last_result"]])
         self.assertEqual(
             sum(
                 command == ["image", "ls", "--all", "--no-trunc", "--quiet"]
                 for command in client.commands
             ),
             2,
+        )
+
+    def test_repeated_previews_retain_bounded_count_only_history(self) -> None:
+        """Keep prior operator reviews without retaining old image identities."""
+
+        client = FakeCleanupClient("standalone")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            report_path = Path(temporary_directory) / "cleanup.json"
+            with patch("scripts.image_cleanup.DockerClient", return_value=client):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(
+                        main(["--output-file", str(report_path)]),
+                        0,
+                    )
+                    self.assertEqual(
+                        main(["--output-file", str(report_path)]),
+                        0,
+                    )
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(len(report["history"]), 2)
+        self.assertEqual(report["last_result"]["status"], "preview")
+        self.assertTrue(
+            all("image_id" not in entry for entry in report["history"])
+        )
+
+    def test_cancelled_apply_is_published_without_removal(self) -> None:
+        """Record a default-No outcome while keeping Docker unchanged."""
+
+        client = FakeCleanupClient("standalone")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            report_path = Path(temporary_directory) / "cleanup.json"
+            with (
+                patch("scripts.image_cleanup.DockerClient", return_value=client),
+                patch("builtins.input", return_value=""),
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                exit_code = main(
+                    ["--apply", "--output-file", str(report_path)]
+                )
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(report["last_result"]["status"], "cancelled")
+        self.assertFalse(
+            any(command[:2] == ["image", "rm"] for command in client.commands)
         )
 
     def test_failed_removal_is_sanitized_and_incomplete(self) -> None:

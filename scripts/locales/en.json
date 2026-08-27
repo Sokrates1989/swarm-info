@@ -416,5 +416,9 @@
   "platformInfo.available": "available",
   "platformInfo.unavailable": "unavailable",
   "platformInfo.report": "Private platform profile: {path}",
-  "platformInfo.writeError": "[ERROR] The platform profile could not be written: {detail}"
+  "platformInfo.writeError": "[ERROR] The platform profile could not be written: {detail}",
+  "runtimeHardening.help.description": "Audit local Docker container hardening without changing Docker.",
+  "runtimeHardening.error": "[ERROR] Runtime-hardening audit failed: {detail}",
+  "runtimeHardening.result": "Runtime-hardening audit: {audited} audited, {affected} affected, {findings} finding(s).",
+  "runtimeHardening.report": "[OK] Runtime-hardening evidence: {path}"
 }

@@ -109,8 +109,26 @@ class PlatformDetectionTests(unittest.TestCase):
         self.assertEqual(payload["schema_version"], 1)
         self.assertFalse(payload["capabilities"]["image_vulnerability_scan"])
         self.assertTrue(payload["docker"]["compose_available"])
+        self.assertFalse(payload["capabilities"]["runtime_hardening"])
         self.assertEqual(payload["capabilities"]["scheduler"], "user-crontab")
         self.assertNotIn("environment", json.dumps(payload).lower())
+
+    def test_container_runtime_enables_read_only_hardening(self) -> None:
+        """Publish hardening only where local-container semantics apply."""
+
+        harness = FakeDockerHarness("local-containers")
+        try:
+            profile = detect_platform_profile(
+                harness.client(),
+                requested_os="qnap",
+                detected_at="2026-08-22T00:00:00Z",
+            )
+        finally:
+            harness.close()
+
+        payload = profile.to_dict()
+        self.assertEqual(payload["docker"]["runtime_mode"], "containers")
+        self.assertTrue(payload["capabilities"]["runtime_hardening"])
 
     def test_unavailable_docker_daemon_produces_explicit_profile(self) -> None:
         """Keep platform diagnostics available while returning no safe actions."""
@@ -128,6 +146,7 @@ class PlatformDetectionTests(unittest.TestCase):
         payload = profile.to_dict()
         self.assertFalse(payload["docker"]["daemon_available"])
         self.assertFalse(payload["capabilities"]["image_cleanup"])
+        self.assertFalse(payload["capabilities"]["runtime_hardening"])
         self.assertEqual(
             payload["capabilities"]["scheduler"], "qnap-persistent-crontab"
         )

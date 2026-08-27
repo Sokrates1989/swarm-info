@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.17.0" "User Commands"
+.TH SWARM-INFO 1 "August 2026" "swarm-info 1.18.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -95,6 +95,15 @@ Show local Docker information.
 .BR \-c ", " \-\-commands
 Show the curated Docker and Swarm command reference.
 .TP
+.B \-\-runtime-hardening
+Audit local running and stopped container configuration through read-only Docker
+inventory and inspect operations. Findings cover privileged mode, host network
+or PID namespaces, Docker-socket and risky host bind mounts, dangerous
+capabilities, root execution, missing no-new-privileges, writable root
+filesystems, missing health checks or resource limits, and published ports.
+Environment values, arbitrary label values, and host mount sources are not
+serialized.
+.TP
 .BR \-i ", " \-\-image-cleanup
 Review images unused on the current Docker node. Running and stopped container
 images are protected. A manager also protects locally available images declared
@@ -115,6 +124,10 @@ With
 .BR "\-\-image-cleanup \-\-apply" ,
 confirm removal non-interactively. Only reviewed exact artifacts and their
 revalidated tags are removed, without force.
+.PP
+With an output file, preview, cancellation, blocked, applied, and partial
+outcomes are retained as a bounded count-only history. Prior image identities
+and removal diagnostics are not copied into history.
 .TP
 .B \-\-state
 Check whether the installed swarm-info checkout is current and modified.
@@ -124,8 +137,8 @@ Check whether the installed swarm-info checkout is current and modified.
 Collect and atomically publish the Swarm health JSON report.
 .TP
 .BI \-o " path" ", " \-\-output-file " path"
-Select the health, vulnerability, image-update, deployment-map, or image-cleanup report
-destination.
+Select the health, vulnerability, image-update, deployment-map,
+runtime-hardening, or image-cleanup report destination.
 .TP
 .BI \-\-deploy-root " path"
 Set an absolute directory searched recursively by deployment mapping. Repeat

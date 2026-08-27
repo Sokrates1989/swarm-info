@@ -437,9 +437,37 @@ review copy. Every row remains non-authorizing; the browser and watchdog cannot
 run the commands or access the Docker socket.
 
 This compatibility mode is deliberately read-only. It does not patch QTS,
-change containers, audit Docker runtime hardening (privileged mode, mounts,
-ports), or run Swarm deployment mutation on a standalone host. Unused-image
-inspection remains the separate safe workflow below.
+change containers, or run Swarm deployment mutation on a standalone host.
+Runtime hardening and unused-image inspection remain separate host evidence
+workflows below.
+
+## Read-only container runtime hardening
+
+Audit every local container, including stopped containers, and publish private
+evidence for the standalone watchdog UI:
+
+```bash
+# QNAP
+swarm-info --runtime-hardening \
+  --container-scope all \
+  --os qnap \
+  --output-file /share/Public/swarm-info/runtime_hardening.json
+
+# Standard Linux
+swarm-info --runtime-hardening \
+  --container-scope all \
+  --os auto \
+  --output-file "${XDG_STATE_HOME:-$HOME/.local/state}/swarm-info/runtime_hardening.json"
+```
+
+The audit reports privileged containers, host network or PID namespaces,
+Docker-socket and risky host bind mounts, dangerous Linux capabilities, root
+execution, missing `no-new-privileges`, writable root filesystems, missing
+health checks or resource limits, and published ports. It invokes only Docker
+inventory and inspect operations. Environment values, arbitrary label values,
+and host mount source paths are never serialized. A complete audit exits zero
+even when findings exist; incomplete inspection fails explicitly while still
+publishing sanitized evidence.
 
 ## Safe unused-image cleanup
 
@@ -447,7 +475,8 @@ Review cleanup candidates on QNAP, standalone Docker, or a Swarm manager:
 
 ```bash
 # Read-only review; no image is removed
-swarm-info -i
+swarm-info -i \
+  --output-file /share/Public/swarm-info/image_cleanup.json
 
 # Review, then request default-No confirmation before removal
 swarm-info -i --apply
@@ -467,6 +496,12 @@ node when node-local cleanup is intended.
 The `i` shortcut in either interactive menu opens the same review and then
 offers the default-No removal confirmation. Direct `swarm-info -i` remains a
 read-only command.
+
+When `--output-file` is used, each preview or apply decision records a bounded
+count-only result history alongside the current candidate list. History never
+retains obsolete image IDs or removal diagnostics. This lets the authenticated
+standalone UI show the latest preview and prior outcomes without receiving any
+Docker mutation capability.
 
 The candidate size is an upper bound based on virtual image sizes; shared layers
 mean actual recovered storage is normally smaller. Before an approved cleanup,

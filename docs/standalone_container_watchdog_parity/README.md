@@ -3,7 +3,8 @@
 **Plan ID:** `SCWP`
 
 **Status:** SCWP-03A implementation and QNAP/Swarm operator acceptance complete;
-SCWP-03B, SCWP-03C, and standard-Linux real-host acceptance remain pending
+SCWP-03B automated implementation complete with QNAP/Swarm operator gates
+pending; SCWP-03C remains pending
 
 **Scope:** `swarm-info`, `swarm-info-watchdog`, and their standalone-container
 deployment contract
@@ -66,8 +67,8 @@ actually completed. Empty or predictive evidence files are not permitted.
 
 | Tier | Meaning | Initial platforms |
 | --- | --- | --- |
-| Tier 1 | Automated tests plus accepted real-host installation, scheduling, runtime, API, UI, and notification evidence | QNAP; Debian/Ubuntu after `SCWP-01` acceptance |
-| Tier 2 | Automated fixtures and best-effort compatibility, without a complete real-host acceptance record | Other standard Linux distributions |
+| Tier 1 | Automated tests plus accepted real-host installation, scheduling, runtime, API, UI, and notification evidence | QNAP |
+| Tier 2 | Automated fixtures and best-effort compatibility, without a complete real-host acceptance record | Debian/Ubuntu and other standard Linux distributions |
 | Unsupported | The runtime or required dependencies cannot satisfy the published capability contract | Non-Linux hosts and Docker environments without local daemon access |
 
 Passing an `/etc/os-release` fixture does not promote a platform to Tier 1.
@@ -116,9 +117,11 @@ each repository remains independently buildable, testable, and revertible.
 
 ## Definition of complete
 
-The plan is complete when all of the following are true:
+The currently available-host plan is complete when all of the following are
+true:
 
-- QNAP and a real Debian/Ubuntu Docker host pass the final acceptance matrix.
+- QNAP passes the standalone acceptance matrix and the single-manager Ubuntu
+  Swarm deployment passes every regression checkpoint.
 - One shared capability contract drives CLI, API, UI, and notifications.
 - QNAP-specific QPKG, Scout-storage, and persistent-cron behavior lives behind
   a thin adapter rather than being spread through the shared workflow.
@@ -134,6 +137,11 @@ The plan is complete when all of the following are true:
 - Existing Swarm scanner, watchdog, deployment, and notification behavior pass
   their regression gates.
 - Every Tier 1 claim links to completed, sanitized evidence.
+
+Debian/Ubuntu standalone Docker support remains implemented through the shared
+standard-Linux adapter and automated fixtures. It is not a current acceptance
+or completion gate because no non-Swarm host is available; a future real-host
+run can promote it from Tier 2 without creating a platform-specific fork.
 
 ## Explicit non-goals
 

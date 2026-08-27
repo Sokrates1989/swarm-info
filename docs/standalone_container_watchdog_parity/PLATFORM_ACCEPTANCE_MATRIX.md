@@ -20,17 +20,18 @@
 - Mark skipped checks with a reason. A silent blank cell is not accepted evidence.
 - Tier 1 requires every mandatory row for that platform.
 
-## Required environments
+## Current and deferred environments
 
 | Environment ID | Required host | Purpose |
 | --- | --- | --- |
 | `QNAP-REAL` | Existing QNAP Container Station host, current accepted user and private report path | Vendor adapter, QPKG discovery, persistent cron, permissions, API/UI/Telegram, and runtime behavior |
-| `DEBIAN-REAL` | Debian or Ubuntu host/VM with Docker Engine and Compose v2 | Standard-Linux adapter, installer, user cron, reboot persistence, API/UI/Telegram, and runtime behavior |
+| `DEBIAN-FUTURE` | Future Debian or Ubuntu host/VM with Docker Engine and Compose v2 | Deferred Tier 2 validation of the standard-Linux adapter; not a current acceptance gate |
 | `SWARM-REAL` | Existing Docker Swarm manager | Regression for service inventory, reports, notifications, UI, mapping, and deployment |
 | `FIXTURES` | Deterministic automated test environment | Unsupported/malformed platform data and edge-state coverage |
 
-A containerized Debian test is useful under `FIXTURES`, but it does not replace
-`DEBIAN-REAL`.
+A containerized Debian test is useful under `FIXTURES`, but it does not promote
+standard Linux from Tier 2. Promotion can be considered when a suitable
+non-Swarm host becomes available.
 
 ## Reproducible validation entry points
 
@@ -71,9 +72,9 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 
 | Slice | Automated | QNAP real host | Debian/Ubuntu real host | Swarm regression | Accepted |
 | --- | --- | --- | --- | --- | --- |
-| `SCWP-01` | Pending | Pending | Pending | Pending | No |
-| `SCWP-02` | Complete | [Passed (2026-08-25)](SCWP_02_QNAP_EVIDENCE.md) | Pending | [Passed (2026-08-26)](SCWP_02_SWARM_REGRESSION.md) | Conditional |
-| `SCWP-03` | `03A` complete; `03B`/`03C` pending | [`03A` passed (2026-08-28)](SCWP_03A_QNAP_EVIDENCE.md); later checkpoints pending | Pending | [`03A` passed (2026-08-27)](SCWP_03A_SWARM_REGRESSION.md); later checkpoints pending | No |
+| `SCWP-01` | Pending | Pending | Tier 2 fixture coverage; live gate deferred | Pending | No |
+| `SCWP-02` | Complete | [Passed (2026-08-25)](SCWP_02_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [Passed (2026-08-26)](SCWP_02_SWARM_REGRESSION.md) | Yes |
+| `SCWP-03` | `03A`/`03B` complete; `03C` pending | [`03A` passed (2026-08-28)](SCWP_03A_QNAP_EVIDENCE.md); `03B` pending | Tier 2 fixture coverage; live gate deferred | [`03A` passed (2026-08-27)](SCWP_03A_SWARM_REGRESSION.md); `03B` pending | No |
 
 ## SCWP-01 checkpoints
 
@@ -151,8 +152,9 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 - [x] No standalone Docker evidence mount or daemon access appears in the stack.
 
 The operator accepted the QNAP and Swarm results and authorized `SCWP-03A` to
-start. This does not promote standard Linux to Tier 1: its real-host row remains
-pending until a non-Swarm Debian or Ubuntu Docker host is available.
+start. This does not promote standard Linux to Tier 1: the unavailable
+non-Swarm Debian/Ubuntu host remains Tier 2 and is not a completion gate for
+the current implementation.
 
 ## SCWP-03 checkpoints
 
@@ -170,8 +172,21 @@ pending until a non-Swarm Debian or Ubuntu Docker host is available.
 The operator accepted the QNAP and Swarm `SCWP-03A` gates. See the
 [QNAP evidence](SCWP_03A_QNAP_EVIDENCE.md) and
 [Swarm regression evidence](SCWP_03A_SWARM_REGRESSION.md). Standalone
-Debian/Ubuntu acceptance and the broader `SCWP-03B` and `SCWP-03C` checkpoints
-below remain open.
+Debian/Ubuntu acceptance is deferred at Tier 2. `SCWP-03B` has passed its
+automated checkpoint and awaits QNAP plus single-manager Swarm operator
+acceptance; `SCWP-03C` remains open.
+
+### SCWP-03B automated checkpoint
+
+- [x] Every runtime-hardening finding and secret-redaction case is covered.
+- [x] Cleanup preview protects container-owned images and retains bounded,
+  count-only result history.
+- [x] Authenticated API and bilingual collapsed UI represent current, stale,
+  missing, invalid, incomplete, and unsupported evidence explicitly.
+- [x] Contract tests prove that no API mutation route or Docker socket
+  dependency was added.
+- [x] Swarm stack templates retain their existing evidence, secret, image, and
+  routing boundaries without standalone report mounts.
 
 ### Automated
 
@@ -185,7 +200,7 @@ below remain open.
   focused post-check.
 - [ ] No API mutation route or Docker socket dependency.
 
-### QNAP and Debian/Ubuntu real hosts
+### QNAP real host (Debian/Ubuntu standalone deferred at Tier 2)
 
 - [ ] One first-party/local and one third-party image assessment.
 - [ ] Correct Compose ownership and affected-container mapping.
@@ -237,7 +252,7 @@ Create only after a completed run:
 The roadmap is accepted only when:
 
 - all three slice rows are accepted;
-- QNAP and Debian/Ubuntu satisfy every mandatory Tier 1 checkpoint;
+- QNAP satisfies every mandatory Tier 1 checkpoint;
 - Swarm regression is green for every slice;
 - capability-unavailable states remain explicit;
 - no secret, credential, or Docker daemon control was added to public-facing

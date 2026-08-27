@@ -30,6 +30,7 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
 source "$SCRIPT_DIR/functions.sh"
 source "$SCRIPT_DIR/vulnerability_cli.sh"
 source "$SCRIPT_DIR/image_cleanup_cli.sh"
+source "$SCRIPT_DIR/runtime_hardening_cli.sh"
 source "$SCRIPT_DIR/operator_cli.sh"
 
 # Define the number of pages when showing all information.
@@ -449,6 +450,8 @@ display_help() {
     echo -e "  --output-file     Health, scan, image-candidate/comparison, map, or cleanup JSON destination"
     echo -e "  --platform        Swarm default: linux/amd64; security-check default: auto"
     echo -e "  --platform-info   $OP_HELP_PLATFORM_INFO"
+    echo -e "  --runtime-hardening"
+    echo -e "                    $OP_HELP_RUNTIME_HARDENING"
     echo -e "  --container-state Publish all local-container operational evidence"
     echo -e "  --freshness-minutes Container-state freshness window (default: 15)"
     echo -e "  --scan-vulnerabilities"
@@ -806,6 +809,10 @@ while [ $# -gt 0 ]; do
             ;;
         --platform-info)
             selected_action="platform-info"
+            shift
+            ;;
+        --runtime-hardening)
+            selected_action="runtime-hardening"
             shift
             ;;
         --platform)
@@ -1298,6 +1305,9 @@ case "$selected_action" in
         ;;
     "platform-info")
         run_platform_info
+        ;;
+    "runtime-hardening")
+        run_runtime_hardening
         ;;
     "scheduled-vulnerability-scan")
         run_service_image_vulnerability_job scheduled

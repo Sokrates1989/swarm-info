@@ -416,5 +416,9 @@
   "platformInfo.available": "verf\u00fcgbar",
   "platformInfo.unavailable": "nicht verf\u00fcgbar",
   "platformInfo.report": "Privates Plattformprofil: {path}",
-  "platformInfo.writeError": "[FEHLER] Das Plattformprofil konnte nicht geschrieben werden: {detail}"
+  "platformInfo.writeError": "[FEHLER] Das Plattformprofil konnte nicht geschrieben werden: {detail}",
+  "runtimeHardening.help.description": "Lokale Docker-Container-Härtung prüfen, ohne Docker zu verändern.",
+  "runtimeHardening.error": "[FEHLER] Laufzeit-Härtungsprüfung fehlgeschlagen: {detail}",
+  "runtimeHardening.result": "Laufzeit-Härtungsprüfung: {audited} geprüft, {affected} betroffen, {findings} Befund(e).",
+  "runtimeHardening.report": "[OK] Laufzeit-Härtungsnachweis: {path}"
 }

@@ -249,7 +249,9 @@ def build_host_profile(
         container_health=docker.daemon_available,
         expected_state_policy=docker.daemon_available,
         scan_progress=effective_scanner,
-        runtime_hardening=False,
+        runtime_hardening=(
+            docker.daemon_available and docker.inventory_mode == "containers"
+        ),
         guided_remediation="read-only" if docker.daemon_available else "unavailable",
         image_cleanup=docker.daemon_available,
         scheduler=(

@@ -32,6 +32,11 @@ A production target requires separate explicit operator authorization.
 
 ## SCWP-01 — Portable platform and deployment foundation
 
+The Debian/Ubuntu real-host steps retained in this document describe a future
+Tier 2 promotion path. For the current implementation, only QNAP live gates and
+the single-manager Ubuntu Swarm regressions are required; automated fixtures
+keep the shared standard-Linux adapter flexible meanwhile.
+
 ### Outcome
 
 QNAP and standard Linux use one versioned platform/capability contract. QNAP's
@@ -242,9 +247,10 @@ host-side guided workflow. The browser remains read-only guidance.
 
 `SCWP-03A` has passed its automated implementation gate and its QNAP and Swarm
 operator gates. See the [QNAP evidence](SCWP_03A_QNAP_EVIDENCE.md) and
-[Swarm regression evidence](SCWP_03A_SWARM_REGRESSION.md). `SCWP-03B` and
-`SCWP-03C` have not started, and standalone Debian/Ubuntu real-host acceptance
-remains pending.
+[Swarm regression evidence](SCWP_03A_SWARM_REGRESSION.md). `SCWP-03B` has
+passed its automated implementation gate and awaits QNAP plus single-manager
+Swarm operator acceptance. `SCWP-03C` has not started. Standalone
+Debian/Ubuntu remains a fixture-tested Tier 2 target until a host is available.
 
 ### `swarm-info` ownership
 
@@ -299,7 +305,8 @@ remains pending.
 
 ### Manual gate
 
-On QNAP and Debian/Ubuntu, using the disposable acceptance fixture:
+On QNAP, using the repository-owned acceptance workflow and a disposable
+fixture wherever mutation is tested:
 
 - Select one vulnerable first-party or locally built image and one third-party
   image.
@@ -312,6 +319,10 @@ On QNAP and Debian/Ubuntu, using the disposable acceptance fixture:
   perform an accepted test update with backup, post-check, and rollback evidence.
 - Confirm API/UI expose results but cannot invoke Docker mutations.
 
+The same host-side evidence commands and standard-Linux adapter remain covered
+by automated fixtures for a future non-Swarm Debian/Ubuntu acceptance run, but
+that unavailable host is not a checkpoint for the current implementation.
+
 On the Swarm manager:
 
 - Repeat the established mapping, image-assessment, guided remedy, cleanup
@@ -319,8 +330,7 @@ On the Swarm manager:
 
 ### Commit and evidence gate
 
-- Final evidence links QNAP, Debian/Ubuntu, and Swarm accepted commits and
-  sanitized outputs.
+- Final evidence links QNAP and Swarm accepted commits and sanitized outputs.
 - The final matrix must have no unexplained pending Tier 1 rows.
 - Any unsupported capability remains explicit rather than being counted clean.
 

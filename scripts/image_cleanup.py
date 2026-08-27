@@ -25,6 +25,9 @@ from scripts.vulnerability_scan import CommandResult, DockerClient
 from scripts.vulnerability_scout import sanitize_command_error
 
 
+CLEANUP_HISTORY_LIMIT = 20
+
+
 @dataclasses.dataclass(frozen=True)
 class LocalImage:
     """One exact image artifact currently stored by the local Docker daemon."""
@@ -368,28 +371,49 @@ def build_cleanup_report(
     removed: Sequence[str] = (),
     already_absent: Sequence[str] = (),
     removal_errors: Mapping[str, str] | None = None,
+    *,
+    mode: str = "preview",
+    status: str = "preview",
+    previous_report: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Serialize cleanup evidence and optional apply results."""
+    """Serialize cleanup preview, latest result, and bounded prior history."""
 
     errors = dict(removal_errors or {})
+    generated_at = utc_timestamp()
+    summary = {
+        "local_images": len(inventory.images),
+        "protected_images": len(inventory.protected_image_ids),
+        "candidate_images": len(inventory.candidates),
+        "candidate_virtual_size_upper_bound_bytes": sum(
+            image.size for image in inventory.candidates
+        ),
+        "removed_images": len(removed),
+        "already_absent_images": len(already_absent),
+        "failed_removals": len(errors),
+    }
+    last_result = {
+        "completed_at": generated_at,
+        "mode": mode,
+        "status": status,
+        "candidate_images": summary["candidate_images"],
+        "candidate_virtual_size_upper_bound_bytes": summary[
+            "candidate_virtual_size_upper_bound_bytes"
+        ],
+        "removed_images": summary["removed_images"],
+        "already_absent_images": summary["already_absent_images"],
+        "failed_removals": summary["failed_removals"],
+    }
+    history = cleanup_history(previous_report)
+    history.append(last_result)
+    history = history[-CLEANUP_HISTORY_LIMIT:]
     return {
         "schema_version": 2,
-        "generated_at": utc_timestamp(),
+        "generated_at": generated_at,
         "coverage": "current-docker-node-only",
         "runtime": inventory.runtime,
         "apply_allowed": inventory.apply_allowed,
         "blockers": list(inventory.blockers),
-        "summary": {
-            "local_images": len(inventory.images),
-            "protected_images": len(inventory.protected_image_ids),
-            "candidate_images": len(inventory.candidates),
-            "candidate_virtual_size_upper_bound_bytes": sum(
-                image.size for image in inventory.candidates
-            ),
-            "removed_images": len(removed),
-            "already_absent_images": len(already_absent),
-            "failed_removals": len(errors),
-        },
+        "summary": summary,
         "service_references": list(inventory.service_references),
         "candidates": [image.to_dict() for image in inventory.candidates],
         "action": {
@@ -397,7 +421,80 @@ def build_cleanup_report(
             "already_absent_image_ids": list(already_absent),
             "removal_errors": errors,
         },
+        "last_result": last_result,
+        "history": history,
     }
+
+
+def cleanup_history(
+    previous_report: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Recover only count-only result entries from one previous report."""
+
+    if not isinstance(previous_report, Mapping):
+        return []
+    raw_history = previous_report.get("history")
+    if not isinstance(raw_history, list):
+        raw_last_result = previous_report.get("last_result")
+        raw_history = [raw_last_result] if isinstance(raw_last_result, Mapping) else []
+    history: list[dict[str, Any]] = []
+    for raw in raw_history[-CLEANUP_HISTORY_LIMIT:]:
+        if not isinstance(raw, Mapping):
+            continue
+        completed_at = raw.get("completed_at")
+        mode = raw.get("mode")
+        status = raw.get("status")
+        counts = {
+            key: raw.get(key)
+            for key in (
+                "candidate_images",
+                "candidate_virtual_size_upper_bound_bytes",
+                "removed_images",
+                "already_absent_images",
+                "failed_removals",
+            )
+        }
+        if (
+            not isinstance(completed_at, str)
+            or mode not in {"preview", "apply"}
+            or status
+            not in {
+                "preview",
+                "no-candidates",
+                "cancelled",
+                "blocked",
+                "applied",
+                "partial",
+            }
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 0
+                for value in counts.values()
+            )
+        ):
+            continue
+        history.append(
+            {
+                "completed_at": completed_at[:64],
+                "mode": mode,
+                "status": status,
+                **counts,
+            }
+        )
+    return history
+
+
+def load_previous_report(path: Path | None) -> Mapping[str, Any] | None:
+    """Read a prior cleanup report only for bounded result-history retention."""
+
+    if path is None or not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, Mapping) else None
 
 
 def display_inventory(inventory: CleanupInventory) -> None:
@@ -507,14 +604,26 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     options = parse_arguments(arguments)
     client = DockerClient()
+    previous_report = load_previous_report(options.output_file)
     try:
         inventory = discover_cleanup_inventory(client)
     except ImageCleanupError as error:
         print(f"[ERROR] Image cleanup inventory failed: {error}", file=sys.stderr)
         return 3
     display_inventory(inventory)
-    report = build_cleanup_report(inventory)
     if not options.apply or not inventory.candidates:
+        report = build_cleanup_report(
+            inventory,
+            mode="apply" if options.apply else "preview",
+            status=(
+                "blocked"
+                if options.apply and not inventory.apply_allowed
+                else "no-candidates"
+                if not inventory.candidates
+                else "preview"
+            ),
+            previous_report=previous_report,
+        )
         if options.output_file and not publish_report(options.output_file, report):
             return 3
         if inventory.candidates:
@@ -524,9 +633,25 @@ def main(arguments: Sequence[str] | None = None) -> int:
             return 3
         return 0
     if not inventory.apply_allowed:
+        report = build_cleanup_report(
+            inventory,
+            mode="apply",
+            status="blocked",
+            previous_report=previous_report,
+        )
+        if options.output_file and not publish_report(options.output_file, report):
+            return 3
         return 3
     if not options.yes and not confirm_removal(len(inventory.candidates)):
         print("[INFO] Cleanup cancelled; no images were removed.")
+        report = build_cleanup_report(
+            inventory,
+            mode="apply",
+            status="cancelled",
+            previous_report=previous_report,
+        )
+        if options.output_file and not publish_report(options.output_file, report):
+            return 3
         return 0
 
     approved_ids = frozenset(image.image_id for image in inventory.candidates)
@@ -555,6 +680,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
         removed=removed,
         already_absent=already_absent,
         removal_errors=failures,
+        mode="apply",
+        status="partial" if failures else "applied",
+        previous_report=previous_report,
     )
     if options.output_file and not publish_report(options.output_file, report):
         return 3

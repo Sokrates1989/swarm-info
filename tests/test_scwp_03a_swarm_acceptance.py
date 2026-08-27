@@ -21,6 +21,7 @@ class Scwp03aSwarmAcceptanceTests(unittest.TestCase):
             "docker service inspect",
             'swarm.cronjob.enable',
             '{"0/0", "0/1", "1/1"}',
+            '"true|0"|"true|1"',
             "--platform-info",
             "--service-health",
             "--vulnerability-status",

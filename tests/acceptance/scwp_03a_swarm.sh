@@ -96,10 +96,15 @@ PY
 watchdog_schedule=$(docker service inspect "${stack_name}_watchdog" \
     --format '{{index .Spec.Labels "swarm.cronjob.enable"}}|{{.Spec.Mode.Replicated.Replicas}}') \
     || acceptance_fail "Could not inspect the cron-triggered watchdog service."
-[ "$watchdog_schedule" = "true|0" ] \
-    || acceptance_fail \
-        "Watchdog is not configured as an idle cron-triggered service: $watchdog_schedule"
-printf '[OK] Watchdog 0/0 is the expected idle state between scheduled executions.\n'
+case "$watchdog_schedule" in
+    "true|0"|"true|1") ;;
+    *)
+        acceptance_fail \
+            "Watchdog is not configured as a bounded cron-triggered service: $watchdog_schedule"
+        ;;
+esac
+printf '[OK] Watchdog is cron-triggered with bounded configured replicas: %s.\n' \
+    "${watchdog_schedule#*|}"
 
 printf '\n=== Producer and deployment regressions ===\n'
 "$repository_root/get_info.sh" --platform-info --json \

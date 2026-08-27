@@ -381,6 +381,7 @@ class CliOperatorContractTests(unittest.TestCase):
         self.assertIn("-m scripts.image_update_assessment_cli", bridge)
         self.assertIn("--candidate-report-file", bridge)
         self.assertIn("--vulnerability-report-file", bridge)
+        self.assertIn('--os "$SECURITY_HOST_OS"', bridge)
 
     def test_qnap_report_discovery_and_page_routing_are_mode_aware(self) -> None:
         """Prefer QNAP evidence and never open Swarm remediation for containers."""

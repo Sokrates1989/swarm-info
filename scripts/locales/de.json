@@ -381,6 +381,8 @@
   "imageAssessment.service": "- {service}: entfernt {critical} kritisch, {high} hoch -> {candidate} | {compatibility}",
   "imageAssessment.moreServices": "  ... sowie {count} weitere Dienste; Details stehen im JSON-Bericht.",
   "imageAssessment.incomplete": "[UNVOLLSTÄNDIG] Teilergebnisse bleiben erhalten, fehlende Ermittlungs- oder Scannachweise dürfen jedoch nicht als sauber gelten.",
+  "imageAssessment.scanFailure": "Fehlgeschlagener Kandidat {reference}: {detail}",
+  "imageAssessment.moreScanFailures": "... sowie {count} weitere fehlgeschlagene Kandidatenscans; Details stehen im JSON-Bericht.",
   "imageAssessment.discoveryRetry": "Kandidatenermittlung zuerst vervollständigen: swarm-info --discover-image-updates {approvals} --output-file /info_json/image_update_candidates.json",
   "imageAssessment.authorization": "Kein Kandidat ist für ein Deployment autorisiert. Vor einer Dienständerung Kompatibilität, Sicherungsbedarf und die zugehörige Deployment-Quelle prüfen.",
   "imageAssessment.report": "Atomarer Bewertungsbericht: {path}",

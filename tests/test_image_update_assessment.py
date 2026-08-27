@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -10,8 +11,15 @@ from scripts.image_update_assessment import (
     ImageUpdateAssessmentError,
     assess_image_updates,
 )
-from scripts.image_update_assessment_cli import _source_vulnerability_report_path
+from scripts.image_update_assessment_cli import (
+    _prepare_scout_client,
+    _render_incomplete,
+    _source_vulnerability_report_path,
+)
+from scripts.operator_report import load_messages
+from scripts.terminal_style import TerminalStyle
 from scripts.vulnerability_models import ImageScanResult
+from scripts.vulnerability_scan import DockerClient
 
 
 CURRENT_ONE_DIGEST = "sha256:" + "1" * 64
@@ -456,6 +464,55 @@ class ImageUpdateAssessmentTests(unittest.TestCase):
             _source_vulnerability_report_path({}, Path("candidates.json"), None)
 
         self.assertEqual(raised.exception.code, "source-path-missing")
+
+    def test_qnap_assessment_moves_scout_work_out_of_system_tmp(self) -> None:
+        """Apply the QNAP adapter before immutable candidate scans start."""
+
+        with TemporaryDirectory() as directory:
+            environment = {"HOME": directory}
+            client = DockerClient(
+                command_prefix=("fake-docker",),
+                environment=environment,
+                scout_command_prefix=("fake-scout",),
+            )
+
+            prepared = _prepare_scout_client(client, "qnap", environment)
+
+            work_root = Path(directory) / ".cache/swarm-info/docker-scout"
+            self.assertEqual(prepared.environment["TMPDIR"], str(work_root / "tmp"))
+            self.assertEqual(
+                prepared.environment["DOCKER_SCOUT_CACHE_DIR"],
+                str(work_root / "cache"),
+            )
+            self.assertTrue((work_root / "tmp").is_dir())
+            self.assertTrue((work_root / "cache").is_dir())
+
+    def test_incomplete_output_includes_sanitized_candidate_failure(self) -> None:
+        """Make retained candidate-scan diagnostics visible to the operator."""
+
+        output = StringIO()
+        report = {
+            "complete": False,
+            "errors": [
+                {
+                    "status": "candidate-scan-failed",
+                    "reference": CANDIDATE_REFERENCE,
+                    "detail": "Registry scan failed: no space left on device",
+                }
+            ],
+            "required_registry_hosts": [],
+        }
+
+        _render_incomplete(
+            report,
+            load_messages("en"),
+            TerminalStyle(output),
+            output,
+        )
+
+        rendered = output.getvalue()
+        self.assertIn(CANDIDATE_REFERENCE, rendered)
+        self.assertIn("no space left on device", rendered)
 
 
 if __name__ == "__main__":

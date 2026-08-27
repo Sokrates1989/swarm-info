@@ -20,10 +20,26 @@ from scripts.operator_report import (
     safe_text,
     selected_locale,
 )
+from scripts.platforms import HOST_OS_MODES, detect_host_os, platform_adapter_for
 from scripts.terminal_style import TerminalStyle
 from scripts.vulnerability_job import ScanLock
 from scripts.vulnerability_models import write_json_atomic
 from scripts.vulnerability_scan import DEFAULT_PLATFORM, DockerClient, platform_argument
+
+
+def _prepare_scout_client(
+    client: DockerClient,
+    host_os_mode: str,
+    environment: Mapping[str, str],
+) -> DockerClient:
+    """Apply host-adapter storage settings before candidate Scout scans."""
+
+    host_os = detect_host_os(host_os_mode)
+    prepared_client, _ = platform_adapter_for(host_os).prepare_scout_client(
+        client,
+        environment,
+    )
+    return prepared_client
 
 
 def _preferred_file(name: str, fallback: Path) -> Path:
@@ -212,6 +228,33 @@ def _render_incomplete(
         return
     print(file=output)
     print(style.warning(message(catalog, "imageAssessment.incomplete")), file=output)
+    scan_errors = [
+        error
+        for error in report.get("errors", [])
+        if isinstance(error, Mapping)
+        and error.get("status") == "candidate-scan-failed"
+    ]
+    for error in scan_errors[:3]:
+        print(
+            style.warning(
+                message(
+                    catalog,
+                    "imageAssessment.scanFailure",
+                    reference=safe_text(error.get("reference", "unknown")),
+                    detail=safe_text(error.get("detail", "unknown")),
+                )
+            ),
+            file=output,
+        )
+    if len(scan_errors) > 3:
+        print(
+            message(
+                catalog,
+                "imageAssessment.moreScanFailures",
+                count=len(scan_errors) - 3,
+            ),
+            file=output,
+        )
     required_hosts = report.get("required_registry_hosts", [])
     if required_hosts:
         approvals = " ".join(
@@ -263,6 +306,7 @@ def parse_arguments(
     )
     parser.add_argument("--output-file", type=Path, default=_default_output_file())
     parser.add_argument("--platform", type=platform_argument, default=DEFAULT_PLATFORM)
+    parser.add_argument("--os", choices=HOST_OS_MODES, default="auto", dest="host_os")
     parser.add_argument("--lock-file", type=Path)
     parser.add_argument("--locale", choices=SUPPORTED_LOCALES)
     return parser.parse_args(arguments)
@@ -302,12 +346,17 @@ def main(arguments: Sequence[str] | None = None) -> int:
             2,
             "vulnerability-report",
         )
+        client = _prepare_scout_client(
+            DockerClient(),
+            options.host_os,
+            os.environ,
+        )
         outcome = assess_image_updates(
             candidate_report,
             options.candidate_report_file,
             vulnerability_report,
             vulnerability_report_path,
-            DockerClient(),
+            client,
             options.platform,
             progress=_progress_presenter(catalog),
         )

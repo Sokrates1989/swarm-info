@@ -381,6 +381,8 @@
   "imageAssessment.service": "- {service}: removes {critical} critical, {high} high -> {candidate} | {compatibility}",
   "imageAssessment.moreServices": "  ... and {count} more service(s); see the JSON report.",
   "imageAssessment.incomplete": "[INCOMPLETE] Partial results are retained, but missing discovery or scan evidence must not be treated as clean.",
+  "imageAssessment.scanFailure": "Failed candidate {reference}: {detail}",
+  "imageAssessment.moreScanFailures": "... and {count} more failed candidate scan(s); see the JSON report.",
   "imageAssessment.discoveryRetry": "Complete candidate discovery first: swarm-info --discover-image-updates {approvals} --output-file /info_json/image_update_candidates.json",
   "imageAssessment.authorization": "No candidate is authorized for deployment. Review compatibility, backup needs, and the owning deployment source before changing a service.",
   "imageAssessment.report": "Atomic assessment report: {path}",

@@ -225,7 +225,7 @@ def collect_service_references(client: DockerClient) -> tuple[str, ...]:
 
     service_ids = list_identifiers(
         client,
-        ["service", "ls", "--quiet", "--no-trunc"],
+        ["service", "ls", "--quiet"],
         "Docker service inventory failed",
     )
     references: set[str] = set()

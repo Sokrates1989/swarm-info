@@ -97,7 +97,7 @@ class FakeCleanupClient:
             return CommandResult(0, "container-a\n", "")
         if command == ["container", "inspect", "container-a"]:
             return CommandResult(0, json.dumps([{"Image": IMAGE_A}]), "")
-        if command == ["service", "ls", "--quiet", "--no-trunc"]:
+        if command == ["service", "ls", "--quiet"]:
             return CommandResult(0, "service-scaled\n", "")
         if command == ["service", "inspect", "service-scaled"]:
             payload = {
@@ -234,6 +234,10 @@ class ImageCleanupTests(unittest.TestCase):
         )
         self.assertEqual(
             [image.image_id for image in inventory.candidates], [IMAGE_C]
+        )
+        self.assertIn(["service", "ls", "--quiet"], client.commands)
+        self.assertNotIn(
+            ["service", "ls", "--quiet", "--no-trunc"], client.commands
         )
 
     def test_standalone_protects_all_container_images(self) -> None:

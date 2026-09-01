@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "targets": [
+    {
+      "id": "example-web-update",
+      "enabled": false,
+      "match": {
+        "compose_service": "example/web",
+        "repository": "registry.example/example/web"
+      },
+      "candidate_image": "registry.example/example/web:1.1.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "backup": {
+        "status": "ready",
+        "reason": "Persistent data backup and restore procedure were verified."
+      },
+      "source": {
+        "type": "yaml_image",
+        "file": "compose.yml"
+      },
+      "verification": {
+        "timeout_seconds": 300
+      }
+    }
+  ]
+}

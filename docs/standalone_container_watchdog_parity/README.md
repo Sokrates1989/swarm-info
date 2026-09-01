@@ -3,7 +3,8 @@
 **Plan ID:** `SCWP`
 
 **Status:** SCWP-03A and SCWP-03B implementation plus QNAP/Swarm operator
-acceptance complete; SCWP-03C remains pending
+acceptance complete; SCWP-03C implementation and automated regression complete,
+with QNAP/Swarm operator acceptance pending
 
 **Scope:** `swarm-info`, `swarm-info-watchdog`, and their standalone-container
 deployment contract

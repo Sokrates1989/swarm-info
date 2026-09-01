@@ -420,5 +420,22 @@
   "runtimeHardening.help.description": "Audit local Docker container hardening without changing Docker.",
   "runtimeHardening.error": "[ERROR] Runtime-hardening audit failed: {detail}",
   "runtimeHardening.result": "Runtime-hardening audit: {audited} audited, {affected} affected, {findings} finding(s).",
-  "runtimeHardening.report": "[OK] Runtime-hardening evidence: {path}"
+  "runtimeHardening.report": "[OK] Runtime-hardening evidence: {path}",
+  "composeRemediation.description": "Plan or explicitly confirm one policy-approved Compose image update.",
+  "composeRemediation.error.mutuallyExclusive": "--apply and --rollback are mutually exclusive.",
+  "composeRemediation.error.required": "--report-file, --remediation-policy, and --compose-service are required.",
+  "composeRemediation.error.timeout": "--scout-timeout-minutes must be greater than zero.",
+  "composeRemediation.confirm.backup": "Confirm workload backups and candidate compatibility are ready",
+  "composeRemediation.confirm.apply": "Apply the reviewed update to {selector}",
+  "composeRemediation.confirm.rollback": "Rollback {selector}",
+  "composeRemediation.promptSuffix": " [y/N] ",
+  "composeRemediation.affirmative": "y,yes",
+  "composeRemediation.diffTitle": "Reviewed Compose source diff",
+  "composeRemediation.dryRunPassed": "[OK] Dry-run validated: {path}",
+  "composeRemediation.noChange": "[INFO] No Compose source or container was changed.",
+  "composeRemediation.noUpdate": "[INFO] No update was applied.",
+  "composeRemediation.updatePassed": "[OK] Compose update and focused post-check passed: {path}",
+  "composeRemediation.rollbackAvailable": "[INFO] Rollback remains available with --rollback-compose-remediation --remediation-plan-file {path}",
+  "composeRemediation.rollbackPassed": "[OK] Rollback confirmed: {path}",
+  "composeRemediation.error": "[ERROR] Compose remediation stopped safely ({code}){detail}"
 }

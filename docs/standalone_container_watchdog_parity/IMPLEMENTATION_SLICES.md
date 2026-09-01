@@ -249,9 +249,11 @@ host-side guided workflow. The browser remains read-only guidance.
 operator gates. See the [QNAP evidence](SCWP_03A_QNAP_EVIDENCE.md) and
 [Swarm regression evidence](SCWP_03A_SWARM_REGRESSION.md). `SCWP-03B` has also
 passed its automated, [QNAP](SCWP_03B_QNAP_EVIDENCE.md), and
-[single-manager Swarm](SCWP_03B_SWARM_REGRESSION.md) gates. `SCWP-03C` has not
-started. Standalone Debian/Ubuntu remains a fixture-tested Tier 2 target until
-a host is available.
+[single-manager Swarm](SCWP_03B_SWARM_REGRESSION.md) gates. `SCWP-03C` has
+passed its implementation and automated regression gate; its disposable QNAP
+Compose transaction and single-manager Swarm operator gates remain pending.
+Standalone Debian/Ubuntu remains a fixture-tested Tier 2 target until a host is
+available.
 
 ### `swarm-info` ownership
 

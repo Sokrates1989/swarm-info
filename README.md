@@ -533,6 +533,49 @@ same remediation workflow directly with:
 swarm-info --remediate-vulnerabilities --deploy-root /swarm
 ```
 
+On a standalone Compose host, mutation is available only through a separate,
+installation-owned policy and an exact focused report. First publish focused
+evidence for one digest-pinned Compose service:
+
+```bash
+swarm-info --security-check \
+  --compose-service my-project/web \
+  --os auto \
+  --output-file "$HOME/.local/state/swarm-info/web-focused.json"
+```
+
+Then review a non-mutating transaction plan. This validates the immutable
+same-repository candidate, exact Docker-retained working directory and config
+file list, the zero-context source diff, and a temporary rendered Compose
+configuration:
+
+```bash
+swarm-info --compose-remediation \
+  --compose-service my-project/web \
+  --vulnerability-report-file "$HOME/.local/state/swarm-info/web-focused.json" \
+  --remediation-policy "$HOME/.config/swarm-info/compose-remediation-policy.json" \
+  --remediation-plan-file "$HOME/.local/state/swarm-info/web-remediation.json"
+```
+
+Add `--apply` only after reviewing the plan. The command asks two default-No
+questions, creates an owner-only exact-byte source backup, recreates only the
+selected service, verifies the candidate local image ID, and publishes a fresh
+focused post-check. It automatically attempts rollback after any failure that
+follows the source edit. A successful transaction remains explicitly
+reversible:
+
+```bash
+swarm-info --rollback-compose-remediation \
+  --remediation-plan-file "$HOME/.local/state/swarm-info/web-remediation.json"
+```
+
+Current Compose source must itself be digest-pinned so rollback can reproduce
+the prior registry artifact exactly. The selected YAML source must be one of
+the paths retained in `com.docker.compose.project.config_files`; no path is
+guessed. `--yes` is intentionally unsupported. See
+[`config/compose-remediation-policy.example.json.md`](config/compose-remediation-policy.example.json.md)
+for the standalone policy contract.
+
 View the version-matched command reference with `swarm-info --help` or
 `man swarm-info`.
 

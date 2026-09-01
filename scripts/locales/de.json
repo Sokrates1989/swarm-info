@@ -420,5 +420,22 @@
   "runtimeHardening.help.description": "Lokale Docker-Container-Härtung prüfen, ohne Docker zu verändern.",
   "runtimeHardening.error": "[FEHLER] Laufzeit-Härtungsprüfung fehlgeschlagen: {detail}",
   "runtimeHardening.result": "Laufzeit-Härtungsprüfung: {audited} geprüft, {affected} betroffen, {findings} Befund(e).",
-  "runtimeHardening.report": "[OK] Laufzeit-Härtungsnachweis: {path}"
+  "runtimeHardening.report": "[OK] Laufzeit-Härtungsnachweis: {path}",
+  "composeRemediation.description": "Ein richtliniengenehmigtes Compose-Image-Update planen oder ausdrücklich bestätigen.",
+  "composeRemediation.error.mutuallyExclusive": "--apply und --rollback schließen sich gegenseitig aus.",
+  "composeRemediation.error.required": "--report-file, --remediation-policy und --compose-service sind erforderlich.",
+  "composeRemediation.error.timeout": "--scout-timeout-minutes muss größer als null sein.",
+  "composeRemediation.confirm.backup": "Bestätigen, dass Workload-Sicherungen und Kandidatenkompatibilität bereit sind",
+  "composeRemediation.confirm.apply": "Das geprüfte Update auf {selector} anwenden",
+  "composeRemediation.confirm.rollback": "{selector} zurücksetzen",
+  "composeRemediation.promptSuffix": " [j/N] ",
+  "composeRemediation.affirmative": "j,ja,y,yes",
+  "composeRemediation.diffTitle": "Geprüfter Compose-Quelldiff",
+  "composeRemediation.dryRunPassed": "[OK] Trockenlauf validiert: {path}",
+  "composeRemediation.noChange": "[INFO] Keine Compose-Quelle und kein Container wurden geändert.",
+  "composeRemediation.noUpdate": "[INFO] Es wurde kein Update angewendet.",
+  "composeRemediation.updatePassed": "[OK] Compose-Update und gezielte Nachprüfung erfolgreich: {path}",
+  "composeRemediation.rollbackAvailable": "[INFO] Rollback bleibt verfügbar mit --rollback-compose-remediation --remediation-plan-file {path}",
+  "composeRemediation.rollbackPassed": "[OK] Rollback bestätigt: {path}",
+  "composeRemediation.error": "[FEHLER] Compose-Behebung wurde sicher beendet ({code}){detail}"
 }

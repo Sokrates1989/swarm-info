@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "August 2026" "swarm-info 1.18.0" "User Commands"
+.TH SWARM-INFO 1 "September 2026" "swarm-info 1.19.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -47,6 +47,26 @@ and update confirmations. All other items remain blocked until reviewed policy
 targets authorize them. No mutation is available without a terminal, fresh
 complete scan, current manager access, exact rollback evidence, and separate
 confirmations.
+.TP
+.B \-\-compose-remediation
+Plan one installation-policy-approved standalone Compose service image update.
+The command requires an exact
+.B PROJECT/SERVICE
+selector, a complete focused local-container report, a digest-pinned current
+image, an immutable same-repository candidate, and an exact source file retained
+in Docker Compose labels. The default is a non-mutating diff and temporary
+.B docker compose config
+validation. With
+.BR \-\-apply ,
+two default-No confirmations precede an owner-only source backup, service-only
+recreation, exact local image-ID convergence, and a fresh focused security scan.
+Any failure after the source edit attempts automatic restoration of both source
+and the prior artifact.
+.TP
+.B \-\-rollback-compose-remediation
+Restore the source backup and exact prior image recorded by one successful
+Compose remediation plan. Rollback requires a default-No confirmation and
+revalidates rendered Compose configuration plus exact image convergence.
 .PP
 Targeted guidance first asks the operator to open a second terminal. It runs
 read-only Scout and image-metadata checks with a progress heartbeat. Standard
@@ -113,7 +133,10 @@ service visibility.
 .B \-\-apply
 With
 .BR \-\-image-cleanup ,
-request removal after a default-No confirmation and a fresh safety inventory.
+request removal after a default-No confirmation and a fresh safety inventory;
+with
+.BR \-\-compose-remediation ,
+request the separately confirmed guarded Compose transaction.
 Parent chains needed by protected images remain protected. Approved unused
 branches are removed child-first, dependency conflicts are retried after
 progress, and multi-tag images require an exact tag-to-image recheck before
@@ -156,6 +179,9 @@ candidate images, backup classifications, and optional source adapters. In
 automatic mode, a missing selected file is created with no active targets and
 an inert generated review queue. Without this option or its environment
 equivalent, swarm-info uses a deployment-local or user-scoped default.
+Standalone Compose remediation uses its separate schema with exact
+.B PROJECT/SERVICE
+ownership; see the repository example.
 .TP
 .BI \-\-remediation-plan-file " path"
 Select the atomically written dry-run plan and sanitized execution record.

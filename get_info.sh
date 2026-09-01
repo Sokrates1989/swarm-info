@@ -30,6 +30,7 @@ MAIN_DIR="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
 source "$SCRIPT_DIR/functions.sh"
 source "$SCRIPT_DIR/vulnerability_cli.sh"
 source "$SCRIPT_DIR/image_cleanup_cli.sh"
+source "$SCRIPT_DIR/compose_remediation_cli.sh"
 source "$SCRIPT_DIR/runtime_hardening_cli.sh"
 source "$SCRIPT_DIR/operator_cli.sh"
 
@@ -427,7 +428,7 @@ display_help() {
     echo -e "  --history-days    Vulnerability report retention days (default: 14)"
     echo -e "  -i                Alias for --image-cleanup"
     echo -e "  --image-cleanup   Review unused local images without deleting by default"
-    echo -e "  --apply           With --image-cleanup, request confirmed removal"
+    echo -e "  --apply           $OP_HELP_APPLY"
     echo -e "  --yes             With --image-cleanup --apply, confirm non-interactively"
     echo -e "  --force-auto-remedy-attempt"
     echo -e "                    $OP_HELP_FORCE_REMEDY"
@@ -519,6 +520,10 @@ display_help() {
     echo -e "  --vulnerabilities $OP_HELP_VULNERABILITIES"
     echo -e "  --remediate-vulnerabilities"
     echo -e "                    $OP_HELP_REMEDIATE"
+    echo -e "  --compose-remediation"
+    echo -e "                    $OP_HELP_COMPOSE_REMEDIATION"
+    echo -e "  --rollback-compose-remediation"
+    echo -e "                    $OP_HELP_COMPOSE_ROLLBACK"
     echo -e "  --remediation-policy"
     echo -e "                    $OP_HELP_REMEDIATION_POLICY"
     echo -e "  --remediation-plan-file"
@@ -537,6 +542,7 @@ display_help() {
     echo "  swarm-info --security-check --image-id sha256:<64-HEX-DIGITS> --os=qnap"
     echo "  swarm-info --security-check --compose-project qnap-app --os=qnap"
     echo "  swarm-info --security-check --compose-service qnap-app/web --os=qnap"
+    echo "  swarm-info --compose-remediation --compose-service qnap-app/web --vulnerability-report-file focused.json --remediation-policy compose-policy.json --remediation-plan-file compose-plan.json"
     echo "  swarm-info -i"
     echo "  swarm-info -i --apply"
     echo "  swarm-info --map-service-deployments --deploy-root /swarm"
@@ -602,6 +608,7 @@ FORCE_AUTO_REMEDY_ATTEMPT="false"
 ALLOW_RUNTIME_OVERRIDE="false"
 IMAGE_CLEANUP_APPLY="false"
 IMAGE_CLEANUP_ASSUME_YES="false"
+REQUEST_APPLY="false"
 IMAGE_UPDATE_CURRENT_IMAGE=""
 IMAGE_UPDATE_CANDIDATE_IMAGE=""
 IMAGE_UPDATE_REPORT_FILE="NONE"
@@ -736,7 +743,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --apply)
-            IMAGE_CLEANUP_APPLY="true"
+            REQUEST_APPLY="true"
             shift
             ;;
         --yes)
@@ -1071,6 +1078,14 @@ while [ $# -gt 0 ]; do
             selected_action="remediate-vulnerabilities"
             shift
             ;;
+        --compose-remediation)
+            selected_action="compose-remediation"
+            shift
+            ;;
+        --rollback-compose-remediation)
+            selected_action="rollback-compose-remediation"
+            shift
+            ;;
         --remediation-policy)
             if [ "$#" -lt 2 ]; then
                 echo -e "Missing value for $1" >&2
@@ -1144,14 +1159,23 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if [ "$IMAGE_CLEANUP_ASSUME_YES" = "true" ] && [ "$IMAGE_CLEANUP_APPLY" != "true" ]; then
+if [ "$IMAGE_CLEANUP_ASSUME_YES" = "true" ] && [ "$REQUEST_APPLY" != "true" ]; then
     echo "[ERROR] --yes requires --apply." >&2
     exit 64
 fi
-if { [ "$IMAGE_CLEANUP_APPLY" = "true" ] || [ "$IMAGE_CLEANUP_ASSUME_YES" = "true" ]; } \
+if [ "$IMAGE_CLEANUP_ASSUME_YES" = "true" ] \
     && [ "$selected_action" != "image-cleanup" ]; then
-    echo "[ERROR] --apply and --yes are valid only with --image-cleanup." >&2
+    echo "$OP_COMPOSE_YES_SCOPE" >&2
     exit 64
+fi
+if [ "$REQUEST_APPLY" = "true" ] \
+    && [ "$selected_action" != "image-cleanup" ] \
+    && [ "$selected_action" != "compose-remediation" ]; then
+    echo "$OP_APPLY_SCOPE" >&2
+    exit 64
+fi
+if [ "$selected_action" = "image-cleanup" ]; then
+    IMAGE_CLEANUP_APPLY="$REQUEST_APPLY"
 fi
 if [ "$SECURITY_CRON_RUNTIME_USER" != "NONE" ] \
     && [ "$selected_action" != "install-security-cron" ]; then
@@ -1182,7 +1206,8 @@ elif { [ "${#IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS[@]}" -gt 0 ] \
     exit 64
 elif [ "$IMAGE_UPDATE_REPORT_FILE" != "NONE" ] \
     && [ "$selected_action" != "discover-image-updates" ] \
-    && [ "$selected_action" != "assess-image-updates" ]; then
+    && [ "$selected_action" != "assess-image-updates" ] \
+    && [ "$selected_action" != "compose-remediation" ]; then
     echo "$OP_IMAGE_REPORT_OPTION_SCOPE" >&2
     exit 64
 elif [ "$IMAGE_UPDATE_CANDIDATE_REPORT_FILE" != "NONE" ] \
@@ -1195,7 +1220,8 @@ elif [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
     exit 64
 fi
 if [ "$SECURITY_FOCUS_KIND" != "all" ]; then
-    if [ "$selected_action" != "security-check" ]; then
+    if [ "$selected_action" != "security-check" ] \
+        && [ "$selected_action" != "compose-remediation" ]; then
         echo "$OP_SECURITY_FOCUS_REQUIRES_CHECK" >&2
         exit 64
     fi
@@ -1204,6 +1230,19 @@ if [ "$SECURITY_FOCUS_KIND" != "all" ]; then
         exit 64
     fi
     SECURITY_RUNTIME_MODE="containers"
+fi
+if [ "$selected_action" = "compose-remediation" ]; then
+    if [ "$SECURITY_FOCUS_KIND" != "compose-service" ] \
+        || [ "$IMAGE_UPDATE_REPORT_FILE" = "NONE" ] \
+        || [ "$REMEDIATION_POLICY_FILE" = "NONE" ]; then
+        echo "$OP_COMPOSE_REQUIRED" >&2
+        exit 64
+    fi
+fi
+if [ "$selected_action" = "rollback-compose-remediation" ] \
+    && [ "$REMEDIATION_PLAN_FILE" = "NONE" ]; then
+    echo "$OP_COMPOSE_ROLLBACK_REQUIRED" >&2
+    exit 64
 fi
 
 if [ "$SECURITY_CONTAINER_SCOPE_EXPLICIT" != "true" ] \
@@ -1259,6 +1298,9 @@ case "$selected_action" in
         ;;
     "remediate-vulnerabilities")
         run_vulnerability_remediation_menu
+        ;;
+    "compose-remediation"|"rollback-compose-remediation")
+        run_compose_remediation
         ;;
     "nodes")
         display_node_info

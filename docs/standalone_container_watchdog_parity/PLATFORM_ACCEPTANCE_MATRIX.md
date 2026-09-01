@@ -74,7 +74,7 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 | --- | --- | --- | --- | --- | --- |
 | `SCWP-01` | Pending | Pending | Tier 2 fixture coverage; live gate deferred | Pending | No |
 | `SCWP-02` | Complete | [Passed (2026-08-25)](SCWP_02_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [Passed (2026-08-26)](SCWP_02_SWARM_REGRESSION.md) | Yes |
-| `SCWP-03` | `03A`/`03B` complete; `03C` pending | [`03A` passed (2026-08-28)](SCWP_03A_QNAP_EVIDENCE.md); `03B` pending | Tier 2 fixture coverage; live gate deferred | [`03A` passed (2026-08-27)](SCWP_03A_SWARM_REGRESSION.md); `03B` pending | No |
+| `SCWP-03` | `03A`/`03B` complete; `03C` pending | [`03A` passed (2026-08-28)](SCWP_03A_QNAP_EVIDENCE.md); [`03B` passed (2026-09-01)](SCWP_03B_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [`03A` passed (2026-08-27)](SCWP_03A_SWARM_REGRESSION.md); [`03B` passed (2026-09-01)](SCWP_03B_SWARM_REGRESSION.md) | No |
 
 ## SCWP-01 checkpoints
 
@@ -173,8 +173,9 @@ The operator accepted the QNAP and Swarm `SCWP-03A` gates. See the
 [QNAP evidence](SCWP_03A_QNAP_EVIDENCE.md) and
 [Swarm regression evidence](SCWP_03A_SWARM_REGRESSION.md). Standalone
 Debian/Ubuntu acceptance is deferred at Tier 2. `SCWP-03B` has passed its
-automated checkpoint and awaits QNAP plus single-manager Swarm operator
-acceptance; `SCWP-03C` remains open.
+automated, [QNAP](SCWP_03B_QNAP_EVIDENCE.md), and
+[single-manager Swarm](SCWP_03B_SWARM_REGRESSION.md) gates; `SCWP-03C` remains
+open.
 
 ### SCWP-03B automated checkpoint
 
@@ -187,6 +188,14 @@ acceptance; `SCWP-03C` remains open.
   dependency was added.
 - [x] Swarm stack templates retain their existing evidence, secret, image, and
   routing boundaries without standalone report mounts.
+
+The QNAP gate published current platform, hardening, and cleanup evidence,
+independently confirmed one sanitized Docker-inspect finding, verified that the
+preview changed no image inventory, and accepted the read-only UI. The Swarm
+gate retained the existing service-native UI and Telegram path while proving
+that standalone hardening and cleanup cards remain absent. See the
+[QNAP evidence](SCWP_03B_QNAP_EVIDENCE.md) and
+[Swarm regression evidence](SCWP_03B_SWARM_REGRESSION.md).
 
 ### Automated
 

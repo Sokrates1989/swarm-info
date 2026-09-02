@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,49 +13,7 @@ import tempfile
 from typing import Sequence
 
 
-BLOCK_BEGIN = "# BEGIN swarm-info managed container security scan"
-BLOCK_END = "# END swarm-info managed container security scan"
 SCHEMA_VERSION = 1
-
-
-def unmanaged_crontab(crontab_text: str) -> str:
-    """Return normalized entries outside the exactly marked managed block."""
-
-    if crontab_text.count(BLOCK_BEGIN) != crontab_text.count(BLOCK_END):
-        raise ValueError("managed cron markers are incomplete")
-    retained: list[str] = []
-    inside_block = False
-    for line in crontab_text.splitlines():
-        if line == BLOCK_BEGIN:
-            if inside_block:
-                raise ValueError("managed cron markers are nested")
-            inside_block = True
-            continue
-        if line == BLOCK_END:
-            if not inside_block:
-                raise ValueError("managed cron markers are out of order")
-            inside_block = False
-            continue
-        if not inside_block:
-            retained.append(line)
-    if inside_block:
-        raise ValueError("managed cron markers are incomplete")
-    while retained and not retained[-1]:
-        retained.pop()
-    return "\n".join(retained) + ("\n" if retained else "")
-
-
-def unmanaged_hash(crontab_text: str) -> str:
-    """Hash normalized unrelated entries without disclosing their contents."""
-
-    content = unmanaged_crontab(crontab_text).encode("utf-8")
-    return hashlib.sha256(content).hexdigest()
-
-
-def crontab_hash(path: Path) -> str:
-    """Read the privileged persistent table and return only its safe hash."""
-
-    return unmanaged_hash(path.read_text(encoding="utf-8"))
 
 
 def write_state(
@@ -128,8 +85,6 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
 
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    hash_parser = commands.add_parser("cron-hash")
-    hash_parser.add_argument("path", type=Path)
     write_parser = commands.add_parser("write-state")
     write_parser.add_argument("path", type=Path)
     write_parser.add_argument("producer_commit")
@@ -145,9 +100,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     options = parse_arguments(arguments)
     try:
-        if options.command == "cron-hash":
-            print(crontab_hash(options.path))
-        elif options.command == "write-state":
+        if options.command == "write-state":
             write_state(
                 options.path,
                 options.producer_commit,

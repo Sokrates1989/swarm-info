@@ -95,24 +95,26 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 
 - [ ] Clean update and platform/dependency output.
 - [ ] Exact local-image full and focused scans.
-- [ ] Persistent schedule install/status/remove without changing unrelated cron.
+- [ ] Persistent schedule install/status/remove/reinstall with complete
+  owned-block checks.
 - [ ] Private report readable by the configured containers without permission
   widening.
 - [ ] Authenticated API/UI and Telegram test delivery.
 - [ ] Existing QNAP acceptance workflow still passes.
 - [ ] Ordered lifecycle succeeds: update → platform/dependency status → schedule
   status → cron restart → status → NAS reboot → status → managed removal →
-  unrelated-cron verification → reinstall.
+  absence verification → complete reinstall.
 
 The ordered lifecycle uses the two-phase `scwp_01_qnap_lifecycle.sh` gate. Its
 prepare phase runs the established producer acceptance, restarts QNAP cron, and
 stores only private phase, user, and producer-commit state. The operator reboots
-the NAS manually. Because QNAP regenerates vendor-owned entries during boot, the
-verify phase checks that the complete managed block survived and then records a
-new checksum baseline for all unrelated entries. Removal and reinstall must
-preserve that post-boot baseline exactly. The prepared commit must be the current
-commit or its ancestor, which permits a forward-only gate fix between phases.
-The gate never prints crontab contents or initiates a reboot.
+the NAS manually. Because QNAP regenerates vendor-owned entries asynchronously,
+the live gate does not compare the whole persistent table. It checks that the
+complete managed block survived, is absent after managed removal, and returns
+intact after reinstall. Deterministic scheduler tests separately prove that the
+owned-block transformation preserves unrelated entries. The prepared commit
+must be the current commit or its ancestor, which permits a forward-only gate
+fix between phases. The gate never prints crontab contents or initiates a reboot.
 
 ### Debian/Ubuntu real host
 

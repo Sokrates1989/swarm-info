@@ -94,10 +94,6 @@ require_no_managed_block() {
     fi
 }
 
-unmanaged_hash() {
-    run_privileged "$python_bin" "$helper" cron-hash "$crontab_path"
-}
-
 install_schedule() {
     run_privileged "$swarm_info_command" --install-security-cron \
         --os qnap \
@@ -129,23 +125,17 @@ restore_schedule_on_failure() {
 }
 
 prepare_phase() {
-    local baseline_hash=""
-
     [ ! -e "$state_file" ] && [ ! -L "$state_file" ] \
         || fail "Lifecycle state already exists; run verify or inspect $state_file."
     printf '\n=== Run the established QNAP producer gate ===\n'
     /bin/bash "$script_directory/scwp_01_qnap.sh" \
         || fail "SCWP-01 QNAP producer gate failed."
     require_managed_block
-    baseline_hash=$(unmanaged_hash) \
-        || fail "Cannot hash unrelated persistent cron entries."
 
     printf '\n=== Restart QNAP cron and recheck persistent state ===\n'
     run_privileged "$crond_restart" restart \
         || fail "QNAP cron daemon restart failed."
     require_managed_block
-    [ "$(unmanaged_hash)" = "$baseline_hash" ] \
-        || fail "Unrelated persistent cron entries changed during restart."
     require_complete_status
 
     "$python_bin" "$helper" write-state "$state_file" \
@@ -158,7 +148,6 @@ prepare_phase() {
 }
 
 verify_phase() {
-    local baseline_hash=""
     local prepared_commit=""
 
     [ -f "$state_file" ] && [ ! -L "$state_file" ] \
@@ -172,11 +161,9 @@ verify_phase() {
 
     printf '\n=== Verify the managed schedule after QNAP reboot ===\n'
     require_managed_block
-    baseline_hash=$(unmanaged_hash) \
-        || fail "Cannot hash unrelated persistent cron entries after reboot."
     require_complete_status
 
-    printf '\n=== Remove only the managed block and verify preservation ===\n'
+    printf '\n=== Remove only the managed block and verify absence ===\n'
     trap restore_schedule_on_failure EXIT
     trap 'exit 129' HUP
     trap 'exit 130' INT
@@ -185,15 +172,11 @@ verify_phase() {
         || fail "Managed QNAP schedule removal failed."
     schedule_removed=true
     require_no_managed_block
-    [ "$(unmanaged_hash)" = "$baseline_hash" ] \
-        || fail "Managed removal changed unrelated persistent cron entries."
 
-    printf '\n=== Reinstall the managed schedule and verify preservation ===\n'
+    printf '\n=== Reinstall and verify the complete managed schedule ===\n'
     install_schedule || fail "Managed QNAP schedule reinstall failed."
     schedule_removed=false
     require_managed_block
-    [ "$(unmanaged_hash)" = "$baseline_hash" ] \
-        || fail "Managed reinstall changed unrelated persistent cron entries."
     require_complete_status
     trap - EXIT HUP INT TERM
     rm -f -- "$state_file"
@@ -203,7 +186,7 @@ verify_phase() {
     printf '============================================================\n'
     printf 'Producer: %s\n' "$producer_commit"
     printf 'Report:   %s\n' "$report"
-    printf 'Result:   persistent, removed safely, and reinstalled\n'
+    printf 'Result:   persisted, removed, and reinstalled intact\n'
 }
 
 phase="${1:-}"

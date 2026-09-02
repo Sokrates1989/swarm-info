@@ -417,11 +417,12 @@ bash "$HOME/tools/swarm-info/tests/acceptance/scwp_01_qnap_lifecycle.sh" verify
 ```
 
 The prepare phase records only private `0600` lifecycle state. QNAP regenerates
-some vendor-owned cron entries during boot, so the verify phase confirms that
-the managed block survived and then establishes a new checksum baseline for
-everything else. It removes the managed block, proves the post-boot unrelated
-entries remain unchanged, and reinstalls the schedule. The gate never prints
-the crontab or initiates the reboot itself.
+vendor-owned cron entries asynchronously, so the live gate does not compare the
+whole persistent table. The verify phase confirms the complete managed block
+survived, is absent after managed removal, and returns intact after reinstall.
+Deterministic scheduler tests separately prove that the owned-block
+transformation preserves unrelated entries. The gate never prints the crontab
+or initiates the reboot itself.
 
 Remove only this managed block while preserving unrelated cron entries:
 

@@ -64,10 +64,27 @@ require_complete_status() {
 }
 
 require_managed_block() {
-    run_privileged grep -Fqx "$block_begin" "$crontab_path" \
-        || fail "Managed QNAP cron opening marker is missing."
-    run_privileged grep -Fqx "$block_end" "$crontab_path" \
-        || fail "Managed QNAP cron closing marker is missing."
+    local cron_block=""
+    local expected=""
+
+    cron_block="$(
+        run_privileged sed -n \
+            '/BEGIN swarm-info managed container security scan/,/END swarm-info managed container security scan/p' \
+            "$crontab_path"
+    )" || fail "Cannot read the managed QNAP cron block."
+    for expected in \
+        "$block_begin" \
+        "$block_end" \
+        "--scheduled-container-state" \
+        "--scheduled-security-check" \
+        "--container-scope running" \
+        "/bin/su - $runtime_user"
+    do
+        case "$cron_block" in
+            *"$expected"*) ;;
+            *) fail "Managed QNAP cron block is incomplete." ;;
+        esac
+    done
 }
 
 require_no_managed_block() {
@@ -132,7 +149,7 @@ prepare_phase() {
     require_complete_status
 
     "$python_bin" "$helper" write-state "$state_file" \
-        "$producer_commit" "$runtime_user" "$baseline_hash" \
+        "$producer_commit" "$runtime_user" \
         || fail "Cannot write private reboot-verification state."
     printf '[OK] Private reboot state written with mode 0600; no cron content recorded.\n'
     printf '\n[NEXT] Reboot the QNAP from its normal administration interface.\n'
@@ -142,21 +159,21 @@ prepare_phase() {
 
 verify_phase() {
     local baseline_hash=""
-    local current_hash=""
+    local prepared_commit=""
 
     [ -f "$state_file" ] && [ ! -L "$state_file" ] \
         || fail "Private prepare-phase state is missing: $state_file"
-    baseline_hash=$(
-        "$python_bin" "$helper" read-state "$state_file" \
-            "$producer_commit" "$runtime_user"
+    prepared_commit=$(
+        "$python_bin" "$helper" read-state "$state_file" "$runtime_user"
     ) || fail "Reboot-verification state is invalid."
+    git -C "$repository_root" merge-base --is-ancestor \
+        "$prepared_commit" "$producer_commit" \
+        || fail "The prepared commit is not an ancestor of the current checkout."
 
     printf '\n=== Verify the managed schedule after QNAP reboot ===\n'
     require_managed_block
-    current_hash=$(unmanaged_hash) \
+    baseline_hash=$(unmanaged_hash) \
         || fail "Cannot hash unrelated persistent cron entries after reboot."
-    [ "$current_hash" = "$baseline_hash" ] \
-        || fail "Unrelated persistent cron entries changed across reboot."
     require_complete_status
 
     printf '\n=== Remove only the managed block and verify preservation ===\n'

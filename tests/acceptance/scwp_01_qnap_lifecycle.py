@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import stat
 import sys
 import tempfile
@@ -17,7 +16,6 @@ from typing import Sequence
 
 BLOCK_BEGIN = "# BEGIN swarm-info managed container security scan"
 BLOCK_END = "# END swarm-info managed container security scan"
-HASH_PATTERN = re.compile(r"[0-9a-f]{64}")
 SCHEMA_VERSION = 1
 
 
@@ -65,12 +63,9 @@ def write_state(
     path: Path,
     producer_commit: str,
     runtime_user: str,
-    crontab_hash_value: str,
 ) -> None:
     """Atomically persist the minimum non-secret evidence needed after reboot."""
 
-    if not HASH_PATTERN.fullmatch(crontab_hash_value):
-        raise ValueError("unmanaged crontab hash is invalid")
     if path.exists() or path.is_symlink():
         raise FileExistsError(f"lifecycle state already exists: {path}")
     payload = {
@@ -78,7 +73,6 @@ def write_state(
         "phase": "awaiting-reboot-verification",
         "producer_commit": producer_commit,
         "runtime_user": runtime_user,
-        "unmanaged_crontab_sha256": crontab_hash_value,
         "prepared_at": datetime.now(timezone.utc).isoformat(),
     }
     descriptor, temporary_name = tempfile.mkstemp(
@@ -105,8 +99,8 @@ def write_state(
         raise
 
 
-def read_state(path: Path, producer_commit: str, runtime_user: str) -> str:
-    """Validate private state and return its recorded unrelated-entry hash."""
+def read_state(path: Path, runtime_user: str) -> str:
+    """Validate private state and return its prepared producer commit."""
 
     if path.is_symlink() or not path.is_file():
         raise ValueError(f"lifecycle state is not a regular file: {path}")
@@ -118,16 +112,15 @@ def read_state(path: Path, producer_commit: str, runtime_user: str) -> str:
     expected = {
         "schema_version": SCHEMA_VERSION,
         "phase": "awaiting-reboot-verification",
-        "producer_commit": producer_commit,
         "runtime_user": runtime_user,
     }
     for key, value in expected.items():
         if payload.get(key) != value:
             raise ValueError(f"lifecycle state {key} does not match")
-    hash_value = payload.get("unmanaged_crontab_sha256")
-    if not isinstance(hash_value, str) or not HASH_PATTERN.fullmatch(hash_value):
-        raise ValueError("lifecycle state contains an invalid crontab hash")
-    return hash_value
+    producer_commit = payload.get("producer_commit")
+    if not isinstance(producer_commit, str) or not producer_commit:
+        raise ValueError("lifecycle state producer_commit is invalid")
+    return producer_commit
 
 
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
@@ -141,10 +134,8 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
     write_parser.add_argument("path", type=Path)
     write_parser.add_argument("producer_commit")
     write_parser.add_argument("runtime_user")
-    write_parser.add_argument("unmanaged_hash")
     read_parser = commands.add_parser("read-state")
     read_parser.add_argument("path", type=Path)
-    read_parser.add_argument("producer_commit")
     read_parser.add_argument("runtime_user")
     return parser.parse_args(arguments)
 
@@ -161,16 +152,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 options.path,
                 options.producer_commit,
                 options.runtime_user,
-                options.unmanaged_hash,
             )
         else:
-            print(
-                read_state(
-                    options.path,
-                    options.producer_commit,
-                    options.runtime_user,
-                )
-            )
+            print(read_state(options.path, options.runtime_user))
     except (OSError, ValueError) as error:
         print(f"[FAIL] {error}", file=sys.stderr)
         return 1

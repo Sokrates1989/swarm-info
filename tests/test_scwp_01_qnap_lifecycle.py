@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import stat
@@ -56,15 +57,18 @@ class Scwp01QnapLifecycleTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.json"
-            hash_value = "a" * 64
-            write_state(path, "commit-a", "Patrick", hash_value)
+            write_state(path, "commit-a", "Patrick")
 
             if os.name == "posix":
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
-            self.assertEqual(read_state(path, "commit-a", "Patrick"), hash_value)
+            self.assertEqual(read_state(path, "Patrick"), "commit-a")
             self.assertNotIn("17 2 * * *", path.read_text(encoding="utf-8"))
-            with self.assertRaisesRegex(ValueError, "producer_commit"):
-                read_state(path, "commit-b", "Patrick")
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["unmanaged_crontab_sha256"] = "a" * 64
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            self.assertEqual(read_state(path, "Patrick"), "commit-a")
+            with self.assertRaisesRegex(ValueError, "runtime_user"):
+                read_state(path, "SomeoneElse")
 
     def test_gate_is_two_phase_and_never_reboots_or_prints_crontab(self) -> None:
         """Require operator reboot while checking removal recovery and reinstall."""
@@ -78,11 +82,18 @@ class Scwp01QnapLifecycleTests(unittest.TestCase):
             '--remove-security-cron',
             'restore_schedule_on_failure',
             '[PASS] SCWP-01 QNAP reboot lifecycle passed',
+            '--scheduled-container-state',
+            '--scheduled-security-check',
         ):
             self.assertIn(fragment, source)
         self.assertNotIn("sudo reboot", source)
         self.assertNotIn("run_privileged reboot", source)
         self.assertNotIn('cat "$crontab_path"', source)
+        self.assertNotIn(
+            "Unrelated persistent cron entries changed across reboot.", source
+        )
+        self.assertIn('baseline_hash=$(unmanaged_hash)', source)
+        self.assertIn('merge-base --is-ancestor', source)
 
     @unittest.skipUnless(
         os.name == "posix" and Path("/bin/bash").exists(),

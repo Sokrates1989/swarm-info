@@ -106,11 +106,13 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 
 The ordered lifecycle uses the two-phase `scwp_01_qnap_lifecycle.sh` gate. Its
 prepare phase runs the established producer acceptance, restarts QNAP cron, and
-stores only a private SHA-256 of normalized unrelated entries. The operator
-reboots the NAS manually. The verify phase binds that state to the same commit
-and user, confirms persistence, removes only the marked block, compares the
-unrelated-entry hash, and reinstalls the schedule. It never prints crontab
-contents or initiates a reboot.
+stores only private phase, user, and producer-commit state. The operator reboots
+the NAS manually. Because QNAP regenerates vendor-owned entries during boot, the
+verify phase checks that the complete managed block survived and then records a
+new checksum baseline for all unrelated entries. Removal and reinstall must
+preserve that post-boot baseline exactly. The prepared commit must be the current
+commit or its ancestor, which permits a forward-only gate fix between phases.
+The gate never prints crontab contents or initiates a reboot.
 
 ### Debian/Ubuntu real host
 

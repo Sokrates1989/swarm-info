@@ -11,6 +11,7 @@ repository_root=$(acceptance_repository_root)
 acceptance_require_clean_checkout "$repository_root"
 python_command=$(acceptance_python) \
     || acceptance_fail "Python 3.10+ is unavailable."
+vulnerability_report="${SCWP_VULNERABILITY_REPORT:-/info_json/vulnerability_scan.json}"
 temporary_root=$(mktemp -d "${TMPDIR:-/tmp}/scwp-01-swarm.XXXXXX") \
     || acceptance_fail "Cannot create the private acceptance directory."
 trap 'rm -rf -- "$temporary_root"' EXIT HUP INT TERM
@@ -27,6 +28,7 @@ acceptance_validate_profile standard-linux swarm "$profile_file" "$python_comman
     || [ "$?" -eq 2 ] \
     || acceptance_fail "Service-health regression failed."
 "$repository_root/get_info.sh" --vulnerability-status \
+    --output-file "$vulnerability_report" \
     || [ "$?" -eq 2 ] \
     || acceptance_fail "Vulnerability-status regression failed."
 

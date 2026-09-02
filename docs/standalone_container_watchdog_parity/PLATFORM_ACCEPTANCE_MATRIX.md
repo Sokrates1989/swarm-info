@@ -74,7 +74,7 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 | --- | --- | --- | --- | --- | --- |
 | `SCWP-01` | Pending | Pending | Tier 2 fixture coverage; live gate deferred | Pending | No |
 | `SCWP-02` | Complete | [Passed (2026-08-25)](SCWP_02_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [Passed (2026-08-26)](SCWP_02_SWARM_REGRESSION.md) | Yes |
-| `SCWP-03` | `03A`/`03B` accepted; `03C` implementation complete | [`03A` passed (2026-08-28)](SCWP_03A_QNAP_EVIDENCE.md); [`03B` passed (2026-09-01)](SCWP_03B_QNAP_EVIDENCE.md); `03C` pending | Tier 2 fixture coverage; live gate deferred | [`03A` passed (2026-08-27)](SCWP_03A_SWARM_REGRESSION.md); [`03B` passed (2026-09-01)](SCWP_03B_SWARM_REGRESSION.md); `03C` pending | No |
+| `SCWP-03` | Complete | [`03A` passed (2026-08-28)](SCWP_03A_QNAP_EVIDENCE.md); [`03B` passed (2026-09-01)](SCWP_03B_QNAP_EVIDENCE.md); [`03C` passed (2026-09-02)](SCWP_03C_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [`03A` passed (2026-08-27)](SCWP_03A_SWARM_REGRESSION.md); [`03B` passed (2026-09-01)](SCWP_03B_SWARM_REGRESSION.md); [`03C` passed (2026-09-02)](SCWP_03C_SWARM_REGRESSION.md) | Yes |
 
 ## SCWP-01 checkpoints
 
@@ -175,8 +175,9 @@ The operator accepted the QNAP and Swarm `SCWP-03A` gates. See the
 Debian/Ubuntu acceptance is deferred at Tier 2. `SCWP-03B` has passed its
 automated, [QNAP](SCWP_03B_QNAP_EVIDENCE.md), and
 [single-manager Swarm](SCWP_03B_SWARM_REGRESSION.md) gates. `SCWP-03C` has
-passed its implementation and automated regression gate; live QNAP and Swarm
-acceptance remain open.
+passed its implementation, automated regression,
+[QNAP](SCWP_03C_QNAP_EVIDENCE.md), and
+[single-manager Swarm](SCWP_03C_SWARM_REGRESSION.md) gates.
 
 ### SCWP-03B automated checkpoint
 
@@ -218,9 +219,9 @@ that standalone hardening and cleanup cards remain absent. See the
 - [x] One hardening finding independently confirmed with sanitized Docker inspect
   evidence.
 - [x] Cleanup preview protects all container-owned images.
-- [ ] One policy-approved dry-run is cancelled safely.
-- [ ] One accepted test update records backup, diff, post-check, and rollback.
-- [ ] UI remains read-only while presenting all resulting evidence.
+- [x] One policy-approved dry-run is cancelled safely.
+- [x] One accepted test update records backup, diff, post-check, and rollback.
+- [x] UI remains read-only while presenting all resulting evidence.
 
 ### Swarm regression
 

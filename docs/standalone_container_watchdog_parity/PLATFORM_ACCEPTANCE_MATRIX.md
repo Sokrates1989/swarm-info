@@ -75,7 +75,7 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 
 | Slice | Automated | QNAP real host | Debian/Ubuntu real host | Swarm regression | Accepted |
 | --- | --- | --- | --- | --- | --- |
-| `SCWP-01` | Pending | Pending | Tier 2 fixture coverage; live gate deferred | Pending | No |
+| `SCWP-01` | Complete | [Passed (2026-09-02)](SCWP_01_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | Pending | No |
 | `SCWP-02` | Complete | [Passed (2026-08-25)](SCWP_02_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [Passed (2026-08-26)](SCWP_02_SWARM_REGRESSION.md) | Yes |
 | `SCWP-03` | Complete | [`03A` passed (2026-08-28)](SCWP_03A_QNAP_EVIDENCE.md); [`03B` passed (2026-09-01)](SCWP_03B_QNAP_EVIDENCE.md); [`03C` passed (2026-09-02)](SCWP_03C_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [`03A` passed (2026-08-27)](SCWP_03A_SWARM_REGRESSION.md); [`03B` passed (2026-09-01)](SCWP_03B_SWARM_REGRESSION.md); [`03C` passed (2026-09-02)](SCWP_03C_SWARM_REGRESSION.md) | Yes |
 
@@ -83,25 +83,25 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 
 ### Automated
 
-- [ ] QNAP, Debian, Ubuntu, generic Linux, missing-release, and malformed-release
+- [x] QNAP, Debian, Ubuntu, generic Linux, missing-release, and malformed-release
   fixtures select the expected adapter and sanitized metadata.
-- [ ] Capability output is stable, versioned, and contains no secrets.
-- [ ] The standalone installer remains self-contained.
-- [ ] QNAP and standard-Linux deployment profiles render completely.
-- [ ] Old QNAP commands and variables remain compatible.
-- [ ] All changed-repository test suites pass with documented skips only.
+- [x] Capability output is stable, versioned, and contains no secrets.
+- [x] The standalone installer remains self-contained.
+- [x] QNAP and standard-Linux deployment profiles render completely.
+- [x] Old QNAP commands and variables remain compatible.
+- [x] All changed-repository test suites pass with documented skips only.
 
 ### QNAP real host
 
-- [ ] Clean update and platform/dependency output.
-- [ ] Exact local-image full and focused scans.
-- [ ] Persistent schedule install/status/remove/reinstall with complete
+- [x] Clean update and platform/dependency output.
+- [x] Exact local-image full and focused scans.
+- [x] Persistent schedule install/status/remove/reinstall with complete
   owned-block checks.
-- [ ] Private report readable by the configured containers without permission
+- [x] Private report readable by the configured containers without permission
   widening.
-- [ ] Authenticated API/UI and Telegram test delivery.
-- [ ] Existing QNAP acceptance workflow still passes.
-- [ ] Ordered lifecycle succeeds: update → platform/dependency status → schedule
+- [x] Authenticated API/UI and Telegram test delivery.
+- [x] Existing QNAP acceptance workflow still passes.
+- [x] Ordered lifecycle succeeds: update → platform/dependency status → schedule
   status → cron restart → status → NAS reboot → status → managed removal →
   absence verification → complete reinstall.
 
@@ -115,6 +115,8 @@ intact after reinstall. Deterministic scheduler tests separately prove that the
 owned-block transformation preserves unrelated entries. The prepared commit
 must be the current commit or its ancestor, which permits a forward-only gate
 fix between phases. The gate never prints crontab contents or initiates a reboot.
+The accepted sanitized result is recorded in
+[SCWP-01 QNAP Evidence](SCWP_01_QNAP_EVIDENCE.md).
 
 ### Debian/Ubuntu real host
 

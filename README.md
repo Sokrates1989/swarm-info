@@ -407,6 +407,20 @@ scope correctly starts the bounded scan and can therefore take several hours.
 The unit-test suite is intentionally not rerun by this live acceptance command;
 its simulated missing-Scout cases are release tests, not QNAP runtime failures.
 
+The formal reboot-persistence closeout is intentionally split around an
+operator-controlled NAS reboot:
+
+```bash
+bash "$HOME/tools/swarm-info/tests/acceptance/scwp_01_qnap_lifecycle.sh" prepare
+# Reboot from the QNAP administration interface. After services return:
+bash "$HOME/tools/swarm-info/tests/acceptance/scwp_01_qnap_lifecycle.sh" verify
+```
+
+The prepare phase records only a private `0600` checksum of unrelated persistent
+cron entries. The verify phase confirms the managed block survived, removes it,
+proves unrelated entries are unchanged, and reinstalls it. The gate never
+prints the crontab or initiates the reboot itself.
+
 Remove only this managed block while preserving unrelated cron entries:
 
 ```bash

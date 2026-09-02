@@ -54,6 +54,9 @@ entry points before manual acceptance:
 
 ```text
 /bin/bash tests/acceptance/scwp_01_qnap.sh
+/bin/bash tests/acceptance/scwp_01_qnap_lifecycle.sh prepare
+# Reboot the QNAP through its administration interface, then:
+/bin/bash tests/acceptance/scwp_01_qnap_lifecycle.sh verify
 /bin/bash tests/acceptance/scwp_01_standard_linux.sh
 /bin/bash tests/acceptance/scwp_01_swarm.sh
 ```
@@ -100,6 +103,14 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 - [ ] Ordered lifecycle succeeds: update → platform/dependency status → schedule
   status → cron restart → status → NAS reboot → status → managed removal →
   unrelated-cron verification → reinstall.
+
+The ordered lifecycle uses the two-phase `scwp_01_qnap_lifecycle.sh` gate. Its
+prepare phase runs the established producer acceptance, restarts QNAP cron, and
+stores only a private SHA-256 of normalized unrelated entries. The operator
+reboots the NAS manually. The verify phase binds that state to the same commit
+and user, confirms persistence, removes only the marked block, compares the
+unrelated-entry hash, and reinstalls the schedule. It never prints crontab
+contents or initiates a reboot.
 
 ### Debian/Ubuntu real host
 

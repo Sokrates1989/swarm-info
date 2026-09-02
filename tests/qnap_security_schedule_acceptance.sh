@@ -163,7 +163,6 @@ cron_block="$(
         '/BEGIN swarm-info managed container security scan/,/END swarm-info managed container security scan/p' \
         /etc/config/crontab
 )" || fail "Cannot read QNAP's persistent crontab."
-printf '\n%s\n' "$cron_block"
 for expected in \
     "BEGIN swarm-info managed container security scan" \
     "--scheduled-security-check" \
@@ -179,6 +178,7 @@ do
         *) fail "Persistent cron block is missing: $expected" ;;
     esac
 done
+printf '\n[OK] Managed cron block verified without displaying command content.\n'
 
 printf '\n=== 4. Run or reuse the exact scheduled evidence ===\n'
 printf 'A missing, stale, or changed scope can require a full multi-hour scan.\n'

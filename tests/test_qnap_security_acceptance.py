@@ -115,6 +115,8 @@ class QnapSecurityAcceptanceTests(unittest.TestCase):
         self.assertIn("--install-security-cron", source)
         self.assertIn("--scheduled-security-check", source)
         self.assertIn("hold-lock", source)
+        self.assertNotIn("printf '\\n%s\\n' \"$cron_block\"", source)
+        self.assertIn("without displaying command content", source)
 
     @unittest.skipUnless(os.name == "posix", "Advisory locking requires POSIX.")
     def test_lock_helper_waits_for_an_explicit_release_marker(self) -> None:

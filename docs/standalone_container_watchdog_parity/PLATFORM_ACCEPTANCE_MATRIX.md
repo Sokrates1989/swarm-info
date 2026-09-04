@@ -75,7 +75,7 @@ the repository-owned `container-deployment/acceptance.sh` entry point. Existing
 
 | Slice | Automated | QNAP real host | Debian/Ubuntu real host | Swarm regression | Accepted |
 | --- | --- | --- | --- | --- | --- |
-| `SCWP-01` | Complete | [Passed (2026-09-02)](SCWP_01_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | Pending | No |
+| `SCWP-01` | Complete | [Passed (2026-09-02)](SCWP_01_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [Passed (2026-09-04)](SCWP_01_SWARM_REGRESSION.md) | Yes |
 | `SCWP-02` | Complete | [Passed (2026-08-25)](SCWP_02_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [Passed (2026-08-26)](SCWP_02_SWARM_REGRESSION.md) | Yes |
 | `SCWP-03` | Complete | [`03A` passed (2026-08-28)](SCWP_03A_QNAP_EVIDENCE.md); [`03B` passed (2026-09-01)](SCWP_03B_QNAP_EVIDENCE.md); [`03C` passed (2026-09-02)](SCWP_03C_QNAP_EVIDENCE.md) | Tier 2 fixture coverage; live gate deferred | [`03A` passed (2026-08-27)](SCWP_03A_SWARM_REGRESSION.md); [`03B` passed (2026-09-01)](SCWP_03B_SWARM_REGRESSION.md); [`03C` passed (2026-09-02)](SCWP_03C_SWARM_REGRESSION.md) | Yes |
 
@@ -132,10 +132,17 @@ The accepted sanitized result is recorded in
 
 ### Swarm regression
 
-- [ ] Manager dependency and capability detection remains Swarm mode.
-- [ ] Service-health and vulnerability status remain readable.
-- [ ] Existing vulnerability schedule and deployment preflight pass.
-- [ ] No stack mount, secret, routing, or image contract changed unexpectedly.
+- [x] Manager dependency and capability detection remains Swarm mode.
+- [x] Service-health and vulnerability status remain readable.
+- [x] Existing vulnerability schedule and deployment preflight pass.
+- [x] No stack mount, secret, routing, or image contract changed unexpectedly.
+
+The producer and deployment gates passed on the Ubuntu single-manager host at
+commits `684108bd2654c6ad99f93a13ef2b06f0baf028e8` and
+`305a0943bd0cb9e62e5bfdd8fa0ee41484ce43b1`. The service-health report included
+degraded and down workloads; acceptance confirms truthful reporting and the
+unchanged deployment boundary rather than declaring the cluster healthy. See
+[SCWP-01 Swarm Regression Evidence](SCWP_01_SWARM_REGRESSION.md).
 
 ## SCWP-02 checkpoints
 
@@ -286,3 +293,7 @@ The roadmap is accepted only when:
 - no secret, credential, or Docker daemon control was added to public-facing
   services; and
 - the operator signs off on the exact commits recorded in the evidence.
+
+All current Tier 1 and single-manager Swarm requirements were accepted on
+2026-09-04. Standalone Debian/Ubuntu remains an explicitly deferred Tier 2
+promotion path and is not an open requirement for this roadmap.

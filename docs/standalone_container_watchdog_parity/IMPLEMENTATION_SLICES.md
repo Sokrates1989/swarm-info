@@ -37,6 +37,12 @@ Tier 2 promotion path. For the current implementation, only QNAP live gates and
 the single-manager Ubuntu Swarm regressions are required; automated fixtures
 keep the shared standard-Linux adapter flexible meanwhile.
 
+`SCWP-01` has passed its automated implementation gate, the
+[QNAP reboot lifecycle](SCWP_01_QNAP_EVIDENCE.md), and the
+[single-manager Swarm regression](SCWP_01_SWARM_REGRESSION.md). Standalone
+Debian/Ubuntu remains a fixture-tested Tier 2 promotion path rather than a
+current acceptance requirement.
+
 ### Outcome
 
 QNAP and standard Linux use one versioned platform/capability contract. QNAP's

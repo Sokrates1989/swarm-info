@@ -2,9 +2,8 @@
 
 **Plan ID:** `SCWP`
 
-**Status:** SCWP-03 implementation and QNAP/Swarm operator acceptance complete;
-SCWP-01 automated and QNAP acceptance complete, with only its formal
-single-manager Swarm regression pending
+**Status:** Accepted on 2026-09-04; all SCWP-01, SCWP-02, and SCWP-03 automated,
+QNAP Tier 1, and single-manager Swarm gates are complete
 
 **Scope:** `swarm-info`, `swarm-info-watchdog`, and their standalone-container
 deployment contract

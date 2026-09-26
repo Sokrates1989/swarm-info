@@ -7,6 +7,8 @@ import datetime as dt
 import io
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -17,15 +19,21 @@ from scripts.remediation_engine import (
     deploy_declarative_change,
     execute_latest_refresh,
     execute_runtime_override,
+    preview_yaml_image_change,
     service_image_update_command,
     runtime_update_command,
     validate_candidate,
 )
 from scripts.remediation_guidance import _images
-from scripts.remediation_policy import build_plan, load_policy, vulnerable_items
+from scripts.remediation_policy import (
+    build_plan,
+    load_policy,
+    parse_candidate_image,
+    vulnerable_items,
+)
 from scripts.remediation_source import SourceChange
 from scripts.operator_report import load_messages
-from scripts.vulnerability_scan import CommandResult
+from scripts.vulnerability_scan import CommandResult, DockerClient
 
 from tests.test_remediation_policy import (
     NEW_DIGEST,
@@ -111,6 +119,51 @@ class RollbackClient:
             self.image = self.candidate if self.candidate in rendered else OLD_IMAGE
             return CommandResult(0, "deployed", "")
         return CommandResult(1, "", "unexpected")
+
+
+class ComposeModelClient:
+    """Render a deterministic Compose model without exposing its secret values."""
+
+    def __init__(self, other_change_on_candidate: bool = False) -> None:
+        """Optionally model an unintended change to another service."""
+
+        self.other_change_on_candidate = other_change_on_candidate
+        self.deployments = 0
+
+    def run(self, arguments: list[str]) -> CommandResult:
+        """Serve Compose rendering and the pre-deployment service snapshot."""
+
+        command = list(arguments)
+        if command[:1] == ["compose"] and "-f" in command:
+            stack_file = Path(command[command.index("-f") + 1])
+            contents = stack_file.read_text(encoding="utf-8")
+            if command[-1] == "json":
+                new_image = NEW_IMAGE in contents
+                model = {
+                    "services": {
+                        "api": {
+                            "image": NEW_IMAGE if new_image else OLD_IMAGE.split("@")[0],
+                            "environment": {"PASSWORD": "never-print-me"},
+                        },
+                        "worker": {
+                            "image": (
+                                "redis:8-alpine"
+                                if new_image and self.other_change_on_candidate
+                                else "redis:7-alpine"
+                            )
+                        },
+                    }
+                }
+                return CommandResult(0, json.dumps(model), "")
+            return CommandResult(0, contents, "")
+        if command[:2] == ["service", "ls"]:
+            return CommandResult(0, "demo_api\t1/1\n", "")
+        if command[:2] == ["service", "inspect"]:
+            return CommandResult(0, OLD_IMAGE + "\n", "")
+        if command[:2] == ["stack", "deploy"]:
+            self.deployments += 1
+            return CommandResult(0, "deployed", "")
+        return CommandResult(1, "", "unexpected command")
 
 
 class AutoRuntimeClient:
@@ -248,6 +301,135 @@ class RemediationEngineTests(unittest.TestCase):
             self.assertEqual(environment.read_bytes(), original)
             self.assertEqual(client.image, OLD_IMAGE)
             self.assertEqual(len(client.deployments), 2)
+
+    def test_yaml_preview_allows_only_target_image_render_change(self) -> None:
+        """Validate a proposal privately and remove its temporary source."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stack_file = root / "swarm-stack.yml"
+            original = b"services:\n  api:\n    image: registry.example/team/app:1.0.0\n"
+            replacement = original.replace(
+                b"registry.example/team/app:1.0.0", NEW_IMAGE.encode("utf-8")
+            )
+            stack_file.write_bytes(original)
+            change = SourceChange(stack_file, original, replacement, "diff", 0o600)
+            model = preview_yaml_image_change(
+                ComposeModelClient(), change, stack_file, "api", OLD_IMAGE,
+                parse_candidate_image(NEW_IMAGE),
+            )
+
+            self.assertEqual(model["services"]["api"]["image"], OLD_IMAGE.split("@")[0])
+            self.assertEqual(stack_file.read_bytes(), original)
+            self.assertEqual(list(root.glob(".swarm-info-remediation-preview.*")), [])
+
+    def test_yaml_preview_with_real_compose_ignores_unrelated_advanced_yaml(self) -> None:
+        """Exercise the source guard against Compose's actual rendered model."""
+
+        if shutil.which("docker") is None:
+            self.skipTest("Docker Compose is unavailable")
+        version = subprocess.run(
+            ["docker", "compose", "version"],
+            capture_output=True, check=False, text=True, timeout=10,
+        )
+        if version.returncode != 0:
+            self.skipTest("Docker Compose is unavailable")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stack_file = root / "swarm-stack.yml"
+            original = (
+                "services:\n"
+                "  api:\n"
+                "    image: registry.example/team/app:1.0.0\n"
+                "  worker:\n"
+                "    image: ${WORKER_IMAGE:-redis:7-alpine}\n"
+                "    environment:\n"
+                "      SHARED: &worker_value example\n"
+                "      ALIAS: *worker_value\n"
+            ).encode("utf-8")
+            replacement = original.replace(
+                b"registry.example/team/app:1.0.0", NEW_IMAGE.encode("utf-8")
+            )
+            stack_file.write_bytes(original)
+            change = SourceChange(stack_file, original, replacement, "diff", 0o600)
+            model = preview_yaml_image_change(
+                DockerClient(), change, stack_file, "api", OLD_IMAGE,
+                parse_candidate_image(NEW_IMAGE),
+            )
+
+            self.assertEqual(model["services"]["api"]["image"], OLD_IMAGE.split("@")[0])
+            self.assertEqual(model["services"]["worker"]["image"], "redis:7-alpine")
+            self.assertEqual(stack_file.read_bytes(), original)
+            self.assertEqual(list(root.glob(".swarm-info-remediation-preview.*")), [])
+
+    def test_yaml_preview_rejects_other_rendered_change_without_leaking_secrets(self) -> None:
+        """Block unrelated stack changes before the actual source is edited."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stack_file = root / "swarm-stack.yml"
+            original = b"services:\n  api:\n    image: registry.example/team/app:1.0.0\n"
+            replacement = original.replace(
+                b"registry.example/team/app:1.0.0", NEW_IMAGE.encode("utf-8")
+            )
+            stack_file.write_bytes(original)
+            change = SourceChange(stack_file, original, replacement, "diff", 0o600)
+            with self.assertRaises(RemediationExecutionError) as context:
+                preview_yaml_image_change(
+                    ComposeModelClient(other_change_on_candidate=True),
+                    change, stack_file, "api", OLD_IMAGE,
+                    parse_candidate_image(NEW_IMAGE),
+                )
+
+            self.assertEqual(context.exception.code, "rendered-stack-other-change")
+            self.assertNotIn("never-print-me", context.exception.detail)
+            self.assertEqual(stack_file.read_bytes(), original)
+            self.assertEqual(list(root.glob(".swarm-info-remediation-preview.*")), [])
+
+    def test_yaml_actual_render_drift_restores_source_before_deployment(self) -> None:
+        """Recheck the rendered model after the confirmed source write."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stack_file = root / "swarm-stack.yml"
+            original = b"services:\n  api:\n    image: registry.example/team/app:1.0.0\n"
+            replacement = original.replace(
+                b"registry.example/team/app:1.0.0", NEW_IMAGE.encode("utf-8")
+            )
+            stack_file.write_bytes(replacement)
+            change = SourceChange(stack_file, original, replacement, "diff", 0o600)
+            policy = load_policy(
+                write_policy(
+                    root,
+                    policy_payload(
+                        source={"type": "yaml_image", "file": "swarm-stack.yml"}
+                    ),
+                )
+            )
+            entry = build_plan(
+                vulnerability_report(), deployment_map(root, stack_file), policy
+            )["entries"][0]
+            client = ComposeModelClient(other_change_on_candidate=True)
+            old_model = {
+                "services": {
+                    "api": {
+                        "image": OLD_IMAGE.split("@")[0],
+                        "environment": {"PASSWORD": "never-print-me"},
+                    },
+                    "worker": {"image": "redis:7-alpine"},
+                }
+            }
+
+            with self.assertRaises(RemediationExecutionError) as context:
+                deploy_declarative_change(
+                    client, policy.targets[0], entry, change, original,
+                    expected_rendered_model=old_model,
+                )
+
+            self.assertEqual(context.exception.code, "declarative-deploy-failed")
+            self.assertEqual(stack_file.read_bytes(), original)
+            self.assertEqual(client.deployments, 0)
 
     def test_runtime_command_is_digest_pinned_and_has_registry_auth(self) -> None:
         """Keep the unknown-path fallback explicit and rollback-compatible."""

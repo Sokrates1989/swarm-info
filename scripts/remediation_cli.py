@@ -28,6 +28,7 @@ from scripts.remediation_engine import (
     deploy_declarative_change,
     execute_latest_refresh,
     execute_runtime_override,
+    preview_yaml_image_change,
     render_stack,
     runtime_update_command,
     service_image_update_command,
@@ -434,7 +435,18 @@ def _run_auto(
         try:
             change = prepare_source_change(target, entry)
             mapping = entry["mapping"]
-            old_rendered = render_stack(client, Path(mapping["stack_file"]))
+            stack_file = Path(mapping["stack_file"])
+            expected_rendered_model = None
+            if target.source is not None and target.source.edit_type == "yaml_image":
+                expected_rendered_model = preview_yaml_image_change(
+                    client,
+                    change,
+                    stack_file,
+                    mapping["compose_service"],
+                    str(entry["current_image"]),
+                    target.candidate,
+                )
+            old_rendered = render_stack(client, stack_file)
         except (RemediationExecutionError, SourceEditError) as error:
             record_review_outcome(
                 policy.path,
@@ -493,6 +505,7 @@ def _run_auto(
                 post_validation=lambda: validate_candidate(
                     client, target, entry, platform
                 ),
+                expected_rendered_model=expected_rendered_model,
             )
         except RemediationExecutionError as error:
             record_review_outcome(

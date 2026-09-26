@@ -929,8 +929,12 @@ The policy-backed auto-remediation sequence remains intentionally strict:
 5. Scan the candidate and reject it unless critical/high counts improve and no
    new critical/high CVE identifier appears.
 6. For a mapped source, recheck the old value, show a unified diff, and ask
-   before writing. Ambiguous YAML, aliases, interpolation, duplicate keys,
-   symlinks, path escapes, and stale values fail closed.
+   before writing. A literal `image:` value under the exact Compose service
+   may be edited even when unrelated parts of the stack use anchors or
+   interpolation. For that YAML adapter, the original and proposed Compose
+   models must differ only in the selected service's immutable image. Anchored
+   or interpolated target image values, ambiguous service/image declarations,
+   symlinks, path escapes, stale values, and other rendered changes fail closed.
 7. Ask separately before deployment (default `Y` only after the source change
    was explicitly accepted), wait for the service to converge, and scan the
    immutable candidate again.

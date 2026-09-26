@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -340,6 +342,92 @@ def render_stack(client: DockerClient, stack_file: Path) -> bytes:
     return result.stdout.encode("utf-8")
 
 
+def render_stack_model(client: DockerClient, stack_file: Path) -> dict[str, Any]:
+    """Render a Compose model for private, semantic source-change validation."""
+
+    environment_file = stack_file.parent / ".env"
+    arguments = ["compose"]
+    if environment_file.is_file() and not environment_file.is_symlink():
+        arguments.extend(["--env-file", str(environment_file)])
+    arguments.extend(["-f", str(stack_file), "config", "--format", "json"])
+    result = client.run(arguments)
+    if result.return_code != 0:
+        raise RemediationExecutionError("stack-render-model-failed", str(stack_file))
+    try:
+        model = json.loads(result.stdout)
+    except (TypeError, ValueError) as error:
+        raise RemediationExecutionError("stack-render-model-invalid", str(stack_file)) from error
+    if not isinstance(model, dict):
+        raise RemediationExecutionError("stack-render-model-invalid", str(stack_file))
+    return model
+
+
+def verify_rendered_image_delta(
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+    compose_service: str,
+    current_image: str,
+    candidate: CandidateImage,
+) -> None:
+    """Require only the selected service image to change in rendered Compose."""
+
+    before_services = before.get("services")
+    after_services = after.get("services")
+    if not isinstance(before_services, Mapping) or not isinstance(after_services, Mapping):
+        raise RemediationExecutionError("rendered-stack-services-invalid")
+    before_service = before_services.get(compose_service)
+    after_service = after_services.get(compose_service)
+    if not isinstance(before_service, Mapping) or not isinstance(after_service, Mapping):
+        raise RemediationExecutionError("rendered-stack-target-missing", compose_service)
+    previous_image = before_service.get("image")
+    next_image = after_service.get("image")
+    if (
+        not isinstance(previous_image, str)
+        or not isinstance(next_image, str)
+        or previous_image == next_image
+        or not image_references_match(previous_image, current_image)
+        or not image_references_match(next_image, candidate.reference)
+        or not image_references_match(candidate.reference, next_image)
+    ):
+        raise RemediationExecutionError("rendered-stack-image-mismatch", compose_service)
+    expected = copy.deepcopy(before)
+    expected["services"][compose_service]["image"] = next_image
+    if expected != after:
+        raise RemediationExecutionError("rendered-stack-other-change", compose_service)
+
+
+def preview_yaml_image_change(
+    client: DockerClient,
+    change: SourceChange,
+    stack_file: Path,
+    compose_service: str,
+    current_image: str,
+    candidate: CandidateImage,
+) -> dict[str, Any]:
+    """Check a mode-0600 temporary YAML proposal without editing its source."""
+
+    if change.path != stack_file.resolve():
+        raise RemediationExecutionError("preview-not-mapped-stack", str(stack_file))
+    before = render_stack_model(client, stack_file)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".swarm-info-remediation-preview.", suffix=".yml", dir=stack_file.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(change.replacement)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        after = render_stack_model(client, temporary)
+        verify_rendered_image_delta(
+            before, after, compose_service, current_image, candidate
+        )
+    finally:
+        temporary.unlink(missing_ok=True)
+    return before
+
+
 def deploy_rendered_stack(
     client: DockerClient, stack_name: str, rendered: bytes, directory: Path
 ) -> None:
@@ -384,6 +472,7 @@ def deploy_declarative_change(
     old_rendered: bytes,
     sleeper: Callable[[float], None] = time.sleep,
     post_validation: Callable[[], object] | None = None,
+    expected_rendered_model: Mapping[str, Any] | None = None,
 ) -> ActionResult:
     """Deploy one applied source change, restoring source and stack on failure."""
 
@@ -402,6 +491,19 @@ def deploy_declarative_change(
         if not image_references_match(str(plan_entry.get("current_image", "")), snapshot.image):
             raise RemediationExecutionError("live-image-changed", snapshot.image)
         rendered = render_stack(client, stack_file)
+        if target.source is not None and target.source.edit_type == "yaml_image":
+            if expected_rendered_model is None:
+                raise RemediationExecutionError("rendered-stack-preview-required")
+            compose_service = mapping.get("compose_service")
+            if not isinstance(compose_service, str):
+                raise RemediationExecutionError("mapping-service-missing")
+            verify_rendered_image_delta(
+                expected_rendered_model,
+                render_stack_model(client, stack_file),
+                compose_service,
+                str(plan_entry["current_image"]),
+                target.candidate,
+            )
         deploy_rendered_stack(client, stack, rendered, stack_file.parent)
         deployed = True
         wait_for_candidate(

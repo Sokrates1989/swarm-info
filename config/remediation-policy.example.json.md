@@ -169,9 +169,12 @@ Supported source adapters:
   image reference.
 - `dotenv` with `name_key` and `version_key`: replaces the repository and tag;
   the candidate digest is still enforced during validation and deployment.
-- `yaml_image`: replaces one simple scalar `image:` value under the exact
-  mapped Compose service. YAML anchors, expressions, and ambiguous layouts are
-  rejected.
+- `yaml_image`: replaces one literal scalar `image:` value under the exact
+  mapped Compose service, without requiring a `.env` file. Advanced YAML in
+  unrelated parts of the stack is allowed only when a private Compose render
+  proves the complete model changes solely at that service's image. Anchored
+  or interpolated target image values, ambiguous service/image declarations,
+  or any other rendered change are rejected before the source edit prompt.
 
 For an unresolved deployment path, the plan can only offer a guarded runtime
 override. Such an override is configuration drift, is disabled by default, and

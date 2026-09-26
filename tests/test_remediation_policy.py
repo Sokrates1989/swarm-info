@@ -14,6 +14,7 @@ from scripts.remediation_policy import (
     vulnerable_items,
 )
 from scripts.remediation_source import (
+    SourceChange,
     SourceEditError,
     prepare_source_change,
     write_source_change,
@@ -369,6 +370,24 @@ class RemediationPolicyTests(unittest.TestCase):
 class RemediationSourceTests(unittest.TestCase):
     """Apply only exact, reviewable source edits with byte-for-byte rollback."""
 
+    def _yaml_change(self, root: Path, contents: str) -> SourceChange:
+        """Prepare one mapped API image edit from supplied Compose source."""
+
+        stack_file = root / "swarm-stack.yml"
+        stack_file.write_text(contents, encoding="utf-8")
+        policy = load_policy(
+            write_policy(
+                root,
+                policy_payload(
+                    source={"type": "yaml_image", "file": "swarm-stack.yml"}
+                ),
+            )
+        )
+        plan = build_plan(
+            vulnerability_report(), deployment_map(root, stack_file), policy
+        )
+        return prepare_source_change(policy.targets[0], plan["entries"][0])
+
     def test_dotenv_name_version_change_applies_and_restores_atomically(self) -> None:
         """Update the mapped tag without discarding the reviewed rollback bytes."""
 
@@ -491,6 +510,79 @@ class RemediationSourceTests(unittest.TestCase):
             change = prepare_source_change(policy.targets[0], plan["entries"][0])
 
         self.assertIn(NEW_IMAGE, change.replacement.decode("utf-8"))
+
+    def test_unrelated_advanced_yaml_does_not_block_literal_service_image(self) -> None:
+        """Ignore anchors and interpolation outside the exact image source."""
+
+        contents = (
+            "services:\n"
+            "  api:\n"
+            "    image: registry.example/team/app:1.0.0\n"
+            "  worker:\n"
+            "    image: ${WORKER_IMAGE:-redis:7-alpine}\n"
+            "    environment:\n"
+            "      SHARED: &worker_value example\n"
+            "      ALIAS: *worker_value\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            change = self._yaml_change(Path(temporary), contents)
+
+        self.assertIn(NEW_IMAGE, change.replacement.decode("utf-8"))
+        self.assertIn("&worker_value", change.replacement.decode("utf-8"))
+        self.assertIn("${WORKER_IMAGE:-redis:7-alpine}", change.replacement.decode("utf-8"))
+
+    def test_target_image_anchor_still_fails_closed(self) -> None:
+        """Do not rewrite an image value shared through YAML anchors."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(SourceEditError) as context:
+                self._yaml_change(
+                    Path(temporary),
+                    "services:\n  api:\n"
+                    "    image: &shared_image registry.example/team/app:1.0.0\n",
+                )
+
+        self.assertEqual(context.exception.code, "yaml-advanced-syntax")
+
+    def test_target_image_interpolation_still_fails_closed(self) -> None:
+        """Do not replace a target image whose value comes from the environment."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(SourceEditError) as context:
+                self._yaml_change(
+                    Path(temporary),
+                    "services:\n  api:\n"
+                    "    image: ${API_IMAGE:-registry.example/team/app:1.0.0}\n",
+                )
+
+        self.assertEqual(context.exception.code, "yaml-advanced-syntax")
+
+    def test_target_service_anchor_still_fails_closed(self) -> None:
+        """Do not edit a service mapping that another service may alias."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(SourceEditError) as context:
+                self._yaml_change(
+                    Path(temporary),
+                    "services:\n  api: &shared_service\n"
+                    "    image: registry.example/team/app:1.0.0\n",
+                )
+
+        self.assertEqual(context.exception.code, "yaml-service-count")
+
+    def test_duplicate_services_sections_fail_closed(self) -> None:
+        """Reject a source whose top-level service ownership is ambiguous."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(SourceEditError) as context:
+                self._yaml_change(
+                    Path(temporary),
+                    "services:\n  api:\n"
+                    "    image: registry.example/team/app:1.0.0\n"
+                    "services:\n  worker:\n    image: redis:7-alpine\n",
+                )
+
+        self.assertEqual(context.exception.code, "yaml-services-count")
 
 
 if __name__ == "__main__":

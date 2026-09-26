@@ -165,21 +165,34 @@ def _prepare_dotenv(
 
 
 def _yaml_service_bounds(lines: list[str], compose_service: str) -> tuple[int, int]:
-    """Locate one exact two-space-indented Compose service block."""
+    """Locate one literal service inside one top-level Compose services map."""
 
-    service_pattern = re.compile(rf"^  {re.escape(compose_service)}:\s*(?:#.*)?(?:\r?\n)?$")
-    starts = [index for index, line in enumerate(lines) if service_pattern.fullmatch(line)]
+    sections = [
+        index
+        for index, line in enumerate(lines)
+        if re.fullmatch(r"services:\s*(?:#.*)?", line.rstrip("\r\n"))
+    ]
+    if len(sections) != 1:
+        raise SourceEditError("yaml-services-count", compose_service)
+    section_start = sections[0]
+    section_end = len(lines)
+    for index in range(section_start + 1, len(lines)):
+        line = lines[index]
+        if line.strip() and not line.startswith((" ", "\t", "#")):
+            section_end = index
+            break
+    service_pattern = re.compile(rf"^  {re.escape(compose_service)}:\s*(?:#.*)?$")
+    starts = [
+        index
+        for index in range(section_start + 1, section_end)
+        if service_pattern.fullmatch(lines[index].rstrip("\r\n"))
+    ]
     if len(starts) != 1:
         raise SourceEditError("yaml-service-count", compose_service)
     start = starts[0]
-    if not any(line.rstrip("\r\n") == "services:" for line in lines[:start]):
-        raise SourceEditError("yaml-services-missing", compose_service)
-    end = len(lines)
-    for index in range(start + 1, len(lines)):
+    end = section_end
+    for index in range(start + 1, section_end):
         line = lines[index]
-        if line and not line.startswith((" ", "\t", "\r", "\n")):
-            end = index
-            break
         if re.match(r"^  \S[^:]*:\s*(?:#.*)?(?:\r?\n)?$", line):
             end = index
             break
@@ -195,8 +208,6 @@ def _prepare_yaml_image(
     """Replace one simple scalar image in the exact mapped service block."""
 
     original, text = _decode_source(path)
-    if any(marker in text for marker in ("&", "*", "${")):
-        raise SourceEditError("yaml-advanced-syntax", str(path))
     lines = text.splitlines(keepends=True)
     start, end = _yaml_service_bounds(lines, compose_service)
     image_pattern = re.compile(
@@ -219,6 +230,8 @@ def _prepare_yaml_image(
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         quote = value[0]
         value = value[1:-1]
+    if any(marker in value for marker in ("&", "*", "${")):
+        raise SourceEditError("yaml-advanced-syntax", compose_service)
     if not image_references_match(value, current_image):
         raise SourceEditError("source-image-stale", compose_service)
     ending = match.group("ending") or ""

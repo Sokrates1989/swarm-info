@@ -958,6 +958,52 @@ stops that run, so a later stack deployment cannot silently include the
 pending edit. After each updated service, verify its dependent application
 before accepting compatibility or enabling additional high-risk targets.
 
+### Prepare a best-effort Swarm cohort
+
+When a host operator explicitly accepts possible data loss and downtime for a
+reviewed fleet, one dry run can assemble exact option-4 rules from an existing
+image-update assessment and the current complete vulnerability report:
+
+```bash
+swarm-info --prepare-remediation-cohort \
+  --assessment-file /info_json/image_update_assessment.json \
+  --remediation-policy /root/.config/swarm-info/remediation-policy.json \
+  --backup-reason 'Operator accepts data loss for this pre-alpha fleet.'
+```
+
+The command prints every staged or skipped service and writes a private
+decision record to `/info_json/remediation_cohort_plan.json`. It does not edit
+the policy without `--apply`, and it never deploys a service. To add the
+reviewed rules to that host policy, rerun with `--accept-data-loss --apply`.
+The previous policy is backed up beside the file. The preparer accepts an
+incomplete fleet assessment only for rows with an individually verified
+critical/high reduction whose old image still matches the fresh report and
+live service. It skips missing candidates, changed images, nonconverged
+services, cross-repository replacements, and existing policy targets.
+
+For a mapped literal YAML image, a temporary Compose render must prove that
+only the chosen service image changes. Interpolated or otherwise unproved
+sources are skipped by default. `--allow-runtime-override` can explicitly
+stage services with unresolved or unverified ownership as runtime-only
+candidates; a known mapped source whose edit fails proof remains skipped.
+Option 4 must also receive that flag and asks separately before each such
+update. Runtime overrides create drift
+until the declarative stack source is repaired. Neither path guesses an image
+version: a verified immutable candidate must already exist in the assessment.
+
+After applying the host policy, run `swarm-info -v` and select 4 once. It
+validates each candidate again, asks before each source edit or deployment,
+attempts eligible targets sequentially, stops when a failure cannot safely be
+ignored, and performs the full confirmation scan after successful changes.
+`--continue-on-safe-error` may be added for a best-effort run: it records and
+skips only a candidate scan that fails, introduces new critical/high findings,
+or no longer improves the image. Source-edit, deployment, and rollback errors
+still stop the run because their effects may be uncertain.
+This is a faster batch *attempt*, not a promise that every vulnerability has a
+published fix or that an image-security improvement proves application
+compatibility. Review failed/skipped targets and application behavior before
+another batch.
+
 `--force-auto-remedy-attempt` overrides only `auto_eligible=false`. It cannot
 bypass a disabled entry, backup classification, immutable digest, repository
 match, candidate scan, source precondition, review prompt, convergence check,

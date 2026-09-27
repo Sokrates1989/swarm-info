@@ -105,6 +105,7 @@ def parse_arguments(
     parser.add_argument("--mode", choices=SUPPORTED_MODES, default="menu")
     parser.add_argument("--force-auto-remedy-attempt", action="store_true")
     parser.add_argument("--allow-runtime-override", action="store_true")
+    parser.add_argument("--continue-on-safe-error", action="store_true")
     return parser.parse_args(arguments)
 
 
@@ -330,6 +331,37 @@ def _run_auto(
                 error.code,
                 error.detail,
             )
+            # This handler surrounds only the pre-deployment Scout comparison.
+            # Continue solely for its candidate-specific, non-mutating verdicts.
+            # Any source edit, deployment, or rollback error still stops the run.
+            if (
+                getattr(options, "continue_on_safe_error", False)
+                and error.code in {
+                    "candidate-scan-failed",
+                    "candidate-new-findings",
+                    "candidate-not-improved",
+                }
+            ):
+                _record_result(
+                    plan,
+                    ActionResult(
+                        "skipped-safe-error",
+                        target.service,
+                        target.candidate.reference,
+                        detail=error.code,
+                    ),
+                    plan_output,
+                )
+                print(
+                    message(
+                        catalog,
+                        "remediation.safeErrorSkipped",
+                        service=target.service,
+                        code=error.code,
+                    ),
+                    file=output,
+                )
+                continue
             raise
         print(
             message(

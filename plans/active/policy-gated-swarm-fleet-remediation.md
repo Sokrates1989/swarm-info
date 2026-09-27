@@ -1,22 +1,30 @@
 # Policy-gated Swarm fleet remediation
 
 Status: active. The operator requested visible option-4 progress and a path to
-remediate as many Ubuntu Swarm services as can be reviewed safely. The first
-Redis source edit and image update succeeded technically on 2026-09-27; its
-dependent API smoke test remains pending. No fleet-wide policy authorization
-has been granted by that pilot.
+attempt all available Ubuntu Swarm image remediations in one policy-driven run.
+On 2026-09-27 the operator confirmed that Redis data and pre-alpha website data
+may be lost, with backups and repositories available, and prioritized reducing
+exposure over individual browser acceptance. Five Redis deployments had passed
+exact-image security checks and dependent-client checks in operator output;
+manual guided modes 1–3 remain untested. Fleet deployment has not occurred.
 
-Milestone 1 is implemented locally and validated with 316 offline WSL tests on
-2026-09-27. The changes have not been published or tested on Ubuntu Swarm.
+Milestone 1 was implemented and the operator exercised its visible progress,
+guarded rollout, and rollback boundary on Ubuntu Swarm. The current change
+adds an opt-in bulk policy-preparation command; its local tests and Ubuntu
+acceptance are separate from those earlier results.
 
 ## Proposed approach and decision boundary
 
-Keep option 4's existing installation-owned, exact-service allow list. Extend
-generic execution safety without guessing candidate versions or backup
-dispositions. Process reviewed targets sequentially with a visible heartbeat,
-bounded Swarm convergence/stability check, post-scan, and fail-stop behavior.
-Continue requiring confirmation for each proposed source diff and deployment.
-Do not equate Scout's vulnerability reduction with application compatibility.
+Keep option 4's installation-owned, exact-service allow list. Build many
+explicit targets at once from previously verified immutable candidates, fresh
+live/report identity, the operator's stated loss disposition, and source-edit
+proof where possible. Use an explicit, separately confirmed runtime-override
+path for unresolved sources if the operator selects it. Option 4 still runs
+targets sequentially with progress, candidate rescans, confirmation, bounded
+convergence, post-validation, rollback, and a final all-image scan. An opt-in
+best-effort flag skips only non-mutating candidate rejection; source and
+rollout failures still stop for investigation. Do not
+equate Scout's vulnerability reduction with application compatibility.
 
 The alternative is to promote every generated suggestion or discovered newer
 tag into an executable target. That could cross major-version and data-format
@@ -31,30 +39,32 @@ override is also not a durable substitute for a mapped stack source.
    Swarm stability window that uses existing rollback on failure. Update
    policy documentation and focused offline tests; run the complete local
    suite. No server is changed in this milestone.
-2. **Installation evidence and target review.** After the operator manually
-   publishes the code, collect a redacted Ubuntu inventory of the remaining
-   affected services: live digest, exact declarative source, candidate digest
-   and proven CVE reduction, mounts/data classification, backup/restore proof,
-   and an application-specific smoke check. Create one reviewed host-local
-   policy target per independent source. `/swarm/test` Redis data may be
-   classified disposable as the operator stated; do not extend that exemption
-   to other paths or production services. Validate the first remaining target
-   end-to-end before enabling the next risk group.
-3. **Staged fleet execution and guided-mode regression.** Run option 4 against
-   reviewed targets one at a time, monitor convergence and dependent app
-   behavior, stop on error or uncertain rollback, and refresh complete scan
-   evidence. After the first accepted option-4 pilot, exercise guided modes
-   1, 2, and 3 separately without authorizing unintended mutations.
+2. **Bulk host-policy preparation.** From the existing assessed candidates and
+   fresh manager inventory, stage exact targets only for individually verified
+   improvements with unchanged live images. Prove literal YAML image edits by
+   private Compose rendering; label unresolved sources as skipped unless the
+   operator explicitly opts into runtime drift. Record every decision, preserve
+   previous host policy bytes, and use the operator's explicit fleet-wide
+   data-loss disposition only for that host policy. No service changes in this
+   milestone.
+3. **Sequential fleet execution and guided-mode regression.** After the
+   operator publishes and reviews the prepared policy, run option 4 once to
+   attempt its eligible targets sequentially. Monitor convergence and
+   application behavior, stop on error or uncertain rollback, and refresh the
+   complete scan. Exercise guided modes 1, 2, and 3 separately without
+   authorizing unintended mutations.
 
 ## Required operator decisions and acceptance
 
-- The operator must confirm backup disposition and compatibility/smoke-test
-  criteria for each stateful or major-version target. A previous image digest
-  is not a data rollback. Host-specific policy changes require their own
-  review and each CLI deployment confirmation.
-- Manual acceptance of Redis 8 requires one successful Redis-dependent API
-  operation after the update. Swarm replicas and a clean Scout scan alone do
-  not satisfy this acceptance check.
+- The operator has accepted possible fleet data loss for this pre-alpha
+  installation; that acceptance must be passed explicitly to the host-policy
+  preparer. A previous image digest is not a data rollback. Each CLI source
+  edit/deployment still requires confirmation, and runtime-only overrides
+  remain visibly distinct from durable source edits.
+- The operator-provided Redis 8 client and feature probes satisfy the
+  Redis-dependent acceptance criterion for those completed updates. The
+  fleet-wide run will use a shorter best-effort acceptance cycle; untested
+  application behavior must be reported rather than called verified.
 - Success for milestone 1 is local tests and documentation, not a claim of
   Ubuntu rollout. Success for a fleet target requires source/live identity,
   healthy Swarm state, dependent behavior, and fresh security evidence.

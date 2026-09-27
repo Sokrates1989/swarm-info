@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from scripts.operator_report import load_messages
 from scripts.remediation_cli import _run_auto
+from scripts.remediation_engine import RemediationExecutionError
 from scripts.remediation_policy import load_policy
 from scripts.remediation_source import SourceChange
 from tests.test_remediation_engine import AutoRuntimeClient
@@ -94,3 +95,104 @@ class RemediationBatchTests(unittest.TestCase):
         self.assertEqual(len(plan["execution"]), 1)
         self.assertEqual(plan["execution"][0]["status"], "source-updated-not-deployed")
         self.assertIn("option-4 run stops here", output.getvalue())
+
+    def test_opt_in_continues_only_after_candidate_rejection(self) -> None:
+        """A non-mutating Scout verdict may be skipped without losing the cohort."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            payload = policy_payload(source=None)
+            second = json.loads(json.dumps(payload["targets"][0]))
+            second["id"] = "demo-worker-update"
+            second["match"]["service"] = "demo_worker"
+            payload["targets"].append(second)
+            policy = load_policy(write_policy(root, payload))
+            report_file = root / "vulnerability_scan.json"
+            report_file.write_text("{}", encoding="utf-8")
+            options = argparse.Namespace(
+                report_file=report_file,
+                deployment_map_file=None,
+                deploy_roots=None,
+                plan_output=root / "plan.json",
+                max_age_hours=30.0,
+                history_days=14,
+                lock_file=root / "scan.lock",
+                force_auto_remedy_attempt=False,
+                allow_runtime_override=False,
+                continue_on_safe_error=True,
+            )
+            validation = SimpleNamespace(
+                critical=0, high=0,
+                comparison=SimpleNamespace(removed_total=2, candidate_total=0),
+            )
+            output = io.StringIO()
+            with (
+                patch("scripts.remediation_cli.prepare_review", return_value=object()),
+                patch("scripts.remediation_cli.run_safe_latest_actions", return_value=0),
+                patch(
+                    "scripts.remediation_cli.validate_candidate",
+                    side_effect=[
+                        RemediationExecutionError("candidate-not-improved"),
+                        validation,
+                    ],
+                ) as scan,
+            ):
+                result = _run_auto(
+                    vulnerability_report(), {"services": []}, policy, options,
+                    AutoRuntimeClient(), load_messages("en"),
+                    input_function=lambda _: "n", output=output,
+                )
+            plan = json.loads(options.plan_output.read_text(encoding="utf-8"))
+
+        self.assertEqual(result, 0)
+        self.assertEqual(scan.call_count, 2)
+        self.assertEqual(plan["execution"][0]["status"], "skipped-safe-error")
+        self.assertEqual(plan["execution"][0]["detail"], "candidate-not-improved")
+        self.assertIn("Continuing to the next target", output.getvalue())
+
+    def test_opt_in_still_stops_after_rollout_error(self) -> None:
+        """Never start another target when deployment effects may be uncertain."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            payload = policy_payload(source=None)
+            second = json.loads(json.dumps(payload["targets"][0]))
+            second["id"] = "demo-worker-update"
+            second["match"]["service"] = "demo_worker"
+            payload["targets"].append(second)
+            policy = load_policy(write_policy(root, payload))
+            report_file = root / "vulnerability_scan.json"
+            report_file.write_text("{}", encoding="utf-8")
+            options = argparse.Namespace(
+                report_file=report_file,
+                deployment_map_file=None,
+                deploy_roots=None,
+                plan_output=root / "plan.json",
+                max_age_hours=30.0,
+                history_days=14,
+                lock_file=root / "scan.lock",
+                force_auto_remedy_attempt=False,
+                allow_runtime_override=True,
+                continue_on_safe_error=True,
+            )
+            validation = SimpleNamespace(
+                critical=0, high=0,
+                comparison=SimpleNamespace(removed_total=2, candidate_total=0),
+            )
+            with (
+                patch("scripts.remediation_cli.prepare_review", return_value=object()),
+                patch("scripts.remediation_cli.run_safe_latest_actions", return_value=0),
+                patch("scripts.remediation_cli.validate_candidate", return_value=validation) as scan,
+                patch(
+                    "scripts.remediation_cli.execute_runtime_override",
+                    side_effect=RemediationExecutionError("runtime-rollback-uncertain"),
+                ),
+            ):
+                with self.assertRaises(RemediationExecutionError):
+                    _run_auto(
+                        vulnerability_report(), {"services": []}, policy, options,
+                        AutoRuntimeClient(), load_messages("en"),
+                        input_function=lambda _: "y", output=io.StringIO(),
+                    )
+
+        self.assertEqual(scan.call_count, 1)

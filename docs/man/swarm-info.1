@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "September 2026" "swarm-info 1.19.0" "User Commands"
+.TH SWARM-INFO 1 "September 2026" "swarm-info 1.20.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -47,6 +47,14 @@ and update confirmations. All other items remain blocked until reviewed policy
 targets authorize them. No mutation is available without a terminal, fresh
 complete scan, current manager access, exact rollback evidence, and separate
 confirmations.
+.TP
+.B \-\-prepare-remediation-cohort
+From an existing image-update assessment, the current complete scan, and live
+manager evidence, stage exact host-policy targets for every individually
+verified candidate that still matches its service. The dry run prints staged
+and skipped decisions; both \fB\-\-accept-data-loss\fR and \fB\-\-apply\fR
+are required to write policy rules. No stack or service is changed. Select
+option 4 later to attempt the targets sequentially with its normal prompts.
 .TP
 .B \-\-compose-remediation
 Plan one installation-policy-approved standalone Compose service image update.
@@ -235,6 +243,33 @@ copy-ready backup, pull/build, recreate, verify, and focused-rescan commands.
 Selection prioritizes critical findings removed, then high findings removed.
 All commands are guidance only; compatibility and deployment remain unverified
 and unauthorized.
+.TP
+.B \-\-prepare-remediation-cohort
+Prepare explicit host-policy targets for individually verified, immutable
+image candidates that still match the fresh report and live Swarm services.
+Mapped literal YAML sources require a rendered non-target-change proof.
+Unproved sources remain skipped unless runtime override staging is explicitly
+requested. This command never deploys services. It writes policy rules only
+with both \fB\-\-accept-data-loss\fR and \fB\-\-apply\fR.
+.TP
+.BI \-\-assessment-file " path"
+Select an existing image-update assessment for cohort preparation. Default:
+/info_json/image_update_assessment.json. Individually verified rows in a
+partial assessment may be used; incomplete or unverified rows cannot.
+.TP
+.BI \-\-backup-reason " text"
+Document the host operator's explicit data-loss and backup disposition for
+every newly staged cohort target. Required for cohort preparation.
+.TP
+.B \-\-accept-data-loss
+Explicitly accept the stated data-loss risk before cohort policy rules are
+applied. Does not bypass option-4 candidate scans or update confirmations.
+.TP
+.B \-\-continue-on-safe-error
+With vulnerability remediation option 4, record and skip only a failed
+pre-deployment candidate scan, a candidate with new critical/high findings,
+or a candidate with no longer-proven improvement. Source-edit, deployment,
+and rollback failures still stop the run. No confirmation is bypassed.
 .TP
 .BI \-\-allow-registry-host " host"
 With
@@ -633,6 +668,19 @@ swarm-info --assess-image-updates \
   --candidate-report-file /info_json/image_update_candidates.json \
   --output-file /info_json/image_update_assessment.json
 .fi
+.PP
+Prepare explicit fleet rules without changing a policy or service:
+.PP
+.nf
+swarm-info --prepare-remediation-cohort \
+  --remediation-policy /root/.config/swarm-info/remediation-policy.json \
+  --backup-reason 'Operator accepts data loss for this fleet.'
+.fi
+.PP
+After reviewing the decision record, repeat with
+.BR "\-\-accept-data-loss \-\-apply" ,
+then select option 4 in
+.BR "swarm-info \-v" .
 .PP
 Verify one service after redeploying its remediated image:
 .PP

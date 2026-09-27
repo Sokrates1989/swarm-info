@@ -258,6 +258,7 @@ display_vulnerability_info() {
         REMEDIATION_PLAN_FILE="$REMEDIATION_PLAN_FILE" \
         FORCE_AUTO_REMEDY_ATTEMPT="$FORCE_AUTO_REMEDY_ATTEMPT" \
         ALLOW_RUNTIME_OVERRIDE="$ALLOW_RUNTIME_OVERRIDE" \
+        CONTINUE_ON_SAFE_ERROR="$CONTINUE_ON_SAFE_ERROR" \
         VULNERABILITY_MAX_AGE_HOURS="$VULNERABILITY_MAX_AGE_HOURS" \
         VULNERABILITY_HISTORY_DAYS="$VULNERABILITY_HISTORY_DAYS" \
         VULNERABILITY_LOCK_FILE="$VULNERABILITY_LOCK_FILE" \
@@ -463,6 +464,14 @@ display_help() {
     echo -e "                    $OP_HELP_DISCOVER_IMAGE_UPDATES"
     echo -e "  --assess-image-updates"
     echo -e "                    $OP_HELP_ASSESS_IMAGE_UPDATES"
+    echo -e "  --prepare-remediation-cohort"
+    echo -e "                    $OP_HELP_PREPARE_COHORT"
+    echo -e "  --assessment-file FILE"
+    echo -e "                    $OP_HELP_COHORT_ASSESSMENT_FILE"
+    echo -e "  --backup-reason TEXT"
+    echo -e "                    $OP_HELP_COHORT_BACKUP_REASON"
+    echo -e "  --accept-data-loss"
+    echo -e "                    $OP_HELP_COHORT_ACCEPT_LOSS"
     echo -e "  --allow-registry-host HOST"
     echo -e "                    $OP_HELP_ALLOW_REGISTRY_HOST"
     echo -e "  --vulnerability-report-file FILE"
@@ -530,6 +539,8 @@ display_help() {
     echo -e "                    $OP_HELP_REMEDIATION_PLAN"
     echo -e "  --allow-runtime-override"
     echo -e "                    $OP_HELP_RUNTIME_OVERRIDE"
+    echo -e "  --continue-on-safe-error"
+    echo -e "                    $OP_HELP_CONTINUE_SAFE_ERROR"
     echo -e "  -V, --version     $OP_HELP_VERSION"
     echo -e "  -w                Alias for --wait"
     echo -e "  --wait            Show swarm info and wait after outputs to make it easier to read"
@@ -553,6 +564,7 @@ display_help() {
     echo "  swarm-info --compare-image-update --current-image my/app:1.0 --candidate-image my/app:2.0"
     echo "  swarm-info --discover-image-updates --allow-registry-host docker.io"
     echo "  swarm-info --assess-image-updates --output-file /info_json/image_update_assessment.json"
+    echo "  swarm-info --prepare-remediation-cohort --remediation-policy /root/.config/swarm-info/remediation-policy.json --backup-reason 'Operator accepts data loss for this fleet' --accept-data-loss --apply"
     echo "  swarm-info -v"
     echo "  swarm-info --remediate-vulnerabilities --deploy-root /swarm"
 
@@ -606,6 +618,7 @@ REMEDIATION_POLICY_FILE="NONE"
 REMEDIATION_PLAN_FILE="NONE"
 FORCE_AUTO_REMEDY_ATTEMPT="false"
 ALLOW_RUNTIME_OVERRIDE="false"
+CONTINUE_ON_SAFE_ERROR="false"
 IMAGE_CLEANUP_APPLY="false"
 IMAGE_CLEANUP_ASSUME_YES="false"
 REQUEST_APPLY="false"
@@ -613,6 +626,9 @@ IMAGE_UPDATE_CURRENT_IMAGE=""
 IMAGE_UPDATE_CANDIDATE_IMAGE=""
 IMAGE_UPDATE_REPORT_FILE="NONE"
 IMAGE_UPDATE_CANDIDATE_REPORT_FILE="NONE"
+REMEDIATION_COHORT_ASSESSMENT_FILE="NONE"
+REMEDIATION_COHORT_BACKUP_REASON=""
+REMEDIATION_COHORT_ACCEPT_DATA_LOSS="false"
 IMAGE_UPDATE_MAX_REGISTRY_TAGS="10000"
 IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS=()
 
@@ -924,6 +940,32 @@ while [ $# -gt 0 ]; do
             selected_action="assess-image-updates"
             shift
             ;;
+        --prepare-remediation-cohort)
+            selected_action="prepare-remediation-cohort"
+            shift
+            ;;
+        --assessment-file)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            REMEDIATION_COHORT_ASSESSMENT_FILE="$1"
+            shift
+            ;;
+        --backup-reason)
+            if [ "$#" -lt 2 ]; then
+                echo -e "Missing value for $1" >&2
+                exit 1
+            fi
+            shift
+            REMEDIATION_COHORT_BACKUP_REASON="$1"
+            shift
+            ;;
+        --accept-data-loss)
+            REMEDIATION_COHORT_ACCEPT_DATA_LOSS="true"
+            shift
+            ;;
         --allow-registry-host)
             if [ "$#" -lt 2 ]; then
                 echo -e "Missing value for $1" >&2
@@ -1108,6 +1150,10 @@ while [ $# -gt 0 ]; do
             ALLOW_RUNTIME_OVERRIDE="true"
             shift
             ;;
+        --continue-on-safe-error)
+            CONTINUE_ON_SAFE_ERROR="true"
+            shift
+            ;;
         --secrets)
             selected_action="secrets"
             shift
@@ -1170,7 +1216,8 @@ if [ "$IMAGE_CLEANUP_ASSUME_YES" = "true" ] \
 fi
 if [ "$REQUEST_APPLY" = "true" ] \
     && [ "$selected_action" != "image-cleanup" ] \
-    && [ "$selected_action" != "compose-remediation" ]; then
+    && [ "$selected_action" != "compose-remediation" ] \
+    && [ "$selected_action" != "prepare-remediation-cohort" ]; then
     echo "$OP_APPLY_SCOPE" >&2
     exit 64
 fi
@@ -1207,12 +1254,24 @@ elif { [ "${#IMAGE_UPDATE_ALLOWED_REGISTRY_HOSTS[@]}" -gt 0 ] \
 elif [ "$IMAGE_UPDATE_REPORT_FILE" != "NONE" ] \
     && [ "$selected_action" != "discover-image-updates" ] \
     && [ "$selected_action" != "assess-image-updates" ] \
+    && [ "$selected_action" != "prepare-remediation-cohort" ] \
     && [ "$selected_action" != "compose-remediation" ]; then
     echo "$OP_IMAGE_REPORT_OPTION_SCOPE" >&2
     exit 64
 elif [ "$IMAGE_UPDATE_CANDIDATE_REPORT_FILE" != "NONE" ] \
     && [ "$selected_action" != "assess-image-updates" ]; then
     echo "$OP_ASSESSMENT_OPTION_SCOPE" >&2
+    exit 64
+elif { [ "$REMEDIATION_COHORT_ASSESSMENT_FILE" != "NONE" ] \
+    || [ -n "$REMEDIATION_COHORT_BACKUP_REASON" ] \
+    || [ "$REMEDIATION_COHORT_ACCEPT_DATA_LOSS" = "true" ]; } \
+    && [ "$selected_action" != "prepare-remediation-cohort" ]; then
+    echo "$OP_COHORT_OPTION_SCOPE" >&2
+    exit 64
+elif [ "$CONTINUE_ON_SAFE_ERROR" = "true" ] \
+    && [ "$selected_action" != "vulnerabilities" ] \
+    && [ "$selected_action" != "remediate-vulnerabilities" ]; then
+    echo "$OP_CONTINUE_SAFE_ERROR_SCOPE" >&2
     exit 64
 elif [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
     && [ "$selected_action" != "scan-vulnerabilities" ]; then
@@ -1341,6 +1400,9 @@ case "$selected_action" in
         ;;
     "assess-image-updates")
         run_image_update_assessment
+        ;;
+    "prepare-remediation-cohort")
+        run_remediation_cohort
         ;;
     "security-check")
         run_compatibility_security_check

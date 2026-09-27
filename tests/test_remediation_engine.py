@@ -27,6 +27,8 @@ from scripts.remediation_engine import (
     runtime_update_command,
     validate_candidate,
     wait_for_candidate,
+    wait_for_original_image,
+    verify_rendered_service_topology,
 )
 from scripts.remediation_progress import run_visible_action
 from scripts.remediation_guidance import _images
@@ -112,11 +114,17 @@ class RollbackClient:
         command = list(arguments)
         if command[:2] == ["service", "inspect"] and "TaskTemplate" in command[-1]:
             return CommandResult(0, self.image + "\n", "")
+        if command[:2] == ["service", "inspect"] and "Spec.Mode" in command[-1]:
+            return CommandResult(0, '{"Replicated":{"Replicas":1}}\n', "")
         if command[:2] == ["service", "inspect"]:
             return CommandResult(0, "completed\n", "")
         if command[:2] == ["service", "ls"]:
             return CommandResult(0, "demo_api\t1/1\n", "")
         if command[:2] == ["compose", "--env-file"]:
+            if command[-1] == "json":
+                return CommandResult(
+                    0, json.dumps({"services": {"api": {"image": self.candidate}}}), ""
+                )
             return CommandResult(0, f"services:\n  api:\n    image: {self.candidate}\n", "")
         if command[:2] == ["stack", "deploy"]:
             rendered = Path(command[command.index("-c") + 1]).read_text(encoding="utf-8")
@@ -214,6 +222,8 @@ class AutoRuntimeClient:
             return CommandResult(0, "demo_worker\t1/1\n", "")
         if command[:2] == ["service", "inspect"] and "ContainerSpec.Image" in command[-1]:
             return CommandResult(0, self.image + "\n", "")
+        if command[:2] == ["service", "inspect"] and "Spec.Mode" in command[-1]:
+            return CommandResult(0, '{"Replicated":{"Replicas":1}}\n', "")
         if command[:2] == ["service", "inspect"]:
             return CommandResult(0, "completed\n", "")
         if command == ["service", "update", "--rollback", "demo_worker"]:
@@ -297,6 +307,21 @@ class RemediationEngineTests(unittest.TestCase):
                     capture_service(UnavailableClient(replicas), "demo_worker")
                 self.assertEqual(context.exception.code, "service-not-converged")
 
+    def test_capture_records_global_mode(self) -> None:
+        """Recognize a converged global service before starting an image action."""
+
+        class GlobalClient(AutoRuntimeClient):
+            """Provide Docker's global-mode inspection response."""
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                if arguments[:2] == ["service", "inspect"] and "Spec.Mode" in arguments[-1]:
+                    return CommandResult(0, '{"Global":{}}\n', "")
+                return super().run(arguments)
+
+        snapshot = capture_service(GlobalClient(), "demo_worker")
+        self.assertEqual(snapshot.mode, "global")
+        self.assertEqual((snapshot.running, snapshot.desired), (1, 1))
+
     def test_candidate_must_remain_converged_for_stability_window(self) -> None:
         """Reset the healthy timer when replicas briefly disappear."""
 
@@ -313,6 +338,8 @@ class RemediationEngineTests(unittest.TestCase):
                     self.index += 1
                     return CommandResult(0, f"demo_api\t{state}\n", "")
                 if arguments[:2] == ["service", "inspect"]:
+                    if "Spec.Mode" in arguments[-1]:
+                        return CommandResult(0, '{"Replicated":{"Replicas":1}}\n', "")
                     value = NEW_IMAGE if "ContainerSpec.Image" in arguments[-1] else "completed"
                     return CommandResult(0, value + "\n", "")
                 return CommandResult(1, "", "unexpected command")
@@ -353,6 +380,8 @@ class RemediationEngineTests(unittest.TestCase):
                     self.index += 1
                     return CommandResult(0, f"demo_api\t{replicas}\n", "")
                 if arguments[:2] == ["service", "inspect"]:
+                    if "Spec.Mode" in arguments[-1]:
+                        return CommandResult(0, '{"Replicated":{"Replicas":1}}\n', "")
                     value = NEW_IMAGE if "ContainerSpec.Image" in arguments[-1] else "completed"
                     return CommandResult(0, value + "\n", "")
                 return CommandResult(1, "", "unexpected command")
@@ -376,6 +405,119 @@ class RemediationEngineTests(unittest.TestCase):
             )
 
         self.assertEqual(context.exception.code, "service-convergence-timeout")
+
+    def test_global_rollout_tolerates_temporary_scheduler_target_change(self) -> None:
+        """Global desired task counts may briefly fall to zero during replacement."""
+
+        class GlobalRolloutClient:
+            """Expose the observed Traefik-like 1/0 state before convergence."""
+
+            def __init__(self) -> None:
+                self.states = ("1/0", "0/1", "1/1", "1/1")
+                self.index = 0
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                if arguments[:2] == ["service", "ls"]:
+                    state = self.states[min(self.index, len(self.states) - 1)]
+                    self.index += 1
+                    return CommandResult(0, f"traefik_traefik\t{state}\n", "")
+                if "Spec.Mode" in arguments[-1]:
+                    return CommandResult(0, '{"Global":{}}\n', "")
+                if "ContainerSpec.Image" in arguments[-1]:
+                    return CommandResult(0, NEW_IMAGE + "\n", "")
+                return CommandResult(0, "completed\n", "")
+
+        elapsed = [0.0]
+
+        def advance(seconds: float) -> None:
+            """Advance the polling clock without sleeping."""
+
+            elapsed[0] += seconds
+
+        client = GlobalRolloutClient()
+        wait_for_candidate(
+            client,
+            ServiceSnapshot("traefik_traefik", OLD_IMAGE, 1, 1, "global"),
+            parse_candidate_image(NEW_IMAGE),
+            12,
+            sleeper=advance,
+            stability_seconds=2,
+            clock=lambda: elapsed[0],
+        )
+
+        self.assertEqual(client.index, 4)
+
+    def test_replicated_rollout_rejects_changed_replica_target(self) -> None:
+        """Keep the fixed-target guard for ordinary replicated services."""
+
+        class ChangedTargetClient:
+            """Return one undesired scale-to-zero event."""
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                if arguments[:2] == ["service", "ls"]:
+                    return CommandResult(0, "demo_api\t1/0\n", "")
+                if "Spec.Mode" in arguments[-1]:
+                    return CommandResult(0, '{"Replicated":{"Replicas":0}}\n', "")
+                if "ContainerSpec.Image" in arguments[-1]:
+                    return CommandResult(0, NEW_IMAGE + "\n", "")
+                return CommandResult(0, "completed\n", "")
+
+        with self.assertRaises(RemediationExecutionError) as context:
+            wait_for_candidate(
+                ChangedTargetClient(),
+                ServiceSnapshot("demo_api", OLD_IMAGE, 1, 1),
+                parse_candidate_image(NEW_IMAGE),
+                10,
+            )
+
+        self.assertEqual(context.exception.code, "service-replica-target-changed")
+
+    def test_rollback_does_not_accept_zero_global_availability(self) -> None:
+        """Restoring an image at 0/0 is not a confirmed rollback of a 1/1 service."""
+
+        class UnavailableGlobalClient:
+            """Report the original image but no desired or running task."""
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                if arguments[:2] == ["service", "ls"]:
+                    return CommandResult(0, "traefik_traefik\t0/0\n", "")
+                if "Spec.Mode" in arguments[-1]:
+                    return CommandResult(0, '{"Global":{}}\n', "")
+                return CommandResult(0, OLD_IMAGE + "\n", "")
+
+        with patch("scripts.remediation_engine.time.monotonic", side_effect=[0, 0, 2]):
+            with self.assertRaises(RemediationExecutionError) as context:
+                wait_for_original_image(
+                    UnavailableGlobalClient(),
+                    ServiceSnapshot("traefik_traefik", OLD_IMAGE, 1, 1, "global"),
+                    1,
+                    sleeper=lambda _: None,
+                )
+
+        self.assertEqual(context.exception.code, "rollback-convergence-timeout")
+
+    def test_rendered_source_must_match_live_service_topology(self) -> None:
+        """Do not reconcile stale source scaling or mode in an image-only deploy."""
+
+        global_snapshot = ServiceSnapshot("traefik_traefik", OLD_IMAGE, 1, 1, "global")
+        verify_rendered_service_topology(
+            {"services": {"traefik": {"deploy": {"mode": "global"}}}},
+            "traefik", global_snapshot,
+        )
+
+        with self.assertRaises(RemediationExecutionError) as context:
+            verify_rendered_service_topology(
+                {"services": {"traefik": {"deploy": {"replicas": 1}}}},
+                "traefik", global_snapshot,
+            )
+        self.assertEqual(context.exception.code, "source-service-mode-drift")
+
+        with self.assertRaises(RemediationExecutionError) as context:
+            verify_rendered_service_topology(
+                {"services": {"api": {"deploy": {"replicas": 0}}}},
+                "api", ServiceSnapshot("demo_api", OLD_IMAGE, 1, 1),
+            )
+        self.assertEqual(context.exception.code, "source-service-replica-drift")
 
     def test_clean_candidate_is_accepted_as_an_improvement(self) -> None:
         """Require exact immutable scanning before any edit is prepared."""
@@ -542,6 +684,50 @@ class RemediationEngineTests(unittest.TestCase):
             self.assertEqual(context.exception.code, "declarative-deploy-failed")
             self.assertEqual(environment.read_bytes(), original)
             self.assertEqual(client.image, OLD_IMAGE)
+
+    def test_source_replica_drift_restores_edit_without_deploying(self) -> None:
+        """Reject stale declarative scaling before any live stack mutation."""
+
+        class DriftedSourceClient(RollbackClient):
+            """Render a zero-replica source while the live target remains 1/1."""
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                if arguments[:1] == ["compose"] and arguments[-1] == "json":
+                    return CommandResult(
+                        0,
+                        json.dumps({
+                            "services": {
+                                "api": {
+                                    "image": NEW_IMAGE,
+                                    "deploy": {"replicas": 0},
+                                }
+                            }
+                        }),
+                        "",
+                    )
+                return super().run(arguments)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = root / ".env"
+            original = b"IMAGE_VERSION=1.0.0\n"
+            replacement = b"IMAGE_VERSION=1.1.0\n"
+            environment.write_bytes(replacement)
+            target, entry = self._target_and_entry(root)
+            change = SourceChange(environment, original, replacement, "diff", 0o600)
+            client = DriftedSourceClient(OLD_IMAGE, NEW_IMAGE)
+
+            with self.assertRaises(RemediationExecutionError) as context:
+                deploy_declarative_change(
+                    client, target, entry, change,
+                    f"services:\n  api:\n    image: {OLD_IMAGE}\n".encode(),
+                )
+
+            self.assertEqual(environment.read_bytes(), original)
+            self.assertEqual(client.deployments, [])
+
+        self.assertEqual(context.exception.code, "declarative-deploy-failed")
+        self.assertIn("source-service-replica-drift", context.exception.detail)
 
     def test_yaml_preview_allows_only_target_image_render_change(self) -> None:
         """Validate a proposal privately and remove its temporary source."""

@@ -165,14 +165,21 @@ can bypass only `auto_eligible`; it cannot bypass any other safeguard.
 
 `verification.timeout_seconds` is the Swarm convergence-polling limit (30–1800
 seconds; default 300), not a timeout for Docker's deploy command. Optional
-`verification.stability_seconds` requires the exact candidate image and all
-desired replicas at every two-second poll over that window before
+`verification.stability_seconds` requires the exact candidate image and full
+service availability at every two-second poll over that window before
 post-validation (0–600 seconds, less than the timeout; default 0 for existing
 policies). An observed drop in replicas resets the stability timer; a timeout
 causes the guarded action to attempt rollback. This does not replace Docker
 health checks or application-specific smoke tests. Set an appropriate window
 per reviewed service, especially after a major version change. An image
 rollback does not reverse a database or data-format migration.
+
+Replicated services keep their fixed live replica target. Global services can
+temporarily change their desired task count during a rollout; the tool waits
+for full convergence and at least the pre-action availability instead of
+treating that transient count as a new scale setting. A source-based deploy
+also requires the rendered target service mode and, for replicated services,
+replica count to match the live pre-action specification.
 
 Option 4 processes eligible targets one at a time and asks before each edit
 and deployment. It stops on an execution error. If the operator accepts a

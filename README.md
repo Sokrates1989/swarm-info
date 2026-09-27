@@ -940,14 +940,18 @@ The policy-backed auto-remediation sequence remains intentionally strict:
    the proposed stack before the real source is edited.
 7. Ask separately before deployment (default `Y` only after the source change
    was explicitly accepted), report immediately and periodically while the
-   action runs, wait for the service to converge, and scan the immutable
-   candidate again. An installation target may add a bounded, opt-in Swarm
-   stability window before post-validation; this is not an application smoke
-   test.
+   action runs, confirm the rendered source still matches the live service's
+   mode and fixed replica target, wait for convergence, and scan the immutable
+   candidate again. Global services may briefly show a different desired task
+   count while Swarm replaces tasks; they must regain at least their prior
+   availability before success. An installation target may add a bounded,
+   opt-in Swarm stability window before post-validation; this is not an
+   application smoke test.
 8. Attempt to restore the original source and previous rendered stack when a
    successful deployment later fails convergence or post-validation, then
-   verify rollback convergence. A failed `docker stack deploy` can have partial
-   effects; the tool restores the source and stops, but an operator must check
+   verify the original image, service mode, and prior availability. A failed
+   `docker stack deploy` can have partial effects; the tool restores the source
+   and stops, but an operator must check
    for live stack drift before continuing. An image rollback cannot undo an
    application data migration.
 9. After any successful deployment, run and atomically publish a locked,

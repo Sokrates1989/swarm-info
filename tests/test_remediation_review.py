@@ -114,6 +114,9 @@ class SafeAutoClient(AdviceClient):
         if command[:2] == ["service", "inspect"] and "ContainerSpec.Image" in command[-1]:
             self.commands.append(command)
             return CommandResult(0, self.live_image + "\n", "")
+        if command[:2] == ["service", "inspect"] and "Spec.Mode" in command[-1]:
+            self.commands.append(command)
+            return CommandResult(0, '{"Replicated":{"Replicas":1}}\n', "")
         if command[:2] == ["service", "inspect"]:
             self.commands.append(command)
             return CommandResult(0, "completed\n", "")

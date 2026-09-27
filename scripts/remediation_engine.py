@@ -53,12 +53,13 @@ class CandidateValidation:
 
 @dataclasses.dataclass(frozen=True)
 class ServiceSnapshot:
-    """Pre-action service image and observed replica state."""
+    """Pre-action service image, mode, and observed availability."""
 
     name: str
     image: str
     running: int
     desired: int
+    mode: str = "replicated"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -213,6 +214,29 @@ def service_replicas(client: DockerClient, service: str) -> tuple[int, int]:
     raise RemediationExecutionError("service-not-found", service)
 
 
+def inspect_service_mode(client: DockerClient, service: str) -> str:
+    """Read the live Swarm mode so global task counts are not treated as fixed replicas."""
+
+    result = client.run(
+        ["service", "inspect", service, "--format", "{{json .Spec.Mode}}"]
+    )
+    if result.return_code != 0:
+        raise RemediationExecutionError(
+            "service-mode-inspect-failed", sanitize_command_error(result.stderr)
+        )
+    try:
+        mode = json.loads(result.stdout)
+    except (TypeError, ValueError) as error:
+        raise RemediationExecutionError("service-mode-invalid", service) from error
+    if not isinstance(mode, dict):
+        raise RemediationExecutionError("service-mode-invalid", service)
+    if mode.get("Global") is not None:
+        return "global"
+    if mode.get("Replicated") is not None:
+        return "replicated"
+    raise RemediationExecutionError("service-mode-unsupported", service)
+
+
 def capture_service(client: DockerClient, service: str) -> ServiceSnapshot:
     """Capture a fully running service before permitting an image mutation."""
 
@@ -221,7 +245,10 @@ def capture_service(client: DockerClient, service: str) -> ServiceSnapshot:
         raise RemediationExecutionError(
             "service-not-converged", f"{service}: replicas={running}/{desired}"
         )
-    return ServiceSnapshot(service, inspect_service_image(client, service), running, desired)
+    return ServiceSnapshot(
+        service, inspect_service_image(client, service), running, desired,
+        inspect_service_mode(client, service),
+    )
 
 
 def _update_state(client: DockerClient, service: str) -> str:
@@ -261,13 +288,20 @@ def wait_for_candidate(
         try:
             image = inspect_service_image(client, snapshot.name)
             running, desired = service_replicas(client, snapshot.name)
-            if desired != snapshot.desired:
+            mode = inspect_service_mode(client, snapshot.name)
+            if mode != snapshot.mode:
+                raise RemediationExecutionError("service-mode-changed", snapshot.name)
+            if mode == "replicated" and desired != snapshot.desired:
                 raise RemediationExecutionError(
                     "service-replica-target-changed",
                     f"{snapshot.name}: replicas={running}/{desired}",
                 )
             image_ready = image_references_match(candidate.reference, image)
-            replicas_ready = running == desired and desired > 0
+            replicas_ready = (
+                running == desired and desired >= snapshot.desired
+                if mode == "global"
+                else running == desired and desired > 0
+            )
             if image_ready and replicas_ready and state not in {"updating", "rollback_started"}:
                 if ready_since is None:
                     ready_since = clock()
@@ -277,7 +311,7 @@ def wait_for_candidate(
                 ready_since = None
             last_detail = f"image={image}; replicas={running}/{desired}; state={state or 'none'}"
         except RemediationExecutionError as error:
-            if error.code == "service-replica-target-changed":
+            if error.code in {"service-replica-target-changed", "service-mode-changed"}:
                 raise
             ready_since = None
             last_detail = error.code
@@ -298,12 +332,15 @@ def wait_for_original_image(
         try:
             image = inspect_service_image(client, snapshot.name)
             running, desired = service_replicas(client, snapshot.name)
+            mode = inspect_service_mode(client, snapshot.name)
             availability = (
                 running == desired
-                if snapshot.running == snapshot.desired
-                else running >= snapshot.running
+                and running >= snapshot.running
+                and desired >= snapshot.desired
+                if mode == "global"
+                else running == snapshot.running and desired == snapshot.desired
             )
-            if image_references_match(snapshot.image, image) and availability:
+            if mode == snapshot.mode and image_references_match(snapshot.image, image) and availability:
                 return
         except RemediationExecutionError:
             pass
@@ -470,6 +507,29 @@ def verify_rendered_image_delta(
         raise RemediationExecutionError("rendered-stack-other-change", compose_service)
 
 
+def verify_rendered_service_topology(
+    rendered: Mapping[str, Any], compose_service: str, snapshot: ServiceSnapshot
+) -> None:
+    """Block a stack deploy when its target mode or replica count differs from live."""
+
+    services = rendered.get("services")
+    service = services.get(compose_service) if isinstance(services, Mapping) else None
+    if not isinstance(service, Mapping):
+        raise RemediationExecutionError("rendered-stack-target-missing", compose_service)
+    deploy = service.get("deploy") or {}
+    if not isinstance(deploy, Mapping):
+        raise RemediationExecutionError("rendered-stack-deploy-invalid", compose_service)
+    mode = deploy.get("mode", "replicated")
+    if mode != snapshot.mode:
+        raise RemediationExecutionError("source-service-mode-drift", compose_service)
+    if mode == "replicated":
+        replicas = deploy.get("replicas", 1)
+        if type(replicas) is not int or replicas != snapshot.desired:
+            raise RemediationExecutionError(
+                "source-service-replica-drift", compose_service
+            )
+
+
 def preview_yaml_image_change(
     client: DockerClient,
     change: SourceChange,
@@ -568,15 +628,17 @@ def deploy_declarative_change(
         if not image_references_match(str(plan_entry.get("current_image", "")), snapshot.image):
             raise RemediationExecutionError("live-image-changed", snapshot.image)
         rendered = render_stack(client, stack_file)
+        compose_service = mapping.get("compose_service")
+        if not isinstance(compose_service, str):
+            raise RemediationExecutionError("mapping-service-missing")
+        rendered_model = render_stack_model(client, stack_file)
+        verify_rendered_service_topology(rendered_model, compose_service, snapshot)
         if target.source is not None and target.source.edit_type == "yaml_image":
             if expected_rendered_model is None:
                 raise RemediationExecutionError("rendered-stack-preview-required")
-            compose_service = mapping.get("compose_service")
-            if not isinstance(compose_service, str):
-                raise RemediationExecutionError("mapping-service-missing")
             verify_rendered_image_delta(
                 expected_rendered_model,
-                render_stack_model(client, stack_file),
+                rendered_model,
                 compose_service,
                 str(plan_entry["current_image"]),
                 target.candidate,

@@ -21,6 +21,19 @@ expand the target allow list or authorize an unreviewed candidate.
 The option is implemented locally and 341 offline tests pass; Ubuntu acceptance
 and the guided-mode regression remain pending.
 
+On 2026-09-27 an operator option-4 Traefik attempt on server commit `8d7ea59`
+stopped at `service-replica-target-changed: replicas=1/0`. The follow-up
+read-only check showed Traefik is a global-mode service, currently restored to
+its original image and running `1/1`; its rendered source is also global. The
+temporary desired task count was not a persistent scale-to-zero setting. A
+local follow-up fix now distinguishes global task churn from replicated target
+drift, checks the rendered source topology before deployment, and requires
+prior availability for rollback confirmation. Offline validation and a new
+Ubuntu acceptance attempt are separate; no fleet remediation is claimed. The
+focused remediation modules passed 71 tests and the full local Ubuntu WSL
+suite passed 347 tests. The Windows-only full-suite invocation fails on
+Bash/path compatibility outside the remediation modules.
+
 ## Proposed approach and decision boundary
 
 Keep option 4's installation-owned, exact-service allow list. Build many

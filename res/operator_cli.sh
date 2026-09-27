@@ -293,6 +293,9 @@ run_vulnerability_remediation_menu() {
     if [ "${CONTINUE_ON_SAFE_ERROR:-false}" = "true" ]; then
         remediation_arguments+=(--continue-on-safe-error)
     fi
+    if [ "${AUTO_CONFIRM_POLICY_TARGETS:-false}" = "true" ]; then
+        remediation_arguments+=(--auto-confirm-policy-targets)
+    fi
     (
         cd "$MAIN_DIR" || exit 3
         "$python_command" "${remediation_arguments[@]}"

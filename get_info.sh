@@ -259,6 +259,7 @@ display_vulnerability_info() {
         FORCE_AUTO_REMEDY_ATTEMPT="$FORCE_AUTO_REMEDY_ATTEMPT" \
         ALLOW_RUNTIME_OVERRIDE="$ALLOW_RUNTIME_OVERRIDE" \
         CONTINUE_ON_SAFE_ERROR="$CONTINUE_ON_SAFE_ERROR" \
+        AUTO_CONFIRM_POLICY_TARGETS="$AUTO_CONFIRM_POLICY_TARGETS" \
         VULNERABILITY_MAX_AGE_HOURS="$VULNERABILITY_MAX_AGE_HOURS" \
         VULNERABILITY_HISTORY_DAYS="$VULNERABILITY_HISTORY_DAYS" \
         VULNERABILITY_LOCK_FILE="$VULNERABILITY_LOCK_FILE" \
@@ -541,6 +542,8 @@ display_help() {
     echo -e "                    $OP_HELP_RUNTIME_OVERRIDE"
     echo -e "  --continue-on-safe-error"
     echo -e "                    $OP_HELP_CONTINUE_SAFE_ERROR"
+    echo -e "  --auto-confirm-policy-targets"
+    echo -e "                    $OP_HELP_AUTO_CONFIRM_POLICY_TARGETS"
     echo -e "  -V, --version     $OP_HELP_VERSION"
     echo -e "  -w                Alias for --wait"
     echo -e "  --wait            Show swarm info and wait after outputs to make it easier to read"
@@ -619,6 +622,7 @@ REMEDIATION_PLAN_FILE="NONE"
 FORCE_AUTO_REMEDY_ATTEMPT="false"
 ALLOW_RUNTIME_OVERRIDE="false"
 CONTINUE_ON_SAFE_ERROR="false"
+AUTO_CONFIRM_POLICY_TARGETS="false"
 IMAGE_CLEANUP_APPLY="false"
 IMAGE_CLEANUP_ASSUME_YES="false"
 REQUEST_APPLY="false"
@@ -1154,6 +1158,10 @@ while [ $# -gt 0 ]; do
             CONTINUE_ON_SAFE_ERROR="true"
             shift
             ;;
+        --auto-confirm-policy-targets)
+            AUTO_CONFIRM_POLICY_TARGETS="true"
+            shift
+            ;;
         --secrets)
             selected_action="secrets"
             shift
@@ -1273,6 +1281,14 @@ elif [ "$CONTINUE_ON_SAFE_ERROR" = "true" ] \
     && [ "$selected_action" != "remediate-vulnerabilities" ]; then
     echo "$OP_CONTINUE_SAFE_ERROR_SCOPE" >&2
     exit 64
+elif [ "$AUTO_CONFIRM_POLICY_TARGETS" = "true" ] \
+    && [ "$selected_action" != "vulnerabilities" ] \
+    && [ "$selected_action" != "remediate-vulnerabilities" ]; then
+    echo "$OP_AUTO_CONFIRM_POLICY_SCOPE" >&2
+    exit 64
+elif [ "$AUTO_CONFIRM_POLICY_TARGETS" = "true" ] && [ ! -t 0 ]; then
+    echo "$OP_AUTO_CONFIRM_POLICY_TTY" >&2
+    exit 3
 elif [ "$VULNERABILITY_SCOPE_KIND" != "all" ] \
     && [ "$selected_action" != "scan-vulnerabilities" ]; then
     echo "$OP_FOCUS_REQUIRES_SCAN" >&2

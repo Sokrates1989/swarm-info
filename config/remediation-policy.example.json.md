@@ -114,6 +114,16 @@ backup exemption. The current service image must also contain an immutable
 digest so rollback can restore the exact artifact. A declaratively mapped
 service additionally needs a source adapter.
 
+`--auto-confirm-policy-targets` changes only the per-target confirmation step
+in option 4. After one exact, typed acknowledgement on the interactive terminal,
+it auto-confirms targets that were already enabled, eligible, and marked
+`auto_eligible=true` in this policy. It cannot promote `generated_review`,
+relax source or candidate checks, or confirm targets entered only through
+`--force-auto-remedy-attempt`. Runtime overrides still need the separate
+`--allow-runtime-override` flag. Policy-free built-in `latest` actions retain
+their own backup/compatibility prompts. The phrase authorizes this run only;
+the tool cannot verify that a usable data backup exists.
+
 ```json
 {
   "schema_version": 3,

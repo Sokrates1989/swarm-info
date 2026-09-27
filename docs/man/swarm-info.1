@@ -1,4 +1,4 @@
-.TH SWARM-INFO 1 "September 2026" "swarm-info 1.20.0" "User Commands"
+.TH SWARM-INFO 1 "September 2026" "swarm-info 1.21.0" "User Commands"
 .SH NAME
 swarm-info \- inspect Docker Swarm health and image vulnerabilities
 .SH SYNOPSIS
@@ -206,6 +206,19 @@ Permit a separately confirmed
 .B docker service update
 fallback for an unresolved deployment source. This creates configuration drift
 and remains disabled by default.
+.TP
+.B \-\-auto-confirm-policy-targets
+With vulnerability remediation option 4, require one exact backup/data-loss
+sentence typed on the interactive terminal, then automatically confirm each
+enabled, eligible,
+.B auto_eligible=true
+policy target in this run. This includes source edits and deployments, policy
+latest refreshes, and runtime overrides only when
+.B \-\-allow-runtime-override
+is separately supplied. Policy-free latest actions and force-attempted targets
+without auto eligibility retain individual prompts. Candidate scans, source
+checks, convergence, rollback, and final scan are not bypassed. The tool cannot
+verify backup contents or recover migrated data through an image rollback.
 .TP
 .B \-\-scan-vulnerabilities
 Force a locked scan of every unique current Swarm service image. Add exactly
@@ -682,6 +695,15 @@ After reviewing the decision record, repeat with
 .BR "\-\-accept-data-loss \-\-apply" ,
 then select option 4 in
 .BR "swarm-info \-v" .
+.PP
+To replace repeated policy-target confirmations with one typed acknowledgement
+for this interactive run:
+.PP
+.nf
+swarm-info -v \
+  --remediation-policy /root/.config/swarm-info/remediation-policy.json \
+  --continue-on-safe-error --auto-confirm-policy-targets
+.fi
 .PP
 Verify one service after redeploying its remediated image:
 .PP

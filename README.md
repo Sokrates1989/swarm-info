@@ -959,7 +959,10 @@ sequence; it does not grant authority to all affected services merely because
 Scout found a newer image. A declined deployment after a confirmed source edit
 stops that run, so a later stack deployment cannot silently include the
 pending edit. After each updated service, verify its dependent application
-before accepting compatibility or enabling additional high-risk targets.
+before accepting compatibility or enabling additional high-risk targets. A
+batch-confirmed run cannot pause for those application-specific smoke checks:
+it proves Swarm convergence and image-security evidence, then proceeds. Review
+application behavior afterward; do not report it as verified by option 4.
 
 ### Prepare a best-effort Swarm cohort
 
@@ -998,6 +1001,34 @@ After applying the host policy, run `swarm-info -v` and select 4 once. It
 validates each candidate again, asks before each source edit or deployment,
 attempts eligible targets sequentially, stops when a failure cannot safely be
 ignored, and performs the full confirmation scan after successful changes.
+For a reviewed fleet where repeated prompts are impractical, add
+`--auto-confirm-policy-targets`:
+
+```bash
+swarm-info -v \
+  --remediation-policy /root/.config/swarm-info/remediation-policy.json \
+  --deploy-root /swarm \
+  --continue-on-safe-error \
+  --auto-confirm-policy-targets
+```
+
+Select option 4 and type the exact backup/data-loss sentence shown by the CLI.
+In English, it is `I HAVE MADE BACKUPS AND ACCEPT POSSIBLE PERMANENT DATA LOSS ON THIS SWARM NODE`.
+The acknowledgement is never accepted from a flag or
+environment variable, applies only to this interactive run, and is recorded
+in the sanitized plan without storing the sentence. It auto-confirms only
+enabled, eligible, `auto_eligible=true` policy targets after their candidate
+and source checks. It covers their source edit and deployment, policy `latest`
+refresh, and runtime override only when `--allow-runtime-override` is also
+passed. Built-in policy-free `latest` actions and targets attempted solely
+through `--force-auto-remedy-attempt` keep individual prompts. A wrong or
+interrupted sentence stops before any policy-target mutation. Docker Scout
+checks, visible diffs, bounded convergence, post-validation, rollback, and
+the final scan remain active. This acknowledgement is not proof that a backup
+exists or that image rollback can recover application data. When `-v` reaches
+the remediation menu with this flag, its exit status reflects that remediation
+run, including a rejected acknowledgement.
+
 `--continue-on-safe-error` may be added for a best-effort run: it records and
 skips only a candidate scan that fails, introduces new critical/high findings,
 or no longer improves the image, or a temporary rendered stack rejected by

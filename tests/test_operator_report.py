@@ -253,7 +253,7 @@ class CliOperatorContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(version, "1.20.0")
+        self.assertEqual(version, "1.21.0")
         self.assertIn(f"swarm-info {version}", manual)
 
     def test_service_page_flows_directly_to_vulnerability_page(self) -> None:
@@ -308,6 +308,24 @@ class CliOperatorContractTests(unittest.TestCase):
             bridge,
         )
 
+    def test_batch_confirmation_flag_reaches_option_four_and_returns_its_status(self) -> None:
+        """Keep a rejected typed consent visible as a failed -v invocation."""
+
+        entrypoint = (REPOSITORY_ROOT / "get_info.sh").read_text(encoding="utf-8")
+        page = (REPOSITORY_ROOT / "res" / "vulnerability_info.sh").read_text(
+            encoding="utf-8"
+        )
+        bridge = (REPOSITORY_ROOT / "res" / "operator_cli.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('AUTO_CONFIRM_POLICY_TARGETS="$AUTO_CONFIRM_POLICY_TARGETS"', entrypoint)
+        self.assertIn('OP_AUTO_CONFIRM_POLICY_TTY', entrypoint)
+        self.assertIn('AUTO_CONFIRM_POLICY_TARGETS="${AUTO_CONFIRM_POLICY_TARGETS:-false}"', page)
+        self.assertIn('remediation_arguments+=(--auto-confirm-policy-targets)', bridge)
+        self.assertIn('if [ "$AUTO_CONFIRM_POLICY_TARGETS" = "true" ]; then', page)
+        self.assertIn('page_status=$?', page)
+
     def test_candidate_discovery_reuses_invoking_repository_policy(self) -> None:
         """Find reviewed successor evidence before the bridge changes directory."""
 
@@ -343,6 +361,7 @@ class CliOperatorContractTests(unittest.TestCase):
             "--deployment-map-file",
             "--force-auto-remedy-attempt",
             "--allow-runtime-override",
+            "--auto-confirm-policy-targets",
             "--service",
             "--image",
             "--stack",

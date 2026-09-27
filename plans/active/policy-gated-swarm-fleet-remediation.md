@@ -6,12 +6,20 @@ On 2026-09-27 the operator confirmed that Redis data and pre-alpha website data
 may be lost, with backups and repositories available, and prioritized reducing
 exposure over individual browser acceptance. Five Redis deployments had passed
 exact-image security checks and dependent-client checks in operator output;
-manual guided modes 1–3 remain untested. Fleet deployment has not occurred.
+manual guided modes 1–3 remain untested. A complete fleet run has not been
+verified by this task.
 
 Milestone 1 was implemented and the operator exercised its visible progress,
-guarded rollout, and rollback boundary on Ubuntu Swarm. The current change
-adds an opt-in bulk policy-preparation command; its local tests and Ubuntu
-acceptance are separate from those earlier results.
+guarded rollout, and rollback boundary on Ubuntu Swarm. The tool also has an
+opt-in bulk policy-preparation command; its local tests and Ubuntu acceptance
+are separate from those earlier results.
+
+On 2026-09-27 the operator also requested one typed, per-run acknowledgement
+in place of repeated yes/no answers for policy-authorized option-4 updates.
+The material approach is approved by that explicit request. This does not
+expand the target allow list or authorize an unreviewed candidate.
+The option is implemented locally and 341 offline tests pass; Ubuntu acceptance
+and the guided-mode regression remain pending.
 
 ## Proposed approach and decision boundary
 
@@ -53,14 +61,27 @@ override is also not a durable substitute for a mapped stack source.
    application behavior, stop on error or uncertain rollback, and refresh the
    complete scan. Exercise guided modes 1, 2, and 3 separately without
    authorizing unintended mutations.
+4. **One-time policy batch acknowledgement.** Add an opt-in option-4 flag that
+   requires an exact, typed backup/data-loss sentence on an interactive TTY
+   before any policy-target workload action. It replaces per-target
+   confirmations only for enabled, eligible, `auto_eligible=true` policy
+   targets. Runtime overrides still require their separate flag; built-in
+   policy-free latest refreshes and force-attempted non-auto-eligible targets
+   keep individual prompts.
+   Preserve candidate scans, rendered source checks, visible diffs, sequential
+   rollout, stability/rollback, and final scan. Validate refusal and both
+   consented/ordinary paths with isolated tests, plus help, man, and locale
+   parity. A declined or interrupted acknowledgement must leave all workloads
+   unchanged.
 
 ## Required operator decisions and acceptance
 
 - The operator has accepted possible fleet data loss for this pre-alpha
   installation; that acceptance must be passed explicitly to the host-policy
-  preparer. A previous image digest is not a data rollback. Each CLI source
-  edit/deployment still requires confirmation, and runtime-only overrides
-  remain visibly distinct from durable source edits.
+  preparer. A previous image digest is not a data rollback. By default each
+  CLI action still needs its own confirmation. The opt-in batch mode replaces
+  those policy-target answers only after one exact typed acknowledgement;
+  runtime-only overrides remain visibly distinct from durable source edits.
 - The operator-provided Redis 8 client and feature probes satisfy the
   Redis-dependent acceptance criterion for those completed updates. The
   fleet-wide run will use a shorter best-effort acceptance cycle; untested

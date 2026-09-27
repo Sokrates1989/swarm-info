@@ -58,7 +58,7 @@ from scripts.vulnerability_job import (
     read_report,
     run_locked_job,
 )
-from scripts.vulnerability_models import write_json_atomic
+from scripts.vulnerability_models import utc_timestamp, write_json_atomic
 from scripts.vulnerability_scan import (
     DockerClient,
     InventoryError,
@@ -106,6 +106,7 @@ def parse_arguments(
     parser.add_argument("--force-auto-remedy-attempt", action="store_true")
     parser.add_argument("--allow-runtime-override", action="store_true")
     parser.add_argument("--continue-on-safe-error", action="store_true")
+    parser.add_argument("--auto-confirm-policy-targets", action="store_true")
     return parser.parse_args(arguments)
 
 
@@ -171,6 +172,57 @@ def _policy_targets(policy: RemediationPolicy) -> dict[str, PolicyTarget]:
     """Index validated policy entries by their unique identifier."""
 
     return {target.identifier: target for target in policy.targets}
+
+
+def _batch_confirmable_targets(
+    plan: Mapping[str, Any],
+    targets: Mapping[str, PolicyTarget],
+    allow_runtime_override: bool,
+) -> frozenset[str]:
+    """Select only eligible policy targets already approved for automatic action."""
+
+    return frozenset(
+        entry["policy_id"]
+        for entry in plan["entries"]
+        if entry["eligible"]
+        and targets[entry["policy_id"]].auto_eligible
+        and (entry["action"] != "runtime-override" or allow_runtime_override)
+    )
+
+
+def _request_batch_confirmation(
+    policy_ids: frozenset[str],
+    context_name: str,
+    catalog: Mapping[str, str],
+    input_function: Callable[[str], str],
+    output: TextIO,
+) -> bool:
+    """Require one exact, non-persisted data-loss acknowledgement for this run."""
+
+    if not policy_ids:
+        print(message(catalog, "remediation.batchNoEligible"), file=output)
+        return True
+    phrase = message(catalog, "remediation.batchConsentPhrase")
+    try:
+        answer = input_function(
+            message(
+                catalog,
+                "remediation.batchConsentPrompt",
+                count=len(policy_ids),
+                context=context_name,
+                phrase=phrase,
+            )
+        )
+    except (EOFError, KeyboardInterrupt):
+        answer = ""
+    if answer != phrase:
+        print(message(catalog, "remediation.batchConsentRejected"), file=output)
+        return False
+    print(
+        message(catalog, "remediation.batchConsentAccepted", count=len(policy_ids)),
+        file=output,
+    )
+    return True
 
 
 def _render_plan(plan: Mapping[str, Any], catalog: Mapping[str, str], output: TextIO) -> None:
@@ -302,6 +354,21 @@ def _run_auto(
     context_name = context.stdout.strip()
     print(message(catalog, "remediation.context", context=context_name), file=output)
     targets = _policy_targets(policy)
+    auto_confirm_ids: frozenset[str] = frozenset()
+    if getattr(options, "auto_confirm_policy_targets", False):
+        auto_confirm_ids = _batch_confirmable_targets(
+            plan, targets, options.allow_runtime_override
+        )
+        if not _request_batch_confirmation(
+            auto_confirm_ids, context_name, catalog, input_function, output
+        ):
+            return 3
+        if auto_confirm_ids:
+            plan["batch_confirmation"] = {
+                "accepted_at": utc_timestamp(),
+                "policy_ids": sorted(auto_confirm_ids),
+            }
+            write_json_atomic(plan_output, plan)
     platform = safe_text((report.get("policy") or {}).get("platform", "linux/amd64"))
     deployed_count = run_safe_latest_actions(
         assessment,
@@ -385,7 +452,12 @@ def _run_auto(
             if not options.allow_runtime_override:
                 print(message(catalog, "remediation.runtimeDisabled"), file=output)
                 continue
-            if not _ask(
+            if target.identifier in auto_confirm_ids:
+                print(
+                    message(catalog, "remediation.batchRuntimeConfirmed", service=target.service),
+                    file=output,
+                )
+            elif not _ask(
                 message(
                     catalog,
                     "remediation.runtimeConfirm",
@@ -434,7 +506,12 @@ def _run_auto(
                 f"  {shlex.join(['docker', 'service', 'update', '--rollback', target.service])}",
                 file=output,
             )
-            if not _ask(
+            if target.identifier in auto_confirm_ids:
+                print(
+                    message(catalog, "remediation.batchLatestConfirmed", service=target.service),
+                    file=output,
+                )
+            elif not _ask(
                 message(
                     catalog,
                     "remediation.policyLatestConfirm",
@@ -529,14 +606,24 @@ def _run_auto(
             raise
         print(message(catalog, "remediation.reviewDiff"), file=output)
         print(change.diff, file=output, end="" if change.diff.endswith("\n") else "\n")
-        if not _ask(
+        if target.identifier in auto_confirm_ids:
+            print(
+                message(catalog, "remediation.batchApplyConfirmed", service=target.service),
+                file=output,
+            )
+        elif not _ask(
             message(catalog, "remediation.applyConfirm", path=change.path),
             input_function,
         ):
             print(message(catalog, "remediation.skipped"), file=output)
             continue
         write_source_change(change)
-        if not _ask(
+        if target.identifier in auto_confirm_ids:
+            print(
+                message(catalog, "remediation.batchDeployConfirmed", service=target.service),
+                file=output,
+            )
+        elif not _ask(
             message(
                 catalog,
                 "remediation.deployConfirm",
@@ -677,6 +764,9 @@ def run(
         mode = {"1": "service", "2": "image", "3": "guided", "4": "auto"}.get(selected, "cancel")
     if mode == "cancel":
         return 0
+    if getattr(options, "auto_confirm_policy_targets", False) and mode != "auto":
+        print(message(catalog, "remediation.batchOnlyAuto"), file=output)
+        return 3
     policy_path = options.remediation_policy or default_policy_path()
     policy = (
         load_policy(policy_path)

@@ -7,6 +7,7 @@ import dataclasses
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import time
 from typing import Any, Callable, Mapping, Sequence
@@ -344,7 +345,7 @@ def restore_service_snapshot(
 
 
 def render_stack(client: DockerClient, stack_file: Path) -> bytes:
-    """Render Compose YAML, omitting its Swarm-unsupported project name."""
+    """Render Compose YAML with Swarm-compatible numeric published ports."""
 
     environment_file = stack_file.parent / ".env"
     arguments = ["compose"]
@@ -370,7 +371,49 @@ def render_stack(client: DockerClient, stack_file: Path) -> bytes:
             raise RemediationExecutionError("stack-render-project-name-invalid")
         # Compose emits project identity here; Swarm receives the stack name separately.
         del lines[index]
+    # Compose quotes long-syntax published ports; Swarm requires decimal integers.
+    in_services = False
+    in_ports = False
+    for index, line in enumerate(lines):
+        indentation = len(line) - len(line.lstrip(" "))
+        if indentation == 0:
+            in_services = line.strip() == "services:"
+            in_ports = False
+        elif in_services and indentation == 4:
+            in_ports = line.strip() == "ports:"
+        if not in_ports or indentation != 8:
+            continue
+        match = re.fullmatch(
+            r'(        published): "(0|[1-9][0-9]*)"(\r?\n?)', line
+        )
+        if match:
+            lines[index] = f"{match[1]}: {match[2]}{match[3]}"
     return "".join(lines).encode("utf-8")
+
+
+def validate_rendered_stack(
+    client: DockerClient, rendered: bytes, directory: Path
+) -> None:
+    """Reject a rendered candidate that Swarm cannot parse before editing source."""
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".swarm-info-remediation-check.", suffix=".yml", dir=directory
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(rendered)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        result = client.run(["stack", "config", "-c", str(temporary)])
+        if result.return_code != 0:
+            raise RemediationExecutionError(
+                "stack-config-invalid",
+                sanitize_command_error(result.stderr or result.stdout),
+            )
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def render_stack_model(client: DockerClient, stack_file: Path) -> dict[str, Any]:
@@ -453,6 +496,9 @@ def preview_yaml_image_change(
         after = render_stack_model(client, temporary)
         verify_rendered_image_delta(
             before, after, compose_service, current_image, candidate
+        )
+        validate_rendered_stack(
+            client, render_stack(client, temporary), stack_file.parent
         )
     finally:
         temporary.unlink(missing_ok=True)

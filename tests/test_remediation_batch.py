@@ -150,6 +150,94 @@ class RemediationBatchTests(unittest.TestCase):
         self.assertEqual(plan["execution"][0]["detail"], "candidate-not-improved")
         self.assertIn("Continuing to the next target", output.getvalue())
 
+    def test_invalid_stack_preflight_is_skippable_only_with_opt_in(self) -> None:
+        """Continue past a rejected temporary stack without editing real source."""
+
+        for allow_continue in (False, True):
+            with self.subTest(allow_continue=allow_continue):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    stack_file = root / "swarm-stack.yml"
+                    original = b"services:\n  api:\n    image: old\n"
+                    stack_file.write_bytes(original)
+                    payload = policy_payload(
+                        source={"type": "yaml_image", "file": stack_file.name}
+                    )
+                    second = json.loads(json.dumps(payload["targets"][0]))
+                    second["id"] = "demo-worker-update"
+                    second["match"]["service"] = "demo_worker"
+                    payload["targets"].append(second)
+                    policy = load_policy(write_policy(root, payload))
+                    mapping = deployment_map(root, stack_file)
+                    mapping["services"][1].update(
+                        status="mapped", reason="matched-stack-service-image",
+                        directory=str(root), stack_file=str(stack_file),
+                        compose_service="worker",
+                    )
+                    mapping["renderer"] = {"available": True}
+                    report_file = root / "vulnerability_scan.json"
+                    report_file.write_text("{}", encoding="utf-8")
+                    options = argparse.Namespace(
+                        report_file=report_file,
+                        deployment_map_file=None,
+                        deploy_roots=None,
+                        plan_output=root / "plan.json",
+                        max_age_hours=30.0,
+                        history_days=14,
+                        lock_file=root / "scan.lock",
+                        force_auto_remedy_attempt=False,
+                        allow_runtime_override=False,
+                        continue_on_safe_error=allow_continue,
+                    )
+                    change = SourceChange(
+                        stack_file, original, b"services: {}\n", "reviewed diff\n", 0o600
+                    )
+                    validation = SimpleNamespace(
+                        critical=0, high=0,
+                        comparison=SimpleNamespace(removed_total=2, candidate_total=0),
+                    )
+                    output = io.StringIO()
+                    with (
+                        patch("scripts.remediation_cli.prepare_review", return_value=object()),
+                        patch("scripts.remediation_cli.run_safe_latest_actions", return_value=0),
+                        patch(
+                            "scripts.remediation_cli.validate_candidate",
+                            side_effect=[
+                                validation,
+                                RemediationExecutionError("candidate-not-improved"),
+                            ],
+                        ) as scan,
+                        patch("scripts.remediation_cli.prepare_source_change", return_value=change),
+                        patch(
+                            "scripts.remediation_cli.preview_yaml_image_change",
+                            side_effect=RemediationExecutionError("stack-config-invalid"),
+                        ),
+                    ):
+                        if allow_continue:
+                            result = _run_auto(
+                                vulnerability_report(), mapping, policy, options,
+                                AutoRuntimeClient(), load_messages("en"),
+                                input_function=lambda _: "n", output=output,
+                            )
+                            self.assertEqual(result, 0)
+                        else:
+                            with self.assertRaises(RemediationExecutionError) as context:
+                                _run_auto(
+                                    vulnerability_report(), mapping, policy, options,
+                                    AutoRuntimeClient(), load_messages("en"),
+                                    input_function=lambda _: "n", output=output,
+                                )
+                            self.assertEqual(context.exception.code, "stack-config-invalid")
+                    plan = json.loads(options.plan_output.read_text(encoding="utf-8"))
+                    self.assertEqual(stack_file.read_bytes(), original)
+
+                self.assertEqual(scan.call_count, 2 if allow_continue else 1)
+                self.assertEqual(
+                    [item["detail"] for item in plan.get("execution", [])],
+                    ["stack-config-invalid", "candidate-not-improved"]
+                    if allow_continue else [],
+                )
+
     def test_opt_in_still_stops_after_rollout_error(self) -> None:
         """Never start another target when deployment effects may be uncertain."""
 

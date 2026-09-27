@@ -463,5 +463,5 @@
   "cohort.reason.source-not-proven": "keine zulässige deklarative Quellenänderung nachgewiesen",
   "cohort.reason.plan-not-eligible": "Option 4 würde dieses Ziel blockieren",
   "cohort.reason.assessment-missing": "für diesen betroffenen Dienst liegt keine Kandidatenbewertung vor",
-  "remediation.safeErrorSkipped": "[ÜBERSPRUNGEN] {service}: Nur die Kandidatenprüfung schlug fehl ({code}); Quelle und Dienst unverändert. Nächstes Ziel wird geprüft."
+  "remediation.safeErrorSkipped": "[ÜBERSPRUNGEN] {service}: Eine Prüfung ohne Änderungen schlug fehl ({code}); Quelle und Dienst unverändert. Nächstes Ziel wird geprüft."
 }

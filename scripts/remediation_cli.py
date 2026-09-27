@@ -499,6 +499,33 @@ def _run_auto(
                 error.code,
                 error.detail,
             )
+            # The temporary Swarm parser check runs before the real source edit.
+            # A deployment or rollback error never reaches this safe-skip path.
+            if (
+                getattr(options, "continue_on_safe_error", False)
+                and isinstance(error, RemediationExecutionError)
+                and error.code == "stack-config-invalid"
+            ):
+                _record_result(
+                    plan,
+                    ActionResult(
+                        "skipped-safe-error",
+                        target.service,
+                        target.candidate.reference,
+                        detail=error.code,
+                    ),
+                    plan_output,
+                )
+                print(
+                    message(
+                        catalog,
+                        "remediation.safeErrorSkipped",
+                        service=target.service,
+                        code=error.code,
+                    ),
+                    file=output,
+                )
+                continue
             raise
         print(message(catalog, "remediation.reviewDiff"), file=output)
         print(change.diff, file=output, end="" if change.diff.endswith("\n") else "\n")

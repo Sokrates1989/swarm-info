@@ -463,5 +463,5 @@
   "cohort.reason.source-not-proven": "no permitted declarative source edit was proven",
   "cohort.reason.plan-not-eligible": "option 4 would block this target",
   "cohort.reason.assessment-missing": "no candidate assessment exists for this affected service",
-  "remediation.safeErrorSkipped": "[SKIP] {service}: candidate-only check failed ({code}); no source or service was changed. Continuing to the next target."
+  "remediation.safeErrorSkipped": "[SKIP] {service}: non-mutating check failed ({code}); no source or service was changed. Continuing to the next target."
 }

@@ -140,10 +140,14 @@ class FailedStackDeployClient(RollbackClient):
 class ComposeModelClient:
     """Render a deterministic Compose model without exposing its secret values."""
 
-    def __init__(self, other_change_on_candidate: bool = False) -> None:
-        """Optionally model an unintended change to another service."""
+    def __init__(
+        self, other_change_on_candidate: bool = False,
+        stack_config_error: bool = False,
+    ) -> None:
+        """Optionally model rendered drift or a rejected Swarm stack."""
 
         self.other_change_on_candidate = other_change_on_candidate
+        self.stack_config_error = stack_config_error
         self.deployments = 0
 
     def run(self, arguments: list[str]) -> CommandResult:
@@ -176,6 +180,12 @@ class ComposeModelClient:
             return CommandResult(0, "demo_api\t1/1\n", "")
         if command[:2] == ["service", "inspect"]:
             return CommandResult(0, OLD_IMAGE + "\n", "")
+        if command[:2] == ["stack", "config"]:
+            return CommandResult(
+                1 if self.stack_config_error else 0,
+                "",
+                "invalid rendered stack" if self.stack_config_error else "",
+            )
         if command[:2] == ["stack", "deploy"]:
             self.deployments += 1
             return CommandResult(0, "deployed", "")
@@ -594,6 +604,31 @@ class RemediationEngineTests(unittest.TestCase):
             self.assertEqual(stack_file.read_bytes(), original)
             self.assertEqual(list(root.glob(".swarm-info-remediation-preview.*")), [])
 
+    def test_yaml_preview_rejects_invalid_swarm_stack_before_source_edit(self) -> None:
+        """A Compose-valid but Swarm-invalid stack cannot enter deployment review."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stack_file = root / "swarm-stack.yml"
+            original = b"services:\n  api:\n    image: registry.example/team/app:1.0.0\n"
+            replacement = original.replace(
+                b"registry.example/team/app:1.0.0", NEW_IMAGE.encode("utf-8")
+            )
+            stack_file.write_bytes(original)
+            change = SourceChange(stack_file, original, replacement, "diff", 0o600)
+            client = ComposeModelClient(stack_config_error=True)
+
+            with self.assertRaises(RemediationExecutionError) as context:
+                preview_yaml_image_change(
+                    client, change, stack_file, "api", OLD_IMAGE,
+                    parse_candidate_image(NEW_IMAGE),
+                )
+
+            self.assertEqual(context.exception.code, "stack-config-invalid")
+            self.assertEqual(stack_file.read_bytes(), original)
+            self.assertEqual(client.deployments, 0)
+            self.assertEqual(list(root.glob(".swarm-info-remediation-*")), [])
+
     def test_rendered_compose_stack_is_accepted_by_swarm_parser(self) -> None:
         """Remove Compose-only project identity from transient deployment YAML."""
 
@@ -610,7 +645,14 @@ class RemediationEngineTests(unittest.TestCase):
             root = Path(temporary)
             stack_file = root / "swarm-stack.yml"
             stack_file.write_text(
-                "services:\n  redis:\n    image: redis:7-alpine\n", encoding="utf-8"
+                "services:\n"
+                "  redis:\n"
+                "    image: redis:7-alpine\n"
+                "    ports:\n"
+                "      - target: 6379\n"
+                "        published: 16379\n"
+                "        mode: host\n",
+                encoding="utf-8",
             )
             rendered = render_stack(DockerClient(), stack_file)
             deployment_file = root / "rendered-stack.yml"
@@ -621,8 +663,45 @@ class RemediationEngineTests(unittest.TestCase):
             )
 
             self.assertFalse(rendered.startswith(b"name:"))
+            self.assertIn(b"published: 16379", rendered)
+            self.assertNotIn(b'published: "16379"', rendered)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("redis:7-alpine", result.stdout)
+
+    def test_render_stack_changes_only_decimal_service_published_ports(self) -> None:
+        """Keep other quoted values and nondecimal port expressions untouched."""
+
+        class PublishedPortClient:
+            """Supply Compose-normalized YAML without a Docker daemon."""
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                """Return one rendered stack for the YAML request."""
+
+                return CommandResult(
+                    0,
+                    "name: example\n"
+                    "services:\n"
+                    "  proxy:\n"
+                    "    environment:\n"
+                    '      PUBLISHED: "80"\n'
+                    "    ports:\n"
+                    "      - mode: host\n"
+                    '        published: "80"\n'
+                    "        target: 80\n"
+                    "  app:\n"
+                    "    ports:\n"
+                    "      - mode: ingress\n"
+                    '        published: "8000-8002"\n'
+                    "        target: 8000\n",
+                    "",
+                )
+
+        rendered = render_stack(PublishedPortClient(), Path("stack.yml"))
+
+        self.assertIn(b"        published: 80\n", rendered)
+        self.assertIn(b'      PUBLISHED: "80"\n', rendered)
+        self.assertIn(b'        published: "8000-8002"\n', rendered)
+        self.assertNotIn(b"name: example", rendered)
 
     def test_render_stack_rejects_ambiguous_project_name(self) -> None:
         """Fail closed rather than silently dropping multiple root keys."""

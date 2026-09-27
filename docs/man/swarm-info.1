@@ -268,8 +268,9 @@ applied. Does not bypass option-4 candidate scans or update confirmations.
 .B \-\-continue-on-safe-error
 With vulnerability remediation option 4, record and skip only a failed
 pre-deployment candidate scan, a candidate with new critical/high findings,
-or a candidate with no longer-proven improvement. Source-edit, deployment,
-and rollback failures still stop the run. No confirmation is bypassed.
+or a candidate with no longer-proven improvement, or a temporary stack that
+Swarm cannot parse before the real source is edited. Other source-edit,
+deployment, and rollback failures still stop the run. No confirmation is bypassed.
 .TP
 .BI \-\-allow-registry-host " host"
 With

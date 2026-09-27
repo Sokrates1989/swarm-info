@@ -935,6 +935,9 @@ The policy-backed auto-remediation sequence remains intentionally strict:
    models must differ only in the selected service's immutable image. Anchored
    or interpolated target image values, ambiguous service/image declarations,
    symlinks, path escapes, stale values, and other rendered changes fail closed.
+   The temporary Compose render converts decimal `ports.published` values to
+   the integer type required by Swarm; `docker stack config` must then parse
+   the proposed stack before the real source is edited.
 7. Ask separately before deployment (default `Y` only after the source change
    was explicitly accepted), report immediately and periodically while the
    action runs, wait for the service to converge, and scan the immutable
@@ -997,8 +1000,10 @@ attempts eligible targets sequentially, stops when a failure cannot safely be
 ignored, and performs the full confirmation scan after successful changes.
 `--continue-on-safe-error` may be added for a best-effort run: it records and
 skips only a candidate scan that fails, introduces new critical/high findings,
-or no longer improves the image. Source-edit, deployment, and rollback errors
-still stop the run because their effects may be uncertain.
+or no longer improves the image, or a temporary rendered stack rejected by
+`docker stack config` before the real source is edited. Other source-edit,
+deployment, and rollback errors still stop the run because their effects may
+be uncertain.
 This is a faster batch *attempt*, not a promise that every vulnerability has a
 published fix or that an image-security improvement proves application
 compatibility. Review failed/skipped targets and application behavior before

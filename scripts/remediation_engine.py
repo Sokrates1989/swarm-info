@@ -326,7 +326,7 @@ def restore_service_snapshot(
 
 
 def render_stack(client: DockerClient, stack_file: Path) -> bytes:
-    """Render Compose YAML without printing its possibly sensitive contents."""
+    """Render Compose YAML, omitting its Swarm-unsupported project name."""
 
     environment_file = stack_file.parent / ".env"
     arguments = ["compose"]
@@ -339,7 +339,20 @@ def render_stack(client: DockerClient, stack_file: Path) -> bytes:
             "stack-render-failed",
             sanitize_command_error(result.stderr or result.stdout),
         )
-    return result.stdout.encode("utf-8")
+    lines = result.stdout.splitlines(keepends=True)
+    project_name_lines = [
+        index for index, line in enumerate(lines) if line.startswith("name:")
+    ]
+    if len(project_name_lines) > 1:
+        raise RemediationExecutionError("stack-render-project-name-invalid")
+    if project_name_lines:
+        index = project_name_lines[0]
+        project_name = lines[index]
+        if not project_name.startswith("name: ") or not project_name.strip()[6:]:
+            raise RemediationExecutionError("stack-render-project-name-invalid")
+        # Compose emits project identity here; Swarm receives the stack name separately.
+        del lines[index]
+    return "".join(lines).encode("utf-8")
 
 
 def render_stack_model(client: DockerClient, stack_file: Path) -> dict[str, Any]:

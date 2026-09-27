@@ -20,6 +20,7 @@ from scripts.remediation_engine import (
     execute_latest_refresh,
     execute_runtime_override,
     preview_yaml_image_change,
+    render_stack,
     service_image_update_command,
     runtime_update_command,
     validate_candidate,
@@ -119,6 +120,17 @@ class RollbackClient:
             self.image = self.candidate if self.candidate in rendered else OLD_IMAGE
             return CommandResult(0, "deployed", "")
         return CommandResult(1, "", "unexpected")
+
+
+class FailedStackDeployClient(RollbackClient):
+    """Reject a stack deployment before the live service image changes."""
+
+    def run(self, arguments: list[str]) -> CommandResult:
+        """Return a parser failure for deployment and delegate other commands."""
+
+        if arguments[:2] == ["stack", "deploy"]:
+            return CommandResult(1, "", "(root) Additional property name is not allowed")
+        return super().run(arguments)
 
 
 class ComposeModelClient:
@@ -302,6 +314,49 @@ class RemediationEngineTests(unittest.TestCase):
             self.assertEqual(client.image, OLD_IMAGE)
             self.assertEqual(len(client.deployments), 2)
 
+    def test_rejected_stack_deploy_restores_source(self) -> None:
+        """Keep an unsuccessful parser attempt from leaving a source-only update."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = root / ".env"
+            original = b"IMAGE_VERSION=1.0.0\n"
+            replacement = b"IMAGE_VERSION=1.1.0\n"
+            environment.write_bytes(replacement)
+            stack_file = root / "swarm-stack.yml"
+            stack_file.write_text("services: {}\n", encoding="utf-8")
+            policy = load_policy(
+                write_policy(
+                    root,
+                    policy_payload(
+                        source={
+                            "type": "dotenv",
+                            "file": ".env",
+                            "name_key": "IMAGE_NAME",
+                            "version_key": "IMAGE_VERSION",
+                        }
+                    ),
+                )
+            )
+            entry = build_plan(
+                vulnerability_report(), deployment_map(root, stack_file), policy
+            )["entries"][0]
+            change = SourceChange(environment, original, replacement, "diff", 0o600)
+            client = FailedStackDeployClient(OLD_IMAGE, NEW_IMAGE)
+
+            with self.assertRaises(RemediationExecutionError) as context:
+                deploy_declarative_change(
+                    client,
+                    policy.targets[0],
+                    entry,
+                    change,
+                    b"services: {}\n",
+                )
+
+            self.assertEqual(context.exception.code, "declarative-deploy-failed")
+            self.assertEqual(environment.read_bytes(), original)
+            self.assertEqual(client.image, OLD_IMAGE)
+
     def test_yaml_preview_allows_only_target_image_render_change(self) -> None:
         """Validate a proposal privately and remove its temporary source."""
 
@@ -362,6 +417,57 @@ class RemediationEngineTests(unittest.TestCase):
             self.assertEqual(model["services"]["worker"]["image"], "redis:7-alpine")
             self.assertEqual(stack_file.read_bytes(), original)
             self.assertEqual(list(root.glob(".swarm-info-remediation-preview.*")), [])
+
+    def test_rendered_compose_stack_is_accepted_by_swarm_parser(self) -> None:
+        """Remove Compose-only project identity from transient deployment YAML."""
+
+        if shutil.which("docker") is None:
+            self.skipTest("Docker Compose is unavailable")
+        version = subprocess.run(
+            ["docker", "compose", "version"],
+            capture_output=True, check=False, text=True, timeout=10,
+        )
+        if version.returncode != 0:
+            self.skipTest("Docker Compose is unavailable")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stack_file = root / "swarm-stack.yml"
+            stack_file.write_text(
+                "services:\n  redis:\n    image: redis:7-alpine\n", encoding="utf-8"
+            )
+            rendered = render_stack(DockerClient(), stack_file)
+            deployment_file = root / "rendered-stack.yml"
+            deployment_file.write_bytes(rendered)
+            result = subprocess.run(
+                ["docker", "stack", "config", "-c", str(deployment_file)],
+                capture_output=True, check=False, text=True, timeout=10,
+            )
+
+            self.assertFalse(rendered.startswith(b"name:"))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("redis:7-alpine", result.stdout)
+
+    def test_render_stack_rejects_ambiguous_project_name(self) -> None:
+        """Fail closed rather than silently dropping multiple root keys."""
+
+        class AmbiguousComposeClient:
+            """Return an invalid rendered model without invoking Docker."""
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                """Supply duplicate Compose project names for the guard."""
+
+                return CommandResult(
+                    0, "name: first\nname: second\nservices: {}\n", ""
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(RemediationExecutionError) as context:
+                render_stack(
+                    AmbiguousComposeClient(), Path(temporary) / "swarm-stack.yml"
+                )
+
+        self.assertEqual(context.exception.code, "stack-render-project-name-invalid")
 
     def test_yaml_preview_rejects_other_rendered_change_without_leaking_secrets(self) -> None:
         """Block unrelated stack changes before the actual source is edited."""

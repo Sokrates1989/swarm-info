@@ -121,6 +121,38 @@ def write_policy(directory: Path, payload: dict[str, object]) -> Path:
 class RemediationPolicyTests(unittest.TestCase):
     """Require explicit immutable candidates and non-bypassable safeguards."""
 
+    def test_optional_stability_window_is_bounded_and_recorded(self) -> None:
+        """Persist reviewed stability timing without changing old policy defaults."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            payload = policy_payload()
+            payload["targets"][0]["verification"] = {
+                "timeout_seconds": 120,
+                "stability_seconds": 30,
+            }
+            policy = load_policy(write_policy(root, payload))
+            plan = build_plan(
+                vulnerability_report(),
+                deployment_map(root, root / "swarm-stack.yml"),
+                policy,
+            )
+
+        self.assertEqual(policy.targets[0].stability_seconds, 30)
+        self.assertEqual(plan["entries"][0]["verification"]["stability_seconds"], 30)
+
+    def test_invalid_stability_window_is_rejected(self) -> None:
+        """Reject negative, boolean, oversized, or impossible timing values."""
+
+        for stability in (-1, True, 30, 601):
+            with self.subTest(stability=stability):
+                with tempfile.TemporaryDirectory() as temporary:
+                    payload = policy_payload()
+                    payload["targets"][0]["verification"]["stability_seconds"] = stability
+                    with self.assertRaises(RemediationPolicyError) as context:
+                        load_policy(write_policy(Path(temporary), payload))
+                self.assertEqual(context.exception.code, "verificationStability")
+
     def test_candidate_requires_tag_and_complete_digest(self) -> None:
         """Reject a mutable candidate before planning or Docker access."""
 

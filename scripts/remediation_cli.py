@@ -42,6 +42,7 @@ from scripts.remediation_policy import (
     load_policy,
     vulnerable_items,
 )
+from scripts.remediation_progress import run_visible_action
 from scripts.remediation_review import (
     ensure_policy,
     policy_output_path,
@@ -364,13 +365,18 @@ def _run_auto(
                 print(message(catalog, "remediation.skipped"), file=output)
                 continue
             try:
-                result = execute_runtime_override(
-                    client,
-                    target,
-                    entry,
-                    post_validation=lambda: validate_candidate(
-                        client, target, entry, platform
+                result = run_visible_action(
+                    lambda: execute_runtime_override(
+                        client,
+                        target,
+                        entry,
+                        post_validation=lambda: validate_candidate(
+                            client, target, entry, platform
+                        ),
                     ),
+                    target.service,
+                    catalog,
+                    output,
                 )
             except RemediationExecutionError as error:
                 record_review_outcome(
@@ -408,15 +414,21 @@ def _run_auto(
                 print(message(catalog, "remediation.skipped"), file=output)
                 continue
             try:
-                result = execute_latest_refresh(
-                    client,
-                    target.service,
-                    target.candidate,
-                    str(entry["current_image"]),
-                    target.timeout_seconds,
-                    post_validation=lambda: validate_candidate(
-                        client, target, entry, platform
+                result = run_visible_action(
+                    lambda: execute_latest_refresh(
+                        client,
+                        target.service,
+                        target.candidate,
+                        str(entry["current_image"]),
+                        target.timeout_seconds,
+                        post_validation=lambda: validate_candidate(
+                            client, target, entry, platform
+                        ),
+                        stability_seconds=target.stability_seconds,
                     ),
+                    target.service,
+                    catalog,
+                    output,
                 )
             except RemediationExecutionError as error:
                 record_review_outcome(
@@ -494,18 +506,24 @@ def _run_auto(
                 ),
                 file=output,
             )
-            continue
+            print(message(catalog, "remediation.batchStoppedSourcePending"), file=output)
+            break
         try:
-            result = deploy_declarative_change(
-                client,
-                target,
-                entry,
-                change,
-                old_rendered,
-                post_validation=lambda: validate_candidate(
-                    client, target, entry, platform
+            result = run_visible_action(
+                lambda: deploy_declarative_change(
+                    client,
+                    target,
+                    entry,
+                    change,
+                    old_rendered,
+                    post_validation=lambda: validate_candidate(
+                        client, target, entry, platform
+                    ),
+                    expected_rendered_model=expected_rendered_model,
                 ),
-                expected_rendered_model=expected_rendered_model,
+                target.service,
+                catalog,
+                output,
             )
         except RemediationExecutionError as error:
             record_review_outcome(

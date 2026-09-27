@@ -1,8 +1,11 @@
 # Guarded Swarm image source edits
 
 Status: operator requested installation-specific allow rules and a safe
-`swarm-info -v` option-4 path. Local implementation and Linux test suite pass;
-push and Ubuntu acceptance remain unapproved and unrun.
+`swarm-info -v` option-4 path. The operator published the implementation and
+ran the Ubuntu Redis pilot on 2026-09-27. Exact image deployment, 1/1 Swarm
+convergence, Swarm-wide confirmation, and a clean focused Redis rescan passed.
+The Redis-dependent API smoke test remains open, so application compatibility
+and final pilot acceptance remain pending.
 
 ## Decision
 
@@ -44,12 +47,12 @@ explicitly confirm any candidate diff and deployment in the Ubuntu CLI.
    for every service merely to achieve full coverage.
 
 Implementation completion, local test results, publication, and live acceptance
-must be reported separately. Until milestone 2 passes, no image remediation is
-accepted from this change.
+must be reported separately. The image-security and Swarm-availability parts
+of milestone 2 passed; dependent application behavior is not yet verified.
 
 ## Local validation
 
 - `python3 -B -m unittest discover -s tests -q` in WSL Ubuntu 24.04:
-  304 tests passed on 2026-09-26, including a real Docker Compose render.
+  316 tests passed on 2026-09-27, including a real Docker Compose render.
 - Windows-native full-suite invocation failed in POSIX shell/platform
   tests; use the Linux result for this Bash-oriented repository.

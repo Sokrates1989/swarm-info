@@ -213,9 +213,13 @@ def service_replicas(client: DockerClient, service: str) -> tuple[int, int]:
 
 
 def capture_service(client: DockerClient, service: str) -> ServiceSnapshot:
-    """Capture pre-action image and replica evidence for rollback verification."""
+    """Capture a fully running service before permitting an image mutation."""
 
     running, desired = service_replicas(client, service)
+    if desired == 0 or running != desired:
+        raise RemediationExecutionError(
+            "service-not-converged", f"{service}: replicas={running}/{desired}"
+        )
     return ServiceSnapshot(service, inspect_service_image(client, service), running, desired)
 
 
@@ -240,27 +244,41 @@ def wait_for_candidate(
     candidate: CandidateImage,
     timeout_seconds: int,
     sleeper: Callable[[float], None] = time.sleep,
+    *,
+    stability_seconds: int = 0,
+    clock: Callable[[], float] = time.monotonic,
 ) -> None:
-    """Wait until image evidence and the service's prior availability recover."""
+    """Require exact image and full replicas throughout an optional stability window."""
 
-    deadline = time.monotonic() + timeout_seconds
+    deadline = clock() + timeout_seconds
     last_detail = ""
-    while time.monotonic() < deadline:
+    ready_since: float | None = None
+    while clock() < deadline:
         state = _update_state(client, snapshot.name)
         if state in {"paused", "rollback_paused"}:
             raise RemediationExecutionError("service-update-paused", state)
         try:
             image = inspect_service_image(client, snapshot.name)
             running, desired = service_replicas(client, snapshot.name)
+            if desired != snapshot.desired:
+                raise RemediationExecutionError(
+                    "service-replica-target-changed",
+                    f"{snapshot.name}: replicas={running}/{desired}",
+                )
             image_ready = image_references_match(candidate.reference, image)
-            if snapshot.running == snapshot.desired:
-                replicas_ready = running == desired
-            else:
-                replicas_ready = running >= snapshot.running
+            replicas_ready = running == desired and desired > 0
             if image_ready and replicas_ready and state not in {"updating", "rollback_started"}:
-                return
+                if ready_since is None:
+                    ready_since = clock()
+                if clock() - ready_since >= stability_seconds:
+                    return
+            else:
+                ready_since = None
             last_detail = f"image={image}; replicas={running}/{desired}; state={state or 'none'}"
         except RemediationExecutionError as error:
+            if error.code == "service-replica-target-changed":
+                raise
+            ready_since = None
             last_detail = error.code
         sleeper(2.0)
     raise RemediationExecutionError("service-convergence-timeout", last_detail)
@@ -525,6 +543,7 @@ def deploy_declarative_change(
             target.candidate,
             target.timeout_seconds,
             sleeper=sleeper,
+            stability_seconds=target.stability_seconds,
         )
         if post_validation is not None:
             post_validation()
@@ -585,6 +604,7 @@ def _execute_service_image_update(
     current_image: str,
     timeout_seconds: int,
     *,
+    stability_seconds: int,
     config_drift: bool,
     detail: str,
     sleeper: Callable[[float], None],
@@ -608,6 +628,7 @@ def _execute_service_image_update(
             candidate,
             timeout_seconds,
             sleeper=sleeper,
+            stability_seconds=stability_seconds,
         )
         if post_validation is not None:
             post_validation()
@@ -648,6 +669,8 @@ def execute_latest_refresh(
     timeout_seconds: int,
     sleeper: Callable[[float], None] = time.sleep,
     post_validation: Callable[[], object] | None = None,
+    *,
+    stability_seconds: int = 0,
 ) -> ActionResult:
     """Refresh a verified latest-following service without changing its source intent."""
 
@@ -657,6 +680,7 @@ def execute_latest_refresh(
         candidate,
         current_image,
         timeout_seconds,
+        stability_seconds=stability_seconds,
         config_drift=False,
         detail="validated latest refresh; declarative source still follows latest",
         sleeper=sleeper,
@@ -679,6 +703,7 @@ def execute_runtime_override(
         target.candidate,
         str(plan_entry.get("current_image", "")),
         target.timeout_seconds,
+        stability_seconds=target.stability_seconds,
         config_drift=True,
         detail="runtime override; update declarative source promptly",
         sleeper=sleeper,

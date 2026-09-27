@@ -936,13 +936,27 @@ The policy-backed auto-remediation sequence remains intentionally strict:
    or interpolated target image values, ambiguous service/image declarations,
    symlinks, path escapes, stale values, and other rendered changes fail closed.
 7. Ask separately before deployment (default `Y` only after the source change
-   was explicitly accepted), wait for the service to converge, and scan the
-   immutable candidate again.
-8. Restore the original source and previous rendered stack when deployment or
-   post-validation fails, then verify rollback convergence.
+   was explicitly accepted), report immediately and periodically while the
+   action runs, wait for the service to converge, and scan the immutable
+   candidate again. An installation target may add a bounded, opt-in Swarm
+   stability window before post-validation; this is not an application smoke
+   test.
+8. Attempt to restore the original source and previous rendered stack when a
+   successful deployment later fails convergence or post-validation, then
+   verify rollback convergence. A failed `docker stack deploy` can have partial
+   effects; the tool restores the source and stops, but an operator must check
+   for live stack drift before continuing. An image rollback cannot undo an
+   application data migration.
 9. After any successful deployment, run and atomically publish a locked,
    complete all-image confirmation scan with the normal freshness/history
    metadata so the next CLI/UI/watchdog view uses fresh Swarm-wide evidence.
+
+Option 4 processes every eligible, reviewed target in the selected policy in
+sequence; it does not grant authority to all affected services merely because
+Scout found a newer image. A declined deployment after a confirmed source edit
+stops that run, so a later stack deployment cannot silently include the
+pending edit. After each updated service, verify its dependent application
+before accepting compatibility or enabling additional high-risk targets.
 
 `--force-auto-remedy-attempt` overrides only `auto_eligible=false`. It cannot
 bypass a disabled entry, backup classification, immutable digest, repository

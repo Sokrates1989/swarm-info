@@ -16,6 +16,7 @@ from scripts.remediation_engine import (
     validate_candidate_reference,
 )
 from scripts.remediation_policy import RemediationPolicy
+from scripts.remediation_progress import run_visible_action
 from scripts.remediation_review import (
     ReviewAssessment,
     assess_review_queue,
@@ -213,19 +214,24 @@ def run_safe_latest_actions(
             print(message(catalog, "remediation.skipped"), file=output)
             continue
         try:
-            result = execute_latest_refresh(
-                client,
-                action.service,
-                action.candidate,
-                action.current_image,
-                action.timeout_seconds,
-                post_validation=lambda current=action: validate_candidate_reference(
+            result = run_visible_action(
+                lambda: execute_latest_refresh(
                     client,
-                    current.candidate,
-                    current.service,
-                    current.to_plan_dict(),
-                    platform,
+                    action.service,
+                    action.candidate,
+                    action.current_image,
+                    action.timeout_seconds,
+                    post_validation=lambda current=action: validate_candidate_reference(
+                        client,
+                        current.candidate,
+                        current.service,
+                        current.to_plan_dict(),
+                        platform,
+                    ),
                 ),
+                action.service,
+                catalog,
+                output,
             )
         except RemediationExecutionError as error:
             record_review_outcome(

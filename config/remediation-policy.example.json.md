@@ -141,7 +141,8 @@ service additionally needs a source adapter.
         "version_key": "WEB_IMAGE_VERSION"
       },
       "verification": {
-        "timeout_seconds": 300
+        "timeout_seconds": 300,
+        "stability_seconds": 30
       }
     }
   ]
@@ -151,6 +152,23 @@ service additionally needs a source adapter.
 Set `auto_eligible` to `true` only after reviewing the mapping, candidate, edit
 adapter, backup classification, and dry-run plan. `--force-auto-remedy-attempt`
 can bypass only `auto_eligible`; it cannot bypass any other safeguard.
+
+`verification.timeout_seconds` is the Swarm convergence-polling limit (30–1800
+seconds; default 300), not a timeout for Docker's deploy command. Optional
+`verification.stability_seconds` requires the exact candidate image and all
+desired replicas at every two-second poll over that window before
+post-validation (0–600 seconds, less than the timeout; default 0 for existing
+policies). An observed drop in replicas resets the stability timer; a timeout
+causes the guarded action to attempt rollback. This does not replace Docker
+health checks or application-specific smoke tests. Set an appropriate window
+per reviewed service, especially after a major version change. An image
+rollback does not reverse a database or data-format migration.
+
+Option 4 processes eligible targets one at a time and asks before each edit
+and deployment. It stops on an execution error. If the operator accepts a
+source edit but declines its deployment, the run stops after recording that
+pending source-only change; a later target in the same stack must not deploy
+it indirectly. The next run must reconcile that source with the live service.
 
 For a digest-pinned candidate whose tag is `latest`, a mapped and verified
 source that already declares unpinned `latest` becomes a `latest-refresh`

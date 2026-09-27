@@ -16,6 +16,8 @@ from unittest.mock import patch
 from scripts.remediation_cli import _run_auto, run
 from scripts.remediation_engine import (
     RemediationExecutionError,
+    ServiceSnapshot,
+    capture_service,
     deploy_declarative_change,
     execute_latest_refresh,
     execute_runtime_override,
@@ -24,7 +26,9 @@ from scripts.remediation_engine import (
     service_image_update_command,
     runtime_update_command,
     validate_candidate,
+    wait_for_candidate,
 )
+from scripts.remediation_progress import run_visible_action
 from scripts.remediation_guidance import _images
 from scripts.remediation_policy import (
     build_plan,
@@ -237,6 +241,132 @@ class RemediationEngineTests(unittest.TestCase):
         )["entries"][0]
         return policy.targets[0], entry
 
+    def test_visible_action_reports_immediate_and_periodic_progress(self) -> None:
+        """Do not leave a blocking deploy silent after operator confirmation."""
+
+        for locale in ("en", "de"):
+            with self.subTest(locale=locale):
+                output = io.StringIO()
+
+                def complete_with_heartbeat(operation, progress, _message, _interval):
+                    """Emit one deterministic heartbeat without sleeping."""
+
+                    progress("internal scanner formatting must remain hidden")
+                    return operation()
+
+                with patch(
+                    "scripts.remediation_progress.run_with_progress_heartbeat",
+                    side_effect=complete_with_heartbeat,
+                ):
+                    result = run_visible_action(
+                        lambda: "complete", "demo_api", load_messages(locale), output
+                    )
+
+                self.assertEqual(result, "complete")
+                self.assertEqual(output.getvalue().count("demo_api"), 2)
+                self.assertNotIn("internal scanner formatting", output.getvalue())
+
+    def test_capture_requires_fully_running_service(self) -> None:
+        """Do not mark a scaled-zero or already-down workload remediated."""
+
+        class UnavailableClient(AutoRuntimeClient):
+            """Return one unavailable replica state from Docker service ls."""
+
+            def __init__(self, replicas: str) -> None:
+                super().__init__()
+                self.replicas = replicas
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                if arguments[:2] == ["service", "ls"]:
+                    return CommandResult(0, f"demo_worker\t{self.replicas}\n", "")
+                return super().run(arguments)
+
+        for replicas in ("0/0", "0/1", "1/2"):
+            with self.subTest(replicas=replicas):
+                with self.assertRaises(RemediationExecutionError) as context:
+                    capture_service(UnavailableClient(replicas), "demo_worker")
+                self.assertEqual(context.exception.code, "service-not-converged")
+
+    def test_candidate_must_remain_converged_for_stability_window(self) -> None:
+        """Reset the healthy timer when replicas briefly disappear."""
+
+        class SequencedClient:
+            """Model a new image whose replicas flap and later stabilize."""
+
+            def __init__(self) -> None:
+                self.states = ("1/1", "0/1", "1/1", "1/1", "1/1", "1/1")
+                self.index = 0
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                if arguments[:2] == ["service", "ls"]:
+                    state = self.states[min(self.index, len(self.states) - 1)]
+                    self.index += 1
+                    return CommandResult(0, f"demo_api\t{state}\n", "")
+                if arguments[:2] == ["service", "inspect"]:
+                    value = NEW_IMAGE if "ContainerSpec.Image" in arguments[-1] else "completed"
+                    return CommandResult(0, value + "\n", "")
+                return CommandResult(1, "", "unexpected command")
+
+        elapsed = [0.0]
+
+        def advance(seconds: float) -> None:
+            """Move a deterministic test clock by one polling interval."""
+
+            elapsed[0] += seconds
+
+        client = SequencedClient()
+        wait_for_candidate(
+            client,
+            ServiceSnapshot("demo_api", OLD_IMAGE, 1, 1),
+            parse_candidate_image(NEW_IMAGE),
+            20,
+            sleeper=advance,
+            stability_seconds=5,
+            clock=lambda: elapsed[0],
+        )
+
+        self.assertEqual(elapsed[0], 10.0)
+        self.assertEqual(client.index, 6)
+
+    def test_candidate_stability_timeout_is_not_a_success(self) -> None:
+        """A repeating task failure must trigger the caller's rollback path."""
+
+        class FlappingClient:
+            """Alternate one ready sample with one missing replica."""
+
+            def __init__(self) -> None:
+                self.index = 0
+
+            def run(self, arguments: list[str]) -> CommandResult:
+                if arguments[:2] == ["service", "ls"]:
+                    replicas = "1/1" if self.index % 2 == 0 else "0/1"
+                    self.index += 1
+                    return CommandResult(0, f"demo_api\t{replicas}\n", "")
+                if arguments[:2] == ["service", "inspect"]:
+                    value = NEW_IMAGE if "ContainerSpec.Image" in arguments[-1] else "completed"
+                    return CommandResult(0, value + "\n", "")
+                return CommandResult(1, "", "unexpected command")
+
+        elapsed = [0.0]
+
+        def advance(seconds: float) -> None:
+            """Advance past the timeout without a real wait."""
+
+            elapsed[0] += seconds
+
+        with self.assertRaises(RemediationExecutionError) as context:
+            wait_for_candidate(
+                FlappingClient(),
+                ServiceSnapshot("demo_api", OLD_IMAGE, 1, 1),
+                parse_candidate_image(NEW_IMAGE),
+                8,
+                sleeper=advance,
+                stability_seconds=4,
+                clock=lambda: elapsed[0],
+            )
+
+        self.assertEqual(context.exception.code, "service-convergence-timeout")
+
     def test_clean_candidate_is_accepted_as_an_improvement(self) -> None:
         """Require exact immutable scanning before any edit is prepared."""
 
@@ -313,6 +443,52 @@ class RemediationEngineTests(unittest.TestCase):
             self.assertEqual(environment.read_bytes(), original)
             self.assertEqual(client.image, OLD_IMAGE)
             self.assertEqual(len(client.deployments), 2)
+
+    def test_stability_failure_restores_source_and_old_stack(self) -> None:
+        """A service that never stays available must not keep the new source."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = root / ".env"
+            original = b"IMAGE_VERSION=1.0.0\n"
+            replacement = b"IMAGE_VERSION=1.1.0\n"
+            environment.write_bytes(replacement)
+            stack_file = root / "swarm-stack.yml"
+            stack_file.write_text("services: {}\n", encoding="utf-8")
+            payload = policy_payload(
+                source={
+                    "type": "dotenv", "file": ".env",
+                    "name_key": "IMAGE_NAME", "version_key": "IMAGE_VERSION",
+                }
+            )
+            payload["targets"][0]["verification"] = {
+                "timeout_seconds": 60, "stability_seconds": 10,
+            }
+            policy = load_policy(write_policy(root, payload))
+            entry = build_plan(
+                vulnerability_report(), deployment_map(root, stack_file), policy
+            )["entries"][0]
+            change = SourceChange(environment, original, replacement, "diff", 0o600)
+            client = RollbackClient(OLD_IMAGE, NEW_IMAGE)
+
+            with patch(
+                "scripts.remediation_engine.wait_for_candidate",
+                side_effect=RemediationExecutionError("service-convergence-timeout"),
+            ) as wait:
+                with self.assertRaises(RemediationExecutionError) as context:
+                    deploy_declarative_change(
+                        client, policy.targets[0], entry, change,
+                        f"services:\n  api:\n    image: {OLD_IMAGE}\n".encode(),
+                        sleeper=lambda _: None,
+                    )
+
+            self.assertEqual(environment.read_bytes(), original)
+            self.assertEqual(client.image, OLD_IMAGE)
+            self.assertEqual(len(client.deployments), 2)
+
+        self.assertEqual(context.exception.code, "declarative-deploy-failed")
+        self.assertIn("service-convergence-timeout", context.exception.detail)
+        self.assertEqual(wait.call_args.kwargs["stability_seconds"], 10)
 
     def test_rejected_stack_deploy_restores_source(self) -> None:
         """Keep an unsuccessful parser attempt from leaving a source-only update."""
@@ -601,6 +777,25 @@ class RemediationEngineTests(unittest.TestCase):
             "demo_worker",
         )
 
+    def test_latest_stability_failure_requests_and_confirms_rollback(self) -> None:
+        """Restore the prior image when the opt-in stability check fails."""
+
+        client = AutoRuntimeClient()
+        with patch(
+            "scripts.remediation_engine.wait_for_candidate",
+            side_effect=RemediationExecutionError("service-convergence-timeout"),
+        ) as wait:
+            with self.assertRaises(RemediationExecutionError) as context:
+                execute_latest_refresh(
+                    client, "demo_worker", parse_candidate_image(NEW_IMAGE),
+                    OLD_IMAGE, 60, sleeper=lambda _: None, stability_seconds=10,
+                )
+
+        self.assertEqual(context.exception.code, "runtime-verification-failed")
+        self.assertIn("rollback confirmed", context.exception.detail)
+        self.assertEqual(client.image, OLD_IMAGE)
+        self.assertEqual(wait.call_args.kwargs["stability_seconds"], 10)
+
 
 class RemediationCliTests(unittest.TestCase):
     """Expose every affected service and shared-image count in guided mode."""
@@ -746,6 +941,9 @@ class RemediationCliTests(unittest.TestCase):
             client=client,
         )
         self.assertIn("All-image confirmation scan is starting", output.getvalue())
+        self.assertIn(
+            "Remediation task for demo_worker is running", output.getvalue()
+        )
 
 
 if __name__ == "__main__":

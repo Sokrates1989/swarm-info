@@ -75,6 +75,7 @@ class PolicyTarget:
     auto_eligible: bool
     source: SourceEdit | None
     timeout_seconds: int
+    stability_seconds: int = 0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -252,11 +253,19 @@ def _parse_target(raw: object, identifiers: set[str]) -> PolicyTarget:
     if not isinstance(verification, Mapping):
         raise RemediationPolicyError("verificationObject", identifier)
     _reject_unknown(
-        verification, {"timeout_seconds"}, "verificationUnknownField"
+        verification, {"timeout_seconds", "stability_seconds"}, "verificationUnknownField"
     )
     timeout = verification.get("timeout_seconds", 300)
     if not isinstance(timeout, int) or isinstance(timeout, bool) or not 30 <= timeout <= 1800:
         raise RemediationPolicyError("verificationTimeout", identifier)
+    stability = verification.get("stability_seconds", 0)
+    if (
+        not isinstance(stability, int)
+        or isinstance(stability, bool)
+        or not 0 <= stability <= 600
+        or stability >= timeout
+    ):
+        raise RemediationPolicyError("verificationStability", identifier)
     enabled = raw.get("enabled", True)
     auto_eligible = raw.get("auto_eligible", False)
     if not isinstance(enabled, bool) or not isinstance(auto_eligible, bool):
@@ -272,6 +281,7 @@ def _parse_target(raw: object, identifiers: set[str]) -> PolicyTarget:
         auto_eligible=auto_eligible,
         source=_parse_source(raw.get("source")),
         timeout_seconds=timeout,
+        stability_seconds=stability,
     )
 
 
@@ -521,7 +531,10 @@ def build_plan(
                 "status": target.backup_status,
                 "reason": target.backup_reason,
             },
-            "verification": {"timeout_seconds": target.timeout_seconds},
+            "verification": {
+                "timeout_seconds": target.timeout_seconds,
+                "stability_seconds": target.stability_seconds,
+            },
         }
         entries.append(entry)
     entries.sort(key=lambda entry: (-entry["critical"], -entry["high"], entry["service"]))

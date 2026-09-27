@@ -196,12 +196,27 @@ def _request_batch_confirmation(
     catalog: Mapping[str, str],
     input_function: Callable[[str], str],
     output: TextIO,
-) -> bool:
-    """Require one exact, non-persisted data-loss acknowledgement for this run."""
+) -> frozenset[str] | None:
+    """Return acknowledged targets, manual mode, or abort on invalid consent."""
 
     if not policy_ids:
         print(message(catalog, "remediation.batchNoEligible"), file=output)
-        return True
+        return frozenset()
+    try:
+        selection = input_function(
+            message(
+                catalog,
+                "remediation.batchModePrompt",
+                count=len(policy_ids),
+                context=context_name,
+            )
+        ).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print(message(catalog, "remediation.batchModeInterrupted"), file=output)
+        return None
+    if selection not in {"y", "yes", "j", "ja"}:
+        print(message(catalog, "remediation.batchManualSelected"), file=output)
+        return frozenset()
     phrase = message(catalog, "remediation.batchConsentPhrase")
     try:
         answer = input_function(
@@ -217,12 +232,12 @@ def _request_batch_confirmation(
         answer = ""
     if answer != phrase:
         print(message(catalog, "remediation.batchConsentRejected"), file=output)
-        return False
+        return None
     print(
         message(catalog, "remediation.batchConsentAccepted", count=len(policy_ids)),
         file=output,
     )
-    return True
+    return policy_ids
 
 
 def _render_plan(plan: Mapping[str, Any], catalog: Mapping[str, str], output: TextIO) -> None:
@@ -356,13 +371,16 @@ def _run_auto(
     targets = _policy_targets(policy)
     auto_confirm_ids: frozenset[str] = frozenset()
     if getattr(options, "auto_confirm_policy_targets", False):
-        auto_confirm_ids = _batch_confirmable_targets(
-            plan, targets, options.allow_runtime_override
+        confirmed_ids = _request_batch_confirmation(
+            _batch_confirmable_targets(plan, targets, options.allow_runtime_override),
+            context_name,
+            catalog,
+            input_function,
+            output,
         )
-        if not _request_batch_confirmation(
-            auto_confirm_ids, context_name, catalog, input_function, output
-        ):
+        if confirmed_ids is None:
             return 3
+        auto_confirm_ids = confirmed_ids
         if auto_confirm_ids:
             plan["batch_confirmation"] = {
                 "accepted_at": utc_timestamp(),

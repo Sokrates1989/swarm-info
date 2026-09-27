@@ -1016,7 +1016,14 @@ swarm-info -v \
   --auto-confirm-policy-targets
 ```
 
-Select option 4 and type the exact backup/data-loss sentence shown by the CLI.
+Select option 4. After showing the plan, the CLI first asks whether to enable
+automatic confirmation for the eligible policy targets shown there. The
+default answer is No: pressing Enter or answering No continues with the
+ordinary individual source/deployment prompts. Answer Yes only if you want
+the batch mode; the CLI then requires the exact backup/data-loss sentence.
+Omit `--auto-confirm-policy-targets` entirely to keep individual prompts
+without this initial choice. A temporary one-target policy can confirm only
+that target, even when the generated review queue contains many entries.
 In English, it is `I HAVE MADE BACKUPS AND ACCEPT POSSIBLE PERMANENT DATA LOSS ON THIS SWARM NODE`.
 The acknowledgement is never accepted from a flag or
 environment variable, applies only to this interactive run, and is recorded

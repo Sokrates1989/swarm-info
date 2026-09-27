@@ -13,7 +13,12 @@ import unittest
 from unittest.mock import patch
 
 from scripts.operator_report import load_messages
-from scripts.remediation_cli import _run_auto, parse_arguments, run
+from scripts.remediation_cli import (
+    _request_batch_confirmation,
+    _run_auto,
+    parse_arguments,
+    run,
+)
 from scripts.remediation_engine import ActionResult, RemediationExecutionError
 from scripts.remediation_policy import load_policy
 from scripts.remediation_source import SourceChange
@@ -61,6 +66,9 @@ class RemediationBatchTests(unittest.TestCase):
         en = load_messages("en")
         de = load_messages("de")
         for key in (
+            "remediation.batchModePrompt",
+            "remediation.batchManualSelected",
+            "remediation.batchModeInterrupted",
             "remediation.batchConsentPhrase",
             "remediation.batchConsentPrompt",
             "remediation.batchConsentRejected",
@@ -101,6 +109,7 @@ class RemediationBatchTests(unittest.TestCase):
             output = io.StringIO()
             for answer in ("y", load_messages("en")["remediation.batchConsentPhrase"] + " "):
                 with self.subTest(answer=answer):
+                    answers = iter(("y", answer))
                     with (
                         patch("scripts.remediation_cli.prepare_review", return_value=object()),
                         patch("scripts.remediation_cli.run_safe_latest_actions") as safe,
@@ -109,7 +118,7 @@ class RemediationBatchTests(unittest.TestCase):
                         result = _run_auto(
                             vulnerability_report(), mapping, policy, options,
                             AutoRuntimeClient(), load_messages("en"),
-                            input_function=lambda _: answer, output=output,
+                            input_function=lambda _: next(answers), output=output,
                         )
                         safe.assert_not_called()
                         scan.assert_not_called()
@@ -153,11 +162,11 @@ class RemediationBatchTests(unittest.TestCase):
             prompts: list[str] = []
 
             def acknowledge(prompt: str) -> str:
-                """Allow exactly one typed acknowledgement, not later prompts."""
+                """Allow the opt-in and sentence, but no later target prompts."""
 
                 prompts.append(prompt)
-                self.assertEqual(len(prompts), 1)
-                return phrase
+                self.assertLessEqual(len(prompts), 2)
+                return "y" if len(prompts) == 1 else phrase
 
             def publish_confirmation(*_: object, **__: object) -> int:
                 """Publish a new complete report without contacting Docker."""
@@ -191,11 +200,108 @@ class RemediationBatchTests(unittest.TestCase):
             self.assertEqual(source_file.read_bytes(), change.replacement)
             self.assertEqual(plan["batch_confirmation"]["policy_ids"], ["demo-api-update"])
             self.assertNotIn(phrase, options.plan_output.read_text(encoding="utf-8"))
-            self.assertEqual(len(prompts), 1)
+            self.assertEqual(len(prompts), 2)
             self.assertIn("Source edit for demo_api", output.getvalue())
             self.assertIn("Stack deployment for demo_api", output.getvalue())
             scan.assert_called_once()
             deploy.assert_called_once()
+
+    def test_default_no_keeps_individual_source_and_deploy_prompts(self) -> None:
+        """Declining the optional batch mode must continue the reviewed manual flow."""
+
+        for mode_answer in ("", "n"):
+            with (
+                self.subTest(mode_answer=mode_answer),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
+                root = Path(temporary)
+                stack_file = root / "swarm-stack.yml"
+                stack_file.write_text("services: {}\n", encoding="utf-8")
+                source_file = root / ".env"
+                source_file.write_bytes(b"IMAGE_VERSION=1.0.0\n")
+                mapping = deployment_map(root, stack_file)
+                mapping["renderer"] = {"available": True}
+                policy = load_policy(write_policy(
+                    root, policy_payload(
+                        source={"type": "dotenv", "file": ".env", "image_key": "IMAGE"}
+                    )
+                ))
+                report_file = root / "report.json"
+                report_file.write_text("{}", encoding="utf-8")
+                options = argparse.Namespace(
+                    report_file=report_file, deployment_map_file=None, deploy_roots=None,
+                    plan_output=root / "plan.json", max_age_hours=30.0,
+                    history_days=14, lock_file=root / "scan.lock",
+                    force_auto_remedy_attempt=False, allow_runtime_override=False,
+                    auto_confirm_policy_targets=True,
+                )
+                change = SourceChange(
+                    source_file, b"IMAGE_VERSION=1.0.0\n",
+                    b"IMAGE_VERSION=1.1.0\n", "reviewed diff\n", 0o600,
+                )
+                validation = SimpleNamespace(
+                    critical=0, high=0,
+                    comparison=SimpleNamespace(removed_total=2, candidate_total=0),
+                )
+                answers = iter((mode_answer, "y", "y"))
+                prompts: list[str] = []
+
+                def publish_confirmation(*_: object, **__: object) -> int:
+                    """Publish a complete mocked report after the manual deployment."""
+
+                    report_file.write_text(json.dumps({
+                        "completed_at": "2026-08-15T12:00:00Z",
+                        "summary": {"complete": True, "status": "vulnerable"},
+                    }), encoding="utf-8")
+                    return 2
+
+                output = io.StringIO()
+                with (
+                    patch("scripts.remediation_cli.prepare_review", return_value=object()),
+                    patch("scripts.remediation_cli.run_safe_latest_actions", return_value=0),
+                    patch("scripts.remediation_cli.validate_candidate", return_value=validation),
+                    patch("scripts.remediation_cli.prepare_source_change", return_value=change),
+                    patch("scripts.remediation_cli.render_stack", return_value=b"services: {}\n"),
+                    patch("scripts.remediation_cli.deploy_declarative_change", return_value=ActionResult(
+                        "deployed", "demo_api", policy.targets[0].candidate.reference,
+                    )) as deploy,
+                    patch("scripts.remediation_cli.run_locked_job", side_effect=publish_confirmation),
+                ):
+                    result = _run_auto(
+                        vulnerability_report(), mapping, policy, options,
+                        AutoRuntimeClient(), load_messages("en"),
+                        input_function=lambda prompt: prompts.append(prompt) or next(answers),
+                        output=output,
+                    )
+
+                self.assertEqual(result, 0)
+                self.assertEqual(source_file.read_bytes(), change.replacement)
+                self.assertEqual(len(prompts), 3)
+                self.assertIn("auto-confirm", prompts[0])
+                self.assertIn("Apply the reviewed change", prompts[1])
+                self.assertIn("Deploy stack", prompts[2])
+                self.assertIn("individual source and deployment prompts", output.getvalue())
+                self.assertNotIn(
+                    "batch_confirmation",
+                    json.loads(options.plan_output.read_text(encoding="utf-8")),
+                )
+                deploy.assert_called_once()
+
+    def test_interrupted_batch_choice_aborts_before_actions(self) -> None:
+        """An interrupted opt-in must not silently continue into mutations."""
+
+        output = io.StringIO()
+        for interruption in (EOFError, KeyboardInterrupt):
+
+            def interrupt(_: str) -> str:
+                raise interruption()
+
+            result = _request_batch_confirmation(
+                frozenset({"reviewed-target"}), "default", load_messages("en"),
+                interrupt, output,
+            )
+            self.assertIsNone(result)
+        self.assertIn("choice was interrupted", output.getvalue())
 
     def test_force_attempted_target_keeps_its_own_confirmation(self) -> None:
         """The batch sentence cannot silently approve auto_eligible=false."""
@@ -314,11 +420,11 @@ class RemediationBatchTests(unittest.TestCase):
             output = io.StringIO()
 
             def acknowledge(prompt: str) -> str:
-                """Allow only one interactive response for this runtime action."""
+                """Allow only the opt-in and sentence for this runtime action."""
 
                 prompts.append(prompt)
-                self.assertEqual(len(prompts), 1)
-                return phrase
+                self.assertLessEqual(len(prompts), 2)
+                return "y" if len(prompts) == 1 else phrase
 
             def publish_confirmation(*_: object, **__: object) -> int:
                 """Write fresh, complete evidence for the mocked final scan."""
@@ -346,7 +452,7 @@ class RemediationBatchTests(unittest.TestCase):
                 )
 
             self.assertEqual(result, 0)
-            self.assertEqual(len(prompts), 1)
+            self.assertEqual(len(prompts), 2)
             self.assertIn("runtime override for demo_api", output.getvalue())
             deploy.assert_called_once()
 
@@ -381,11 +487,11 @@ class RemediationBatchTests(unittest.TestCase):
             output = io.StringIO()
 
             def acknowledge(prompt: str) -> str:
-                """Reject any additional per-target confirmation."""
+                """Allow opt-in and sentence, but no per-target confirmation."""
 
                 prompts.append(prompt)
-                self.assertEqual(len(prompts), 1)
-                return phrase
+                self.assertLessEqual(len(prompts), 2)
+                return "y" if len(prompts) == 1 else phrase
 
             def publish_confirmation(*_: object, **__: object) -> int:
                 """Write a fresh complete report without a live image scan."""
@@ -412,7 +518,7 @@ class RemediationBatchTests(unittest.TestCase):
                 )
 
             self.assertEqual(result, 0)
-            self.assertEqual(len(prompts), 1)
+            self.assertEqual(len(prompts), 2)
             self.assertIn("Policy latest refresh for demo_api", output.getvalue())
             deploy.assert_called_once()
 

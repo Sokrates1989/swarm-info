@@ -115,9 +115,11 @@ digest so rollback can restore the exact artifact. A declaratively mapped
 service additionally needs a source adapter.
 
 `--auto-confirm-policy-targets` changes only the per-target confirmation step
-in option 4. After one exact, typed acknowledgement on the interactive terminal,
-it auto-confirms targets that were already enabled, eligible, and marked
-`auto_eligible=true` in this policy. It cannot promote `generated_review`,
+in option 4. After showing the plan, it asks a default-No question. No or
+Enter retains individual prompts; Yes requires an exact, typed acknowledgement
+on the interactive terminal. Only then does it auto-confirm targets that were
+already enabled, eligible, and marked `auto_eligible=true` in this policy. It
+cannot promote `generated_review`,
 relax source or candidate checks, or confirm targets entered only through
 `--force-auto-remedy-attempt`. Runtime overrides still need the separate
 `--allow-runtime-override` flag. Policy-free built-in `latest` actions retain

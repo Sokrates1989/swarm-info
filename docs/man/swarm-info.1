@@ -208,9 +208,10 @@ fallback for an unresolved deployment source. This creates configuration drift
 and remains disabled by default.
 .TP
 .B \-\-auto-confirm-policy-targets
-With vulnerability remediation option 4, require one exact backup/data-loss
-sentence typed on the interactive terminal, then automatically confirm each
-enabled, eligible,
+With vulnerability remediation option 4, ask a default-No opt-in question
+after showing the plan. No or Enter retains individual prompts. Yes requires
+one exact backup/data-loss sentence typed on the interactive terminal; only
+then does the tool automatically confirm each enabled, eligible,
 .B auto_eligible=true
 policy target in this run. This includes source edits and deployments, policy
 latest refreshes, and runtime overrides only when
